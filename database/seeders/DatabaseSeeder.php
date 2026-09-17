@@ -25,5 +25,18 @@ class DatabaseSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
+
+        $accounts = [
+            ['code' => '1001', 'name' => 'Kas Operasional', 'type' => 'asset'],
+            ['code' => '1002', 'name' => 'Bank BCA', 'type' => 'asset'],
+            ['code' => '4001', 'name' => 'Pendapatan Usaha', 'type' => 'revenue'],
+            ['code' => '5001', 'name' => 'Beban Operasional', 'type' => 'expense'],
+            ['code' => '5002', 'name' => 'Beban Gaji', 'type' => 'expense'],
+            ['code' => '5003', 'name' => 'Beban Perlengkapan Kantor', 'type' => 'expense'],
+        ];
+
+        foreach ($accounts as $acc) {
+            \App\Models\Account::updateOrCreate(['code' => $acc['code']], $acc);
+        }
     }
 }
