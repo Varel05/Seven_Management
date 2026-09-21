@@ -3,30 +3,30 @@
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
                 <div class="flex items-center gap-2.5">
-                    <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                    <h1 class="text-2xl font-black tracking-tight text-white drop-shadow-xs">
                         {{ __('Ikhtisar Keuangan & Buku Jurnal') }}
                     </h1>
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100/80 dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-slate-700">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-900/80 dark:bg-slate-800 text-emerald-200 dark:text-emerald-300 border border-emerald-700/80 dark:border-slate-700 backdrop-blur-md shadow-2xs">
                         Periode {{ now()->translatedFormat('F Y') }}
                     </span>
                 </div>
-                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <p class="text-xs text-emerald-200/80 dark:text-slate-400 mt-1 font-medium">
                     Pencatatan akuntansi double-entry otomatis via Bot Telegram & AI Agent (n8n)
                 </p>
             </div>
 
             <!-- Header Quick Stats / Sync Status -->
             <div class="flex items-center gap-3">
-                <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-400 text-xs font-semibold shadow-xs">
+                <div class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-900/80 dark:bg-emerald-950/60 border border-emerald-700/80 dark:border-emerald-800 text-emerald-200 dark:text-emerald-300 text-xs font-semibold shadow-xs backdrop-blur-md">
                     <span class="relative flex h-2 w-2">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-300"></span>
                     </span>
                     Webhook Telegram Terhubung
                 </div>
-                <span class="text-xs text-slate-300 dark:text-slate-700">|</span>
-                <span class="text-xs text-slate-600 dark:text-slate-400">
-                    <strong class="font-bold text-slate-900 dark:text-slate-200">{{ $verifiedCount ?? 0 }}</strong> Terverifikasi
+                <span class="text-xs text-emerald-600 dark:text-slate-700">|</span>
+                <span class="text-xs text-emerald-200/90 dark:text-slate-400 font-medium">
+                    <strong class="font-extrabold text-white dark:text-slate-200 text-sm">{{ $verifiedCount ?? 0 }}</strong> Terverifikasi
                 </span>
             </div>
         </div>
@@ -35,8 +35,97 @@
     <div class="py-8" x-data="{
         filterStatus: 'all',
         searchQuery: '',
+        perPage: 10,
+        currentPage: 1,
         selectedTrx: null,
         showDetailModal: false,
+        items: {{ Js::from($transactions->map(function($t) {
+            $firstLine = $t->lines->first();
+            $expenseLine = $t->lines->first(fn($l) => $l->account && $l->account->type === 'expense');
+            $revenueLine = $t->lines->first(fn($l) => $l->account && $l->account->type === 'revenue');
+            $accountName = $expenseLine ? ($expenseLine->account->name ?? '') : ($revenueLine ? ($revenueLine->account->name ?? '') : ($firstLine->account->name ?? ''));
+            return [
+                'id'     => $t->id,
+                'status' => $t->status,
+                'search' => strtolower($t->description . ' ' . $t->reference . ' ' . $accountName),
+            ];
+        })) }},
+        get filteredItems() {
+            return this.items.filter(item => {
+                const matchStatus = this.filterStatus === 'all' || this.filterStatus === item.status;
+                const matchSearch = !this.searchQuery || item.search.includes(this.searchQuery.toLowerCase().trim());
+                return matchStatus && matchSearch;
+            });
+        },
+        get visibleCount() {
+            return this.filteredItems.length;
+        },
+        get totalPages() {
+            if (this.perPage === 'all') return 1;
+            const limit = Number(this.perPage);
+            return Math.max(1, Math.ceil(this.filteredItems.length / limit));
+        },
+        get paginatedItemIds() {
+            if (this.perPage === 'all') {
+                return this.filteredItems.map(i => i.id);
+            }
+            const limit = Number(this.perPage);
+            const start = (this.currentPage - 1) * limit;
+            return this.filteredItems.slice(start, start + limit).map(i => i.id);
+        },
+        isRowVisible(id) {
+            return this.paginatedItemIds.includes(id);
+        },
+        get displayStart() {
+            if (this.filteredItems.length === 0) return 0;
+            if (this.perPage === 'all') return 1;
+            return (this.currentPage - 1) * Number(this.perPage) + 1;
+        },
+        get displayEnd() {
+            if (this.filteredItems.length === 0) return 0;
+            if (this.perPage === 'all') return this.filteredItems.length;
+            return Math.min(this.currentPage * Number(this.perPage), this.filteredItems.length);
+        },
+        goToPage(p) {
+            if (p >= 1 && p <= this.totalPages) {
+                this.currentPage = p;
+            }
+        },
+        prevPage() {
+            if (this.currentPage > 1) {
+                this.currentPage--;
+            }
+        },
+        nextPage() {
+            if (this.currentPage < this.totalPages) {
+                this.currentPage++;
+            }
+        },
+        get pageNumbers() {
+            const total = this.totalPages;
+            const current = this.currentPage;
+            const delta = 2;
+            const range = [];
+            for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+                range.push(i);
+            }
+            if (current - delta > 2) {
+                range.unshift('...');
+            }
+            if (current + delta < total - 1) {
+                range.push('...');
+            }
+            range.unshift(1);
+            if (total > 1) {
+                range.push(total);
+            }
+            return range;
+        },
+        init() {
+            this.$watch('filterStatus', () => { this.currentPage = 1; });
+            this.$watch('searchQuery', () => { this.currentPage = 1; });
+            this.$watch('perPage', () => { this.currentPage = 1; });
+        },
         openModal(trx) {
             this.selectedTrx = trx;
             this.showDetailModal = true;
@@ -71,11 +160,11 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
                 
                 <!-- Card 1: Saldo Kas & Bank (Liquid Assets) -->
-                <div class="relative overflow-hidden bg-gradient-to-br from-blue-50/90 via-indigo-50/40 to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 rounded-2xl p-5 border border-blue-200/80 dark:border-slate-800 shadow-sm shadow-blue-500/5 hover:shadow-md hover:border-blue-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-blue-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider">Kas & Bank</span>
-                        <div class="p-2.5 rounded-xl bg-blue-600 text-white shadow-md shadow-blue-600/20 group-hover:scale-105 transition-transform">
+                        <span class="text-xs font-bold text-slate-700 dark:text-blue-300 uppercase tracking-wider">Kas & Bank</span>
+                        <div class="p-2.5 rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                         </div>
                     </div>
@@ -83,7 +172,7 @@
                         <div class="text-2xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white">
                             Rp {{ number_format($totalKasDanBank ?? $totalKas ?? 0, 0, ',', '.') }}
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-blue-700/80 dark:text-slate-400">
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                             <span>Kas Ops: Rp {{ number_format($totalKas ?? 0, 0, ',', '.') }}</span>
                         </div>
@@ -91,11 +180,11 @@
                 </div>
 
                 <!-- Card 2: Pemasukan Bulan Ini (Revenue) -->
-                <div class="relative overflow-hidden bg-gradient-to-br from-emerald-50/90 via-teal-50/40 to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 rounded-2xl p-5 border border-emerald-200/80 dark:border-slate-800 shadow-sm shadow-emerald-500/5 hover:shadow-md hover:border-emerald-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">Pendapatan</span>
-                        <div class="p-2.5 rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20 group-hover:scale-105 transition-transform">
+                        <span class="text-xs font-bold text-slate-700 dark:text-emerald-300 uppercase tracking-wider">Pendapatan</span>
+                        <div class="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                         </div>
                     </div>
@@ -103,7 +192,7 @@
                         <div class="text-2xl font-extrabold font-mono tracking-tight text-emerald-700 dark:text-emerald-400">
                             Rp {{ number_format($pemasukanBulanIni ?? 0, 0, ',', '.') }}
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-emerald-700/80 dark:text-slate-400">
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             <span>Total Akun Revenue</span>
                         </div>
@@ -111,11 +200,11 @@
                 </div>
 
                 <!-- Card 3: Pengeluaran Bulan Ini (Expenses) -->
-                <div class="relative overflow-hidden bg-gradient-to-br from-rose-50/90 via-pink-50/40 to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 rounded-2xl p-5 border border-rose-200/80 dark:border-slate-800 shadow-sm shadow-rose-500/5 hover:shadow-md hover:border-rose-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-rose-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-500 to-pink-500"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-rose-900 dark:text-rose-300 uppercase tracking-wider">Beban Usaha</span>
-                        <div class="p-2.5 rounded-xl bg-rose-600 text-white shadow-md shadow-rose-600/20 group-hover:scale-105 transition-transform">
+                        <span class="text-xs font-bold text-slate-700 dark:text-rose-300 uppercase tracking-wider">Beban Usaha</span>
+                        <div class="p-2.5 rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>
                         </div>
                     </div>
@@ -123,7 +212,7 @@
                         <div class="text-2xl font-extrabold font-mono tracking-tight text-rose-700 dark:text-rose-400">
                             Rp {{ number_format($pengeluaranBulanIni ?? 0, 0, ',', '.') }}
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-rose-700/80 dark:text-slate-400">
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
                             <span>Total Akun Beban</span>
                         </div>
@@ -134,11 +223,11 @@
                 @php
                     $isProfit = ($labaBersihBulanIni ?? 0) >= 0;
                 @endphp
-                <div class="relative overflow-hidden bg-gradient-to-br from-teal-50/90 via-cyan-50/40 to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 rounded-2xl p-5 border border-teal-200/80 dark:border-slate-800 shadow-sm shadow-teal-500/5 hover:shadow-md hover:border-teal-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-teal-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-teal-500 to-cyan-500"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-teal-900 dark:text-teal-300 uppercase tracking-wider">Laba / Rugi Bersih</span>
-                        <div class="p-2.5 rounded-xl {{ $isProfit ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20' : 'bg-rose-600 text-white shadow-md shadow-rose-600/20' }} group-hover:scale-105 transition-transform">
+                        <span class="text-xs font-bold text-slate-700 dark:text-teal-300 uppercase tracking-wider">Laba / Rugi Bersih</span>
+                        <div class="p-2.5 rounded-xl {{ $isProfit ? 'bg-teal-50 text-teal-600 dark:bg-teal-600 dark:text-white' : 'bg-rose-50 text-rose-600 dark:bg-rose-600 dark:text-white' }} shadow-xs group-hover:scale-105 transition-transform">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                             </svg>
@@ -156,19 +245,19 @@
                 </div>
 
                 <!-- Card 5: Perlu Audit / Verifikasi Telegram -->
-                <div class="relative overflow-hidden bg-gradient-to-br from-amber-50/90 via-orange-50/40 to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 rounded-2xl p-5 border border-amber-200/80 dark:border-slate-800 shadow-sm shadow-amber-500/5 hover:shadow-md hover:border-amber-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 to-orange-500"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider">Perlu Audit AI</span>
-                        <div class="p-2.5 rounded-xl bg-amber-500 text-white shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
+                        <span class="text-xs font-bold text-slate-700 dark:text-amber-300 uppercase tracking-wider">Perlu Audit AI</span>
+                        <div class="p-2.5 rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
                     </div>
                     <div class="mt-3.5">
                         <div class="text-2xl font-extrabold font-mono tracking-tight text-amber-700 dark:text-amber-400">
-                            {{ $pendingCount ?? 0 }} <span class="text-sm font-sans font-normal text-amber-600/80 dark:text-slate-400">Trx</span>
+                            {{ $pendingCount ?? 0 }} <span class="text-sm font-sans font-normal text-slate-500 dark:text-slate-400">Trx</span>
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-amber-700/80 dark:text-slate-400">
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                             <span>Menunggu Review</span>
                         </div>
@@ -179,7 +268,7 @@
 
             <!-- 2. COLOR-CODED CHART OF ACCOUNTS (COA) SUMMARY BAR -->
             @if(isset($accounts) && $accounts->count() > 0)
-                <div class="bg-white/95 dark:bg-slate-900/90 backdrop-blur rounded-2xl p-6 border border-slate-200/90 dark:border-slate-800 shadow-sm">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-2">
                         <div>
                             <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -249,10 +338,10 @@
             @endif
 
             <!-- 3. BUKU JURNAL UMUM & LEDGER TABLE -->
-            <div class="bg-white/95 dark:bg-slate-900/90 backdrop-blur rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 
                 <!-- Table Controls Header (Search & Status Tabs) -->
-                <div class="p-5 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50/50 via-white to-slate-50/50 dark:from-slate-900 dark:to-slate-900">
+                <div class="p-5 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900">
                     <div class="flex items-center gap-3">
                         <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
@@ -269,13 +358,29 @@
 
                     <!-- Search & Filter Controls -->
                     <div class="flex flex-wrap items-center gap-3">
+                        <!-- Per-Page Limit Selector -->
+                        <div class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                            <span class="hidden xl:inline font-medium">Batas Data:</span>
+                            <select 
+                                x-model="perPage" 
+                                class="py-1.5 pl-2.5 pr-7 text-xs font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 shadow-2xs cursor-pointer transition-all"
+                                title="Batas maksimal data per halaman"
+                            >
+                                <option value="5">5 baris</option>
+                                <option value="10">10 baris</option>
+                                <option value="25">25 baris</option>
+                                <option value="50">50 baris</option>
+                                <option value="all">Semua</option>
+                            </select>
+                        </div>
+
                         <!-- Live Search Input -->
                         <div class="relative">
                             <input 
                                 x-model="searchQuery" 
                                 type="text" 
                                 placeholder="Cari keterangan / voucher..." 
-                                class="w-60 sm:w-64 pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 shadow-xs transition-all"
+                                class="w-52 sm:w-60 pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 shadow-xs transition-all"
                             />
                             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                         </div>
@@ -369,8 +474,7 @@
                                     ]);
                                 @endphp
                                 <tr 
-                                    x-show="(filterStatus === 'all' || filterStatus === '{{ $trx->status }}') && 
-                                            ('{{ strtolower($trx->description) }} {{ strtolower($trx->reference) }} {{ strtolower($primaryAccount) }}'.includes(searchQuery.toLowerCase()))"
+                                    x-show="isRowVisible({{ $trx->id }})"
                                     class="hover:bg-emerald-50/40 dark:hover:bg-slate-800/40 transition-colors group"
                                 >
                                     <!-- Tanggal -->
@@ -467,23 +571,128 @@
                                     </td>
                                 </tr>
                             @empty
+                                <!-- Kasus 1: Database Kosong (Belum ada data di database) -->
                                 <tr>
                                     <td colspan="8" class="px-6 py-14 text-center">
                                         <div class="max-w-md mx-auto flex flex-col items-center">
-                                            <div class="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 shadow-xs">
-                                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                                            <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3.5 border border-amber-200/80 dark:border-amber-800/60 shadow-xs">
+                                                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                                                </svg>
                                             </div>
-                                            <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">Belum Ada Transaksi Tercatat</h4>
-                                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                                Kirim catatan keuangan (misal: "Beli bensin 50rb") lewat bot Telegram untuk mencatat transaksi jurnal pertama Anda secara otomatis!
+                                            <h4 class="text-base font-bold text-slate-900 dark:text-slate-100">Data Tidak Ditemukan di Database</h4>
+                                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                                                Belum ada mutasi transaksi yang tersimpan di dalam database buku besar. Silakan kirim transaksi melalui Bot Telegram atau webhook n8n untuk mulai mencatat.
                                             </p>
                                         </div>
                                     </td>
                                 </tr>
                             @endforelse
+
+                            <!-- Kasus 2: Data Ada di Database, tetapi Tidak Ditemukan pada Filter / Pencarian Tertentu -->
+                            @if($transactions->isNotEmpty())
+                                <tr x-show="visibleCount === 0" x-cloak>
+                                    <td colspan="8" class="px-6 py-12 text-center">
+                                        <div class="max-w-md mx-auto flex flex-col items-center">
+                                            <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-700 shadow-xs">
+                                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                </svg>
+                                            </div>
+                                            <h4 class="text-sm font-bold text-slate-900 dark:text-slate-100">Data Tidak Ditemukan</h4>
+                                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                Tidak ditemukan transaksi yang cocok dengan kata kunci atau filter status yang dipilih.
+                                            </p>
+                                            <button 
+                                                type="button" 
+                                                @click="filterStatus = 'all'; searchQuery = ''" 
+                                                class="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors shadow-2xs"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                Reset Filter & Pencarian
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endif
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Table Navigation & Pagination Footer -->
+                @if($transactions->isNotEmpty())
+                    <div 
+                        x-show="filteredItems.length > 0" 
+                        class="px-5 py-3.5 border-t border-slate-200/80 dark:border-slate-800 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/80 dark:from-slate-900 dark:to-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                        <!-- Rentang & Total Data Transaksi -->
+                        <div class="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                            <span class="inline-flex w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span>
+                                Menampilkan 
+                                <strong class="font-bold text-slate-900 dark:text-slate-100" x-text="displayStart"></strong> 
+                                - 
+                                <strong class="font-bold text-slate-900 dark:text-slate-100" x-text="displayEnd"></strong> 
+                                dari 
+                                <strong class="font-bold text-slate-900 dark:text-slate-100" x-text="filteredItems.length"></strong> 
+                                data transaksi
+                            </span>
+                            <span class="hidden md:inline text-slate-300 dark:text-slate-700">|</span>
+                            <span class="hidden md:inline font-medium" x-text="'Halaman ' + currentPage + ' dari ' + totalPages"></span>
+                        </div>
+
+                        <!-- Kontrol Navigasi Tombol & Halaman -->
+                        <div class="flex items-center gap-1.5 self-center sm:self-auto" x-show="totalPages > 1 || perPage !== 'all'">
+                            <!-- Tombol Sebelumnya -->
+                            <button 
+                                type="button" 
+                                @click="prevPage()" 
+                                :disabled="currentPage === 1"
+                                :class="currentPage === 1 ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-800/50' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-emerald-700 dark:hover:text-emerald-400 bg-white dark:bg-slate-800 shadow-2xs'"
+                                class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 transition-all"
+                                title="Halaman sebelumnya"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                                <span>Sebelumnya</span>
+                            </button>
+
+                            <!-- Nomor Halaman Dinamis -->
+                            <div class="flex items-center gap-1">
+                                <template x-for="(p, index) in pageNumbers" :key="index">
+                                    <div class="flex items-center">
+                                        <template x-if="p === '...'">
+                                            <span class="px-1.5 py-1 text-xs text-slate-400 dark:text-slate-500 font-mono">...</span>
+                                        </template>
+                                        <template x-if="p !== '...'">
+                                            <button 
+                                                type="button" 
+                                                @click="goToPage(p)" 
+                                                :class="currentPage === p 
+                                                    ? 'bg-emerald-600 text-white font-extrabold shadow-sm shadow-emerald-600/30 border-emerald-600' 
+                                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 font-semibold'"
+                                                class="w-8 h-8 flex items-center justify-center text-xs rounded-xl border transition-all"
+                                                x-text="p"
+                                            ></button>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <!-- Tombol Selanjutnya -->
+                            <button 
+                                type="button" 
+                                @click="nextPage()" 
+                                :disabled="currentPage >= totalPages"
+                                :class="currentPage >= totalPages ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-800/50' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-emerald-700 dark:hover:text-emerald-400 bg-white dark:bg-slate-800 shadow-2xs'"
+                                class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 transition-all"
+                                title="Halaman berikutnya"
+                            >
+                                <span>Selanjutnya</span>
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                @endif
             </div>
 
         </div>

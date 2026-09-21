@@ -10,7 +10,6 @@ Route::get('/', function () {
 Route::get('/dashboard', function () {
     $transactions = \App\Models\JournalEntry::with('lines.account')
         ->latest('date')
-        ->limit(30)
         ->get();
 
     // Saldo Kas & Bank (Semua Akun bertipe Asset, normal balance: Debit - Credit)
