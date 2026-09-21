@@ -9,6 +9,8 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-// Webhook endpoint for n8n / AI Agent
-Route::get('/webhook/transactions', [WebhookTransactionController::class, 'index']);
-Route::post('/webhook/transaction', [WebhookTransactionController::class, 'store']);
+// Webhook endpoints for n8n / AI Agent (Secured with X-Webhook-Secret / Bearer token)
+Route::middleware('webhook.secret')->group(function () {
+    Route::get('/webhook/transactions', [WebhookTransactionController::class, 'index']);
+    Route::post('/webhook/transaction', [WebhookTransactionController::class, 'store']);
+});
