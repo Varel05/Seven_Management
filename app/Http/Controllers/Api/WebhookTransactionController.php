@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
 use App\Models\Account;
+use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\RecurringTransaction;
@@ -87,11 +88,14 @@ class WebhookTransactionController extends Controller
 
             $reference = $validated['reference'] ?? ('TG-' . strtoupper(Str::random(8)));
 
+            $rawSource = $validated['source'] ?? 'telegram';
+            $source = str_starts_with(strtolower($rawSource), 'telegram') ? 'telegram' : $rawSource;
+
             $journalEntry = JournalEntry::create([
                 'reference'   => $reference,
                 'description' => $validated['description'],
                 'date'        => $transactionDate,
-                'source'      => $validated['source'] ?? 'telegram',
+                'source'      => $source,
                 'status'      => $validated['status'] ?? 'verified',
             ]);
 
@@ -320,6 +324,9 @@ class WebhookTransactionController extends Controller
     /**
      * Get list of recurring expenses that are due today and upcoming this month.
      */
+    /**
+     * Get list of recurring expenses and employee payroll that are due today and upcoming this month.
+     */
     public function dueRecurring(Request $request)
     {
         $today = Carbon::today();
@@ -390,8 +397,61 @@ class WebhookTransactionController extends Controller
             }
         }
 
+        // Hitung status Payroll Karyawan bulan ini
+        $activeEmployees = Employee::with('assetAccount')
+            ->active()
+            ->orderBy('pay_day')
+            ->get();
+
+        $payrollDueToday = [];
+        $payrollOverdue = [];
+        $payrollUpcoming = [];
+        $payrollAlreadyPaid = [];
+
+        foreach ($activeEmployees as $emp) {
+            $targetDay = min((int) $emp->pay_day, $daysInMonth);
+            $targetDate = Carbon::create($today->year, $today->month, $targetDay)->startOfDay();
+
+            $alreadyPaidThisMonth = $emp->last_paid_at 
+                && $emp->last_paid_at->isCurrentMonth() 
+                && $emp->last_paid_at->isCurrentYear();
+
+            $daysLeft = (int) $today->diffInDays($targetDate, false);
+
+            $empData = [
+                'id'                   => $emp->id,
+                'name'                 => $emp->name,
+                'position'             => $emp->position,
+                'base_salary'          => (float) $emp->base_salary,
+                'current_points'       => (int) $emp->current_points,
+                'rate_per_point'       => (float) $emp->rate_per_point,
+                'bonus_salary'         => (float) $emp->bonus_salary,
+                'total_salary'         => (float) $emp->total_salary,
+                'amount'               => (float) $emp->total_salary,
+                'formatted_amount'     => $emp->formatted_total_salary,
+                'pay_day'              => $emp->pay_day,
+                'due_date'             => $targetDate->translatedFormat('d F Y'),
+                'days_left'            => $daysLeft,
+                'asset_account_name'   => $emp->assetAccount->name ?? 'Kas Operasional',
+                'last_paid_at'         => $emp->last_paid_at ? $emp->last_paid_at->translatedFormat('d M Y') : null,
+            ];
+
+            if ($alreadyPaidThisMonth) {
+                $payrollAlreadyPaid[] = $empData;
+            } else {
+                if ($today->isSameDay($targetDate)) {
+                    $payrollDueToday[] = $empData;
+                } elseif ($targetDate->isPast()) {
+                    $payrollOverdue[] = $empData;
+                } else {
+                    $payrollUpcoming[] = $empData;
+                }
+            }
+        }
+
         // Actionable items yang membutuhkan tombol konfirmasi bayar
         $actionable = array_merge($dueToday, $overdue);
+        $payrollActionable = array_merge($payrollDueToday, $payrollOverdue);
 
         if ($request->boolean('mark_notified', false)) {
             $actionableIds = array_column($actionable, 'id');
@@ -399,12 +459,203 @@ class WebhookTransactionController extends Controller
         }
 
         // Susun teks respon Telegram yang informatif
-        $messageLines = ["📅 *Jadwal Pengeluaran Rutin ({$monthName})*\n"];
+        $messageLines = ["📅 *Jadwal Pengeluaran & Gaji ({$monthName})*\n"];
+
+        if (!empty($dueToday) || !empty($payrollDueToday)) {
+            $messageLines[] = "🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*";
+            foreach ($dueToday as $d) {
+                $messageLines[] = "• #{$d['id']} *{$d['name']}*: {$d['formatted_amount']}";
+            }
+            foreach ($payrollDueToday as $pd) {
+                $messageLines[] = "• 👤 *Gaji {$pd['name']}* (#{$pd['id']}): {$pd['formatted_amount']}";
+            }
+            $messageLines[] = "";
+        }
+
+        if (!empty($overdue) || !empty($payrollOverdue)) {
+            $messageLines[] = "⚠️ *Terlewat (Belum Dibayar):*";
+            foreach ($overdue as $o) {
+                $messageLines[] = "• #{$o['id']} *{$o['name']}*: {$o['formatted_amount']} (Tgl {$o['day_of_month']} {$now->translatedFormat('M')})";
+            }
+            foreach ($payrollOverdue as $po) {
+                $messageLines[] = "• 👤 *Gaji {$po['name']}* (#{$po['id']}): {$po['formatted_amount']} (Tgl {$po['pay_day']} {$now->translatedFormat('M')})";
+            }
+            $messageLines[] = "";
+        }
+
+        if (!empty($actionable) || !empty($payrollActionable)) {
+            $messageLines[] = "💡 *Cara Bayar Cepat:*";
+            if (!empty($actionable)) {
+                $firstId = $actionable[0]['id'];
+                $firstName = strtolower(explode(' ', $actionable[0]['name'])[0]);
+                $messageLines[] = "• Tagihan Rutin: `/bayar {$firstId}` atau `/bayar {$firstName}`";
+            }
+            if (!empty($payrollActionable)) {
+                $firstEmpName = strtolower(explode(' ', $payrollActionable[0]['name'])[0]);
+                $messageLines[] = "• Gaji Karyawan: `/bayar gaji {$firstEmpName}` atau `/bayar gaji {$payrollActionable[0]['id']}`";
+            }
+            $messageLines[] = "• Untuk lewati: `/lewati <id>`";
+            $messageLines[] = "";
+        }
+
+        if (!empty($upcoming) || !empty($payrollUpcoming)) {
+            $messageLines[] = "⏳ *Mendatang Bulan Ini:*";
+            foreach ($upcoming as $u) {
+                $daysLeft = (int) $u['days_left'];
+                $daysText = $daysLeft === 1 ? 'Besok' : "{$daysLeft} hari lagi";
+                $messageLines[] = "• #{$u['id']} *{$u['name']}*: {$u['formatted_amount']} (Tgl {$u['day_of_month']} {$now->translatedFormat('M')} • {$daysText})";
+            }
+            foreach ($payrollUpcoming as $pu) {
+                $daysLeft = (int) $pu['days_left'];
+                $daysText = $daysLeft === 1 ? 'Besok' : "{$daysLeft} hari lagi";
+                $messageLines[] = "• 👤 *Gaji {$pu['name']}*: {$pu['formatted_amount']} (Tgl {$pu['pay_day']} {$now->translatedFormat('M')} • {$daysText})";
+            }
+            $messageLines[] = "";
+        }
+
+        if (!empty($alreadyPaid) || !empty($payrollAlreadyPaid)) {
+            $messageLines[] = "🟢 *Sudah Dibayar Bulan Ini:*";
+            foreach ($alreadyPaid as $p) {
+                $messageLines[] = "• #{$p['id']} *{$p['name']}*: {$p['formatted_amount']} (Dibayar {$p['last_posted_at']})";
+            }
+            foreach ($payrollAlreadyPaid as $pp) {
+                $messageLines[] = "• 👤 *Gaji {$pp['name']}*: {$pp['formatted_amount']} (Dibayar {$pp['last_paid_at']})";
+            }
+            $messageLines[] = "";
+        }
+
+        if (empty($dueToday) && empty($overdue) && empty($upcoming) && empty($alreadyPaid)
+            && empty($payrollDueToday) && empty($payrollOverdue) && empty($payrollUpcoming) && empty($payrollAlreadyPaid)) {
+            $messageLines[] = "ℹ️ Belum ada jadwal pengeluaran rutin atau gaji untuk bulan ini.\n";
+        }
+
+        $totalRecurring = array_sum(array_column($dueToday, 'amount'))
+                        + array_sum(array_column($overdue, 'amount'))
+                        + array_sum(array_column($upcoming, 'amount'))
+                        + array_sum(array_column($alreadyPaid, 'amount'));
+
+        $totalPayroll = array_sum(array_column($payrollDueToday, 'amount'))
+                      + array_sum(array_column($payrollOverdue, 'amount'))
+                      + array_sum(array_column($payrollUpcoming, 'amount'))
+                      + array_sum(array_column($payrollAlreadyPaid, 'amount'));
+
+        $totalAll = $totalRecurring + $totalPayroll;
+
+        $messageLines[] = "───────────────────";
+        $messageLines[] = "💰 *Total Estimasi Bulan Ini*: Rp " . number_format($totalAll, 0, ',', '.');
+        if ($totalPayroll > 0) {
+            $messageLines[] = "  • Beban Rutin: Rp " . number_format($totalRecurring, 0, ',', '.');
+            $messageLines[] = "  • Beban Gaji (5002): Rp " . number_format($totalPayroll, 0, ',', '.');
+        }
+
+        return response()->json([
+            'status'                 => true,
+            'period'                 => $monthName,
+            'count'                  => count($actionable) + count($payrollActionable),
+            'data'                   => $actionable,
+            'due_today'              => $dueToday,
+            'overdue'                => $overdue,
+            'upcoming'               => $upcoming,
+            'already_paid'           => $alreadyPaid,
+            'payroll'                => [
+                'count'        => count($payrollActionable),
+                'due_today'    => $payrollDueToday,
+                'overdue'      => $payrollOverdue,
+                'upcoming'     => $payrollUpcoming,
+                'already_paid' => $payrollAlreadyPaid,
+                'total_amount' => $totalPayroll,
+                'formatted_total_amount' => 'Rp ' . number_format($totalPayroll, 0, ',', '.'),
+            ],
+            'total_recurring'        => $totalRecurring,
+            'total_payroll'          => $totalPayroll,
+            'total_amount'           => $totalAll,
+            'formatted_total_amount' => 'Rp ' . number_format($totalAll, 0, ',', '.'),
+            'message'                => implode("\n", $messageLines),
+        ]);
+    }
+
+    /**
+     * Tampilkan daftar gaji karyawan dan status pembukuannya untuk bulan ini via webhook / Telegram.
+     */
+    public function duePayroll(Request $request)
+    {
+        $today = now();
+        $daysInMonth = $today->daysInMonth;
+        $monthName = $today->translatedFormat('F Y');
+
+        $activeEmployees = Employee::with('assetAccount')
+            ->active()
+            ->orderBy('pay_day')
+            ->get();
+
+        if ($activeEmployees->isEmpty()) {
+            return response()->json([
+                'status'  => true,
+                'period'  => $monthName,
+                'count'   => 0,
+                'message' => "ℹ️ Belum ada data karyawan aktif di sistem Seven Management.\n\n💡 Silakan tambahkan data staf melalui menu Karyawan & Payroll di dashboard web.",
+                'data'    => [],
+            ]);
+        }
+
+        $dueToday = [];
+        $overdue = [];
+        $upcoming = [];
+        $alreadyPaid = [];
+
+        foreach ($activeEmployees as $emp) {
+            $targetDay = min((int) $emp->pay_day, $daysInMonth);
+            $targetDate = Carbon::create($today->year, $today->month, $targetDay)->startOfDay();
+
+            $alreadyPaidThisMonth = $emp->last_paid_at 
+                && $emp->last_paid_at->isCurrentMonth() 
+                && $emp->last_paid_at->isCurrentYear();
+
+            $daysLeft = (int) $today->diffInDays($targetDate, false);
+
+            $empData = [
+                'id'                 => $emp->id,
+                'name'               => $emp->name,
+                'position'           => $emp->position,
+                'base_salary'        => (float) $emp->base_salary,
+                'formatted_base'     => $emp->formatted_base_salary,
+                'current_points'     => (int) $emp->current_points,
+                'rate_per_point'     => (float) $emp->rate_per_point,
+                'bonus_salary'       => (float) $emp->bonus_salary,
+                'formatted_bonus'    => $emp->formatted_bonus_salary,
+                'total_salary'       => (float) $emp->total_salary,
+                'amount'             => (float) $emp->total_salary,
+                'formatted_amount'   => $emp->formatted_total_salary,
+                'pay_day'            => $emp->pay_day,
+                'due_date'           => $targetDate->translatedFormat('d F Y'),
+                'days_left'          => $daysLeft,
+                'asset_account_name' => $emp->assetAccount->name ?? 'Kas Operasional',
+                'last_paid_at'       => $emp->last_paid_at ? $emp->last_paid_at->translatedFormat('d M Y') : null,
+            ];
+
+            if ($alreadyPaidThisMonth) {
+                $alreadyPaid[] = $empData;
+            } else {
+                if ($today->isSameDay($targetDate)) {
+                    $dueToday[] = $empData;
+                } elseif ($targetDate->isPast()) {
+                    $overdue[] = $empData;
+                } else {
+                    $upcoming[] = $empData;
+                }
+            }
+        }
+
+        $messageLines = ["👥 *Daftar Gaji Karyawan & Status ({$monthName})*\n"];
 
         if (!empty($dueToday)) {
             $messageLines[] = "🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*";
             foreach ($dueToday as $d) {
-                $messageLines[] = "• #{$d['id']} *{$d['name']}*: {$d['formatted_amount']}";
+                $bonusStr = $d['current_points'] > 0 ? " • Bonus: {$d['formatted_bonus']} ({$d['current_points']} pt)" : "";
+                $messageLines[] = "• 👤 *#{$d['id']} {$d['name']}* ({$d['position']})";
+                $messageLines[] = "  💵 Gaji: {$d['formatted_base']}{$bonusStr} ➔ *{$d['formatted_amount']}*";
+                $messageLines[] = "  💳 Bayar via: {$d['asset_account_name']}";
+                $messageLines[] = "  👉 Bayar cepat: `/bayar gaji {$d['id']}`";
             }
             $messageLines[] = "";
         }
@@ -412,18 +663,13 @@ class WebhookTransactionController extends Controller
         if (!empty($overdue)) {
             $messageLines[] = "⚠️ *Terlewat (Belum Dibayar):*";
             foreach ($overdue as $o) {
-                $messageLines[] = "• #{$o['id']} *{$o['name']}*: {$o['formatted_amount']} (Tgl {$o['day_of_month']} {$now->translatedFormat('M')})";
+                $bonusStr = $o['current_points'] > 0 ? " • Bonus: {$o['formatted_bonus']} ({$o['current_points']} pt)" : "";
+                $messageLines[] = "• 👤 *#{$o['id']} {$o['name']}* ({$o['position']})";
+                $messageLines[] = "  💵 Gaji: {$o['formatted_base']}{$bonusStr} ➔ *{$o['formatted_amount']}*";
+                $messageLines[] = "  📅 Jatuh Tempo: Tgl {$o['pay_day']} {$today->translatedFormat('M')}";
+                $messageLines[] = "  💳 Bayar via: {$o['asset_account_name']}";
+                $messageLines[] = "  👉 Bayar cepat: `/bayar gaji {$o['id']}`";
             }
-            $messageLines[] = "";
-        }
-
-        if (!empty($actionable)) {
-            $firstId = $actionable[0]['id'];
-            $firstName = strtolower(explode(' ', $actionable[0]['name'])[0]);
-            $messageLines[] = "💡 *Cara Bayar Cepat:*";
-            $messageLines[] = "• Klik tombol `[✅ Bayar Sekarang]`";
-            $messageLines[] = "• ATAU ketik manual: `/bayar {$firstId}` atau `/bayar {$firstName}`";
-            $messageLines[] = "• Untuk lewati: `/lewati {$firstId}`";
             $messageLines[] = "";
         }
 
@@ -432,41 +678,49 @@ class WebhookTransactionController extends Controller
             foreach ($upcoming as $u) {
                 $daysLeft = (int) $u['days_left'];
                 $daysText = $daysLeft === 1 ? 'Besok' : "{$daysLeft} hari lagi";
-                $messageLines[] = "• #{$u['id']} *{$u['name']}*: {$u['formatted_amount']} (Tgl {$u['day_of_month']} {$now->translatedFormat('M')} • {$daysText})";
+                $bonusStr = $u['current_points'] > 0 ? " • Bonus: {$u['formatted_bonus']}" : "";
+                $messageLines[] = "• 👤 *#{$u['id']} {$u['name']}* ({$u['position']}): *{$u['formatted_amount']}*";
+                $messageLines[] = "  📅 Tgl {$u['pay_day']} {$today->translatedFormat('M')} ({$daysText}) • via {$u['asset_account_name']}";
             }
             $messageLines[] = "";
         }
 
         if (!empty($alreadyPaid)) {
-            $messageLines[] = "🟢 *Sudah Dibayar Bulan Ini:*";
+            $messageLines[] = "🟢 *Sudah Dibayar Bulan Ini (Lunas):*";
             foreach ($alreadyPaid as $p) {
-                $messageLines[] = "• #{$p['id']} *{$p['name']}*: {$p['formatted_amount']} (Dibayar {$p['last_posted_at']})";
+                $messageLines[] = "• 👤 *#{$p['id']} {$p['name']}* ({$p['position']}): *{$p['formatted_amount']}* (Lunas tgl {$p['last_paid_at']})";
             }
             $messageLines[] = "";
         }
 
-        if (empty($dueToday) && empty($overdue) && empty($upcoming) && empty($alreadyPaid)) {
-            $messageLines[] = "ℹ️ Belum ada jadwal pengeluaran rutin untuk bulan ini.\n";
-        }
-
-        $totalAll = array_sum(array_column($dueToday, 'amount'))
-                  + array_sum(array_column($overdue, 'amount'))
-                  + array_sum(array_column($upcoming, 'amount'))
-                  + array_sum(array_column($alreadyPaid, 'amount'));
+        $totalPaid = array_sum(array_column($alreadyPaid, 'amount'));
+        $totalUnpaid = array_sum(array_column($dueToday, 'amount'))
+                     + array_sum(array_column($overdue, 'amount'))
+                     + array_sum(array_column($upcoming, 'amount'));
+        $totalAll = $totalPaid + $totalUnpaid;
 
         $messageLines[] = "───────────────────";
-        $messageLines[] = "💰 *Total Rutin Bulan Ini*: Rp " . number_format($totalAll, 0, ',', '.');
+        $messageLines[] = "💰 *Total Beban Gaji (5002)*: Rp " . number_format($totalAll, 0, ',', '.');
+        $messageLines[] = "  • 🟢 Lunas Dibayar: Rp " . number_format($totalPaid, 0, ',', '.') . " (" . count($alreadyPaid) . " staf)";
+        $messageLines[] = "  • ⏳ Belum Dibayar: Rp " . number_format($totalUnpaid, 0, ',', '.') . " (" . (count($dueToday) + count($overdue) + count($upcoming)) . " staf)";
+
+        if ($totalUnpaid > 0) {
+            $messageLines[] = "";
+            $messageLines[] = "💡 *Ketik `/bayar gaji <nama/id>` untuk eksekusi pembayaran gaji.*";
+        }
 
         return response()->json([
             'status'                 => true,
             'period'                 => $monthName,
-            'count'                  => count($actionable),
-            'data'                   => $actionable,
+            'count'                  => $activeEmployees->count(),
             'due_today'              => $dueToday,
             'overdue'                => $overdue,
             'upcoming'               => $upcoming,
             'already_paid'           => $alreadyPaid,
+            'actionable'             => array_merge($dueToday, $overdue),
             'total_amount'           => $totalAll,
+            'total_paid'             => $totalPaid,
+            'total_unpaid'           => $totalUnpaid,
             'formatted_total_amount' => 'Rp ' . number_format($totalAll, 0, ',', '.'),
             'message'                => implode("\n", $messageLines),
         ]);
@@ -478,7 +732,8 @@ class WebhookTransactionController extends Controller
     public function approveRecurring(Request $request, RecurringTransaction $recurringTransaction)
     {
         $customAmount = $request->filled('amount') ? (float) $request->input('amount') : null;
-        $source = $request->input('source', 'telegram_approval');
+        $rawSource = $request->input('source', 'telegram');
+        $source = str_starts_with(strtolower($rawSource), 'telegram') ? 'telegram' : $rawSource;
 
         $journalEntry = $recurringTransaction->executePosting($customAmount, $source);
 
@@ -497,6 +752,45 @@ class WebhookTransactionController extends Controller
     }
 
     /**
+     * Approve and execute posting for employee payroll via webhook.
+     */
+    public function approvePayroll(Request $request, Employee $employee)
+    {
+        $customAmount = $request->filled('amount') ? (float) $request->input('amount') : null;
+        $rawSource = $request->input('source', 'telegram');
+        $source = str_starts_with(strtolower($rawSource), 'telegram') ? 'telegram' : $rawSource;
+
+        $journalEntry = $employee->executePayrollPosting($customAmount, $source);
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Penggajian karyawan '{$employee->name}' berhasil dibukukan.",
+            'data'    => [
+                'reference'     => $journalEntry->reference,
+                'name'          => $employee->name,
+                'amount'        => $customAmount ?: (float) $employee->total_salary,
+                'expense_code'  => '5002',
+                'expense_name'  => 'Beban Gaji',
+                'asset_account' => $employee->assetAccount->name ?? 'Kas Operasional',
+                'journal_entry' => $journalEntry,
+            ],
+        ], 201);
+    }
+
+    /**
+     * Skip this period for employee payroll via webhook.
+     */
+    public function skipPayroll(Request $request, Employee $employee)
+    {
+        $employee->update(['last_paid_at' => now()]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Penggajian karyawan '{$employee->name}' telah dilewati untuk periode ini.",
+        ]);
+    }
+
+    /**
      * Skip this period for a recurring expense via webhook.
      */
     public function skipRecurring(Request $request, RecurringTransaction $recurringTransaction)
@@ -510,37 +804,84 @@ class WebhookTransactionController extends Controller
     }
 
     /**
-     * Handle manual text command to approve or skip a recurring expense (e.g. /bayar 1 or /bayar wifi).
+     * Handle manual text command to approve or skip a recurring expense or employee payroll.
+     * Examples: /bayar 1, /bayar wifi, /bayar gaji budi, /bayar gaji 1, /lewati gaji budi
      */
     public function manualRecurringAction(Request $request)
     {
         $validated = $request->validate([
             'query'  => 'required|string',
-            'action' => 'nullable|string|in:approve,skip',
+            'action' => 'nullable|string|in:approve,skip,list',
             'amount' => 'nullable|numeric|min:0',
         ]);
 
-        $query = trim($validated['query']);
+        $rawQuery = trim($validated['query']);
         $action = strtolower($validated['action'] ?? 'approve');
+        $customAmount = !empty($validated['amount']) ? (float) $validated['amount'] : null;
 
-        // Cari berdasarkan ID jika berupa angka
-        $recurring = null;
-        if (is_numeric($query)) {
-            $recurring = RecurringTransaction::with(['expenseAccount', 'assetAccount'])->find((int) $query);
+        // Cek jika perintah secara spesifik menargetkan gaji karyawan (misal: "gaji budi", "/gaji", "salary 1", "karyawan asep", atau "gaji")
+        $isExplicitPayroll = false;
+        $cleanQuery = $rawQuery;
+        if (preg_match('/^\/?(?:gaji|salary|karyawan|daftar\s*gaji)\s*(.*)$/i', $rawQuery, $matches)) {
+            $isExplicitPayroll = true;
+            $cleanQuery = trim($matches[1]);
         }
 
-        // Cari berdasarkan nama jika belum ditemukan
-        if (!$recurring && !empty($query)) {
+        // Jika action adalah 'list' atau query murni "gaji" / "daftar gaji" tanpa nama: tampilkan daftar gaji & statusnya!
+        if ($action === 'list' || ($isExplicitPayroll && empty($cleanQuery))) {
+            return $this->duePayroll($request);
+        }
+
+        // 1. Jika query eksplisit gaji, cari langsung di model Employee
+        if ($isExplicitPayroll) {
+            $employee = null;
+            if (is_numeric($cleanQuery)) {
+                $employee = Employee::with('assetAccount')->find((int) $cleanQuery);
+            }
+            if (!$employee && !empty($cleanQuery)) {
+                $employee = Employee::with('assetAccount')
+                    ->where('name', 'LIKE', "%{$cleanQuery}%")
+                    ->first();
+            }
+
+            if (!$employee) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => "❌ Karyawan dengan kata kunci '{$cleanQuery}' tidak ditemukan.\n\n💡 Ketik /rutin untuk melihat daftar karyawan & jadwal gaji.",
+                ], 404);
+            }
+
+            return $this->handleEmployeePayment($employee, $action, $customAmount);
+        }
+
+        // 2. Jika bukan eksplisit gaji, cari dulu di RecurringTransaction
+        $recurring = null;
+        if (is_numeric($rawQuery)) {
+            $recurring = RecurringTransaction::with(['expenseAccount', 'assetAccount'])->find((int) $rawQuery);
+        }
+
+        if (!$recurring && !empty($rawQuery)) {
             $recurring = RecurringTransaction::with(['expenseAccount', 'assetAccount'])
                 ->active()
-                ->where('name', 'LIKE', "%{$query}%")
+                ->where('name', 'LIKE', "%{$rawQuery}%")
                 ->first();
+        }
+
+        // 3. Jika di RecurringTransaction tidak ada, periksa apakah cocok dengan nama Employee
+        if (!$recurring && !empty($rawQuery)) {
+            $employee = Employee::with('assetAccount')
+                ->where('name', 'LIKE', "%{$rawQuery}%")
+                ->first();
+
+            if ($employee) {
+                return $this->handleEmployeePayment($employee, $action, $customAmount);
+            }
         }
 
         if (!$recurring) {
             return response()->json([
                 'status'  => false,
-                'message' => "❌ Tagihan dengan kata kunci '{$query}' tidak ditemukan.\n\n💡 Ketik /rutin untuk melihat daftar nama & ID tagihan yang aktif.",
+                'message' => "❌ Tagihan atau gaji dengan kata kunci '{$rawQuery}' tidak ditemukan.\n\n💡 Ketik /rutin untuk melihat daftar tagihan & jadwal gaji aktif.",
             ], 404);
         }
 
@@ -553,8 +894,7 @@ class WebhookTransactionController extends Controller
         }
 
         // Eksekusi posting akuntansi (double-entry)
-        $customAmount = !empty($validated['amount']) ? (float) $validated['amount'] : null;
-        $journalEntry = $recurring->executePosting($customAmount, 'telegram_manual_command');
+        $journalEntry = $recurring->executePosting($customAmount, 'telegram');
 
         $finalAmount = $customAmount ?: (float) $recurring->amount;
         $formattedAmount = 'Rp ' . number_format($finalAmount, 0, ',', '.');
@@ -572,6 +912,50 @@ class WebhookTransactionController extends Controller
             'data'    => [
                 'reference' => $journalEntry->reference,
                 'name'      => $recurring->name,
+                'amount'    => $finalAmount,
+            ],
+        ], 201);
+    }
+
+    /**
+     * Eksekusi atau lewati pembayaran gaji karyawan dari webhook / Telegram command.
+     */
+    private function handleEmployeePayment(Employee $employee, string $action, ?float $customAmount)
+    {
+        if ($action === 'skip') {
+            $employee->update(['last_paid_at' => now()]);
+            return response()->json([
+                'status'  => true,
+                'message' => "⏭️ Penggajian karyawan '#{$employee->id} {$employee->name}' telah dilewati untuk periode ini.",
+            ]);
+        }
+
+        $journalEntry = $employee->executePayrollPosting($customAmount, 'telegram');
+
+        $finalAmount = $customAmount !== null && $customAmount > 0
+            ? $customAmount
+            : (float) $employee->total_salary;
+        $formattedAmount = 'Rp ' . number_format($finalAmount, 0, ',', '.');
+        $assetName = $employee->assetAccount->name ?? 'Kas Operasional';
+
+        $bonusInfo = "";
+        if ($employee->current_points > 0) {
+            $bonusInfo = "⭐ Bonus Poin: {$employee->formatted_bonus_salary} ({$employee->current_points} poin @ Rp " . number_format($employee->rate_per_point, 0, ',', '.') . ")\n";
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => "✅ *Gaji Karyawan Berhasil Dibukukan!*\n\n" .
+                         "👤 *#{$employee->id} {$employee->name}* ({$employee->position})\n" .
+                         "💵 Gaji Pokok: {$employee->formatted_base_salary}\n" .
+                         $bonusInfo .
+                         "💰 *Total Dibayar: {$formattedAmount}*\n" .
+                         "📂 Beban: Beban Gaji (5002)\n" .
+                         "💳 Bayar dari: {$assetName}\n" .
+                         "🔖 Ref: `{$journalEntry->reference}`",
+            'data'    => [
+                'reference' => $journalEntry->reference,
+                'name'      => $employee->name,
                 'amount'    => $finalAmount,
             ],
         ], 201);

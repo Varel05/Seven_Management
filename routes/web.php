@@ -106,6 +106,14 @@ Route::middleware('auth')->group(function () {
     Route::put('/recurring-transactions/{recurringTransaction}', [\App\Http\Controllers\RecurringTransactionController::class, 'update'])->name('recurring-transactions.update');
     Route::delete('/recurring-transactions/{recurringTransaction}', [\App\Http\Controllers\RecurringTransactionController::class, 'destroy'])->name('recurring-transactions.destroy');
     Route::post('/recurring-transactions/{recurringTransaction}/approve', [\App\Http\Controllers\RecurringTransactionController::class, 'approve'])->name('recurring-transactions.approve');
+
+    // Manajemen Data Karyawan & Payroll
+    Route::get('/employees', [\App\Http\Controllers\EmployeeController::class, 'index'])->name('employees.index');
+    Route::post('/employees', [\App\Http\Controllers\EmployeeController::class, 'store'])->name('employees.store');
+    Route::put('/employees/{employee}', [\App\Http\Controllers\EmployeeController::class, 'update'])->name('employees.update');
+    Route::patch('/employees/{employee}/points', [\App\Http\Controllers\EmployeeController::class, 'updatePoints'])->name('employees.points');
+    Route::delete('/employees/{employee}', [\App\Http\Controllers\EmployeeController::class, 'destroy'])->name('employees.destroy');
+    Route::post('/employees/{employee}/pay', [\App\Http\Controllers\EmployeeController::class, 'pay'])->name('employees.pay');
 });
 
 require __DIR__.'/auth.php';

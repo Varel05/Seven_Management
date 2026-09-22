@@ -76,7 +76,7 @@ class RecurringTransaction extends Model
     /**
      * Eksekusi pembukuan akuntansi (double-entry) untuk pengeluaran berulang ini.
      */
-    public function executePosting(?float $customAmount = null, string $source = 'telegram_approval'): JournalEntry
+    public function executePosting(?float $customAmount = null, string $source = 'telegram'): JournalEntry
     {
         return DB::transaction(function () use ($customAmount, $source) {
             $finalAmount = $customAmount !== null && $customAmount > 0
@@ -84,12 +84,13 @@ class RecurringTransaction extends Model
                 : (float) $this->amount;
 
             $reference = 'RC-' . strtoupper(Str::random(8));
+            $normalizedSource = str_starts_with(strtolower($source), 'telegram') ? 'telegram' : $source;
 
             $journalEntry = JournalEntry::create([
                 'reference'   => $reference,
                 'description' => "Pengeluaran Rutin: {$this->name} (" . now()->translatedFormat('F Y') . ")",
                 'date'        => now(),
-                'source'      => $source,
+                'source'      => $normalizedSource,
                 'status'      => 'verified',
             ]);
 
