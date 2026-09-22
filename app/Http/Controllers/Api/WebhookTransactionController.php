@@ -72,9 +72,18 @@ class WebhookTransactionController extends Controller
         $validated['type'] = $typeMap[$rawType] ?? 'expense';
 
         return DB::transaction(function () use ($validated) {
-            $transactionDate = !empty($validated['date'])
-                ? Carbon::parse($validated['date'])
-                : now();
+            $transactionDate = now();
+            if (!empty($validated['date'])) {
+                try {
+                    $parsed = Carbon::parse($validated['date']);
+                    // Hanya gunakan jika tahunnya valid (minimal tahun ini) agar terhindar dari halusinasi model AI
+                    if ($parsed->year >= now()->year) {
+                        $transactionDate = $parsed;
+                    }
+                } catch (\Exception $e) {
+                    $transactionDate = now();
+                }
+            }
 
             $reference = $validated['reference'] ?? ('TG-' . strtoupper(Str::random(8)));
 
