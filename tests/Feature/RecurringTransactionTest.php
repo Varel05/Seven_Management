@@ -205,4 +205,62 @@ class RecurringTransactionTest extends TestCase
         $this->assertStringContainsString('Tagihan Hosting AWS', $response->json('message'));
         $this->assertStringContainsString('Rp 1.200.000', $response->json('message'));
     }
+
+    public function test_manual_action_approves_recurring_by_id(): void
+    {
+        $recurring = RecurringTransaction::create([
+            'name'               => 'Listrik PLN',
+            'amount'             => 450000,
+            'frequency'          => 'monthly',
+            'day_of_month'       => now()->day,
+            'expense_account_id' => $this->expenseAccount->id,
+            'asset_account_id'   => $this->assetAccount->id,
+            'status'             => 'active',
+        ]);
+
+        $response = $this->postJson('/api/webhook/recurring/manual-action', [
+            'query'  => (string) $recurring->id,
+            'action' => 'approve',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'account_id' => $this->expenseAccount->id,
+            'debit'      => 450000,
+        ]);
+
+        $recurring->refresh();
+        $this->assertNotNull($recurring->last_posted_at);
+    }
+
+    public function test_manual_action_approves_recurring_by_name(): void
+    {
+        $recurring = RecurringTransaction::create([
+            'name'               => 'Gaji Staff Admin',
+            'amount'             => 3500000,
+            'frequency'          => 'monthly',
+            'day_of_month'       => now()->day,
+            'expense_account_id' => $this->expenseAccount->id,
+            'asset_account_id'   => $this->assetAccount->id,
+            'status'             => 'active',
+        ]);
+
+        $response = $this->postJson('/api/webhook/recurring/manual-action', [
+            'query'  => 'Staff Admin',
+            'action' => 'approve',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'account_id' => $this->expenseAccount->id,
+            'debit'      => 3500000,
+        ]);
+
+        $recurring->refresh();
+        $this->assertNotNull($recurring->last_posted_at);
+    }
 }

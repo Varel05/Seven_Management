@@ -395,7 +395,7 @@ class WebhookTransactionController extends Controller
         if (!empty($dueToday)) {
             $messageLines[] = "🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*";
             foreach ($dueToday as $d) {
-                $messageLines[] = "• *{$d['name']}*: {$d['formatted_amount']}";
+                $messageLines[] = "• #{$d['id']} *{$d['name']}*: {$d['formatted_amount']}";
             }
             $messageLines[] = "";
         }
@@ -403,8 +403,18 @@ class WebhookTransactionController extends Controller
         if (!empty($overdue)) {
             $messageLines[] = "⚠️ *Terlewat (Belum Dibayar):*";
             foreach ($overdue as $o) {
-                $messageLines[] = "• *{$o['name']}*: {$o['formatted_amount']} (Tgl {$o['day_of_month']} {$now->translatedFormat('M')})";
+                $messageLines[] = "• #{$o['id']} *{$o['name']}*: {$o['formatted_amount']} (Tgl {$o['day_of_month']} {$now->translatedFormat('M')})";
             }
+            $messageLines[] = "";
+        }
+
+        if (!empty($actionable)) {
+            $firstId = $actionable[0]['id'];
+            $firstName = strtolower(explode(' ', $actionable[0]['name'])[0]);
+            $messageLines[] = "💡 *Cara Bayar Cepat:*";
+            $messageLines[] = "• Klik tombol `[✅ Bayar Sekarang]`";
+            $messageLines[] = "• ATAU ketik manual: `/bayar {$firstId}` atau `/bayar {$firstName}`";
+            $messageLines[] = "• Untuk lewati: `/lewati {$firstId}`";
             $messageLines[] = "";
         }
 
@@ -413,7 +423,7 @@ class WebhookTransactionController extends Controller
             foreach ($upcoming as $u) {
                 $daysLeft = (int) $u['days_left'];
                 $daysText = $daysLeft === 1 ? 'Besok' : "{$daysLeft} hari lagi";
-                $messageLines[] = "• *{$u['name']}*: {$u['formatted_amount']} (Tgl {$u['day_of_month']} {$now->translatedFormat('M')} • {$daysText})";
+                $messageLines[] = "• #{$u['id']} *{$u['name']}*: {$u['formatted_amount']} (Tgl {$u['day_of_month']} {$now->translatedFormat('M')} • {$daysText})";
             }
             $messageLines[] = "";
         }
@@ -421,7 +431,7 @@ class WebhookTransactionController extends Controller
         if (!empty($alreadyPaid)) {
             $messageLines[] = "🟢 *Sudah Dibayar Bulan Ini:*";
             foreach ($alreadyPaid as $p) {
-                $messageLines[] = "• *{$p['name']}*: {$p['formatted_amount']} (Dibayar {$p['last_posted_at']})";
+                $messageLines[] = "• #{$p['id']} *{$p['name']}*: {$p['formatted_amount']} (Dibayar {$p['last_posted_at']})";
             }
             $messageLines[] = "";
         }
@@ -488,6 +498,74 @@ class WebhookTransactionController extends Controller
             'status'  => true,
             'message' => "Pengeluaran rutin '{$recurringTransaction->name}' telah dilewati untuk periode ini.",
         ]);
+    }
+
+    /**
+     * Handle manual text command to approve or skip a recurring expense (e.g. /bayar 1 or /bayar wifi).
+     */
+    public function manualRecurringAction(Request $request)
+    {
+        $validated = $request->validate([
+            'query'  => 'required|string',
+            'action' => 'nullable|string|in:approve,skip',
+            'amount' => 'nullable|numeric|min:0',
+        ]);
+
+        $query = trim($validated['query']);
+        $action = strtolower($validated['action'] ?? 'approve');
+
+        // Cari berdasarkan ID jika berupa angka
+        $recurring = null;
+        if (is_numeric($query)) {
+            $recurring = RecurringTransaction::with(['expenseAccount', 'assetAccount'])->find((int) $query);
+        }
+
+        // Cari berdasarkan nama jika belum ditemukan
+        if (!$recurring && !empty($query)) {
+            $recurring = RecurringTransaction::with(['expenseAccount', 'assetAccount'])
+                ->active()
+                ->where('name', 'LIKE', "%{$query}%")
+                ->first();
+        }
+
+        if (!$recurring) {
+            return response()->json([
+                'status'  => false,
+                'message' => "❌ Tagihan dengan kata kunci '{$query}' tidak ditemukan.\n\n💡 Ketik /rutin untuk melihat daftar nama & ID tagihan yang aktif.",
+            ], 404);
+        }
+
+        if ($action === 'skip') {
+            $recurring->update(['last_posted_at' => now()]);
+            return response()->json([
+                'status'  => true,
+                'message' => "⏭️ Pengeluaran rutin '#{$recurring->id} {$recurring->name}' telah dilewati untuk periode ini.",
+            ]);
+        }
+
+        // Eksekusi posting akuntansi (double-entry)
+        $customAmount = !empty($validated['amount']) ? (float) $validated['amount'] : null;
+        $journalEntry = $recurring->executePosting($customAmount, 'telegram_manual_command');
+
+        $finalAmount = $customAmount ?: (float) $recurring->amount;
+        $formattedAmount = 'Rp ' . number_format($finalAmount, 0, ',', '.');
+        $assetName = $recurring->assetAccount->name ?? 'Kas Operasional';
+        $expenseName = $recurring->expenseAccount->name ?? 'Beban Operasional';
+
+        return response()->json([
+            'status'  => true,
+            'message' => "✅ *Pengeluaran Rutin Berhasil Dibukukan!*\n\n" .
+                         "🏢 *#{$recurring->id} {$recurring->name}*\n" .
+                         "💰 *{$formattedAmount}*\n" .
+                         "📂 Beban: {$expenseName}\n" .
+                         "💳 Bayar dari: {$assetName}\n" .
+                         "🔖 Ref: `{$journalEntry->reference}`",
+            'data'    => [
+                'reference' => $journalEntry->reference,
+                'name'      => $recurring->name,
+                'amount'    => $finalAmount,
+            ],
+        ], 201);
     }
 
     /**

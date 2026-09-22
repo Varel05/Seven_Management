@@ -16,6 +16,7 @@ Route::middleware('webhook.secret')->group(function () {
 
     // Recurring & Subscription Endpoints
     Route::get('/webhook/recurring/due', [WebhookTransactionController::class, 'dueRecurring']);
+    Route::post('/webhook/recurring/manual-action', [WebhookTransactionController::class, 'manualRecurringAction']);
     Route::post('/webhook/recurring/{recurringTransaction}/approve', [WebhookTransactionController::class, 'approveRecurring']);
     Route::post('/webhook/recurring/{recurringTransaction}/skip', [WebhookTransactionController::class, 'skipRecurring']);
 
