@@ -56,6 +56,14 @@ Route::get('/dashboard', function () {
         ];
     });
 
+    // Master Pengeluaran Berulang (Recurring Expenses)
+    $recurringTransactions = \App\Models\RecurringTransaction::with(['expenseAccount', 'assetAccount'])
+        ->latest()
+        ->get();
+
+    $expenseAccounts = \App\Models\Account::where('type', 'expense')->orderBy('code')->get();
+    $assetAccounts = \App\Models\Account::where('type', 'asset')->orderBy('code')->get();
+
     return view('dashboard', compact(
         'transactions', 
         'totalKas', 
@@ -65,7 +73,10 @@ Route::get('/dashboard', function () {
         'labaBersihBulanIni',
         'pendingCount',
         'verifiedCount',
-        'accounts'
+        'accounts',
+        'recurringTransactions',
+        'expenseAccounts',
+        'assetAccounts'
     ));
 })->middleware(['auth', 'verified'])->name('dashboard');
 
@@ -89,6 +100,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/accounts', [\App\Http\Controllers\AccountController::class, 'store'])->name('accounts.store');
     Route::put('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'update'])->name('accounts.update');
     Route::delete('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'destroy'])->name('accounts.destroy');
+
+    // Manajemen Pengeluaran Rutin & Langganan (Recurring Transactions)
+    Route::post('/recurring-transactions', [\App\Http\Controllers\RecurringTransactionController::class, 'store'])->name('recurring-transactions.store');
+    Route::put('/recurring-transactions/{recurringTransaction}', [\App\Http\Controllers\RecurringTransactionController::class, 'update'])->name('recurring-transactions.update');
+    Route::delete('/recurring-transactions/{recurringTransaction}', [\App\Http\Controllers\RecurringTransactionController::class, 'destroy'])->name('recurring-transactions.destroy');
+    Route::post('/recurring-transactions/{recurringTransaction}/approve', [\App\Http\Controllers\RecurringTransactionController::class, 'approve'])->name('recurring-transactions.approve');
 });
 
 require __DIR__.'/auth.php';

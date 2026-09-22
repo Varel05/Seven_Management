@@ -13,4 +13,14 @@ Route::get('/user', function (Request $request) {
 Route::middleware('webhook.secret')->group(function () {
     Route::get('/webhook/transactions', [WebhookTransactionController::class, 'index']);
     Route::post('/webhook/transaction', [WebhookTransactionController::class, 'store']);
+
+    // Recurring & Subscription Endpoints
+    Route::get('/webhook/recurring/due', [WebhookTransactionController::class, 'dueRecurring']);
+    Route::post('/webhook/recurring/{recurringTransaction}/approve', [WebhookTransactionController::class, 'approveRecurring']);
+    Route::post('/webhook/recurring/{recurringTransaction}/skip', [WebhookTransactionController::class, 'skipRecurring']);
+
+    // Information & Monitoring Endpoints (Balance & Summary)
+    Route::get('/webhook/balance', [WebhookTransactionController::class, 'balance']);
+    Route::get('/webhook/summary', [WebhookTransactionController::class, 'summary']);
 });
+

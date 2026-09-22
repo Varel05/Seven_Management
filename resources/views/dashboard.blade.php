@@ -164,6 +164,65 @@
         closeDeleteAccountModal() {
             this.showDeleteAccountModal = false;
             this.accountToDelete = null;
+        },
+        showRecurringModal: false,
+        isEditRecurring: false,
+        recurringForm: {
+            id: null,
+            name: '',
+            amount: '',
+            frequency: 'monthly',
+            day_of_month: {{ now()->day }},
+            month_of_year: {{ now()->month }},
+            expense_account_id: '{{ $expenseAccounts->first()->id ?? '' }}',
+            asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
+            status: 'active',
+            notes: ''
+        },
+        showDeleteRecurringModal: false,
+        recurringToDelete: null,
+        openAddRecurringModal() {
+            this.isEditRecurring = false;
+            this.recurringForm = {
+                id: null,
+                name: '',
+                amount: '',
+                frequency: 'monthly',
+                day_of_month: {{ now()->day }},
+                month_of_year: {{ now()->month }},
+                expense_account_id: '{{ $expenseAccounts->first()->id ?? '' }}',
+                asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
+                status: 'active',
+                notes: ''
+            };
+            this.showRecurringModal = true;
+        },
+        openEditRecurringModal(item) {
+            this.isEditRecurring = true;
+            this.recurringForm = {
+                id: item.id,
+                name: item.name,
+                amount: Number(item.amount),
+                frequency: item.frequency,
+                day_of_month: item.day_of_month,
+                month_of_year: item.month_of_year || 1,
+                expense_account_id: item.expense_account_id,
+                asset_account_id: item.asset_account_id,
+                status: item.status,
+                notes: item.notes || ''
+            };
+            this.showRecurringModal = true;
+        },
+        closeRecurringModal() {
+            this.showRecurringModal = false;
+        },
+        openDeleteRecurringModal(item) {
+            this.recurringToDelete = item;
+            this.showDeleteRecurringModal = true;
+        },
+        closeDeleteRecurringModal() {
+            this.showDeleteRecurringModal = false;
+            this.recurringToDelete = null;
         }
     }">
     <div class="max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 space-y-8">
@@ -433,6 +492,149 @@
                         >
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                             <span>Tambah Akun Baru</span>
+                        </button>
+                    </div>
+                @endif
+            </div>
+
+            <!-- RECURRING EXPENSES & SUBSCRIPTIONS SECTION -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold shadow-md shadow-purple-600/20">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        </div>
+                        <div>
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                Jadwal Pengeluaran Rutin & Langganan
+                            </h2>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Pengeluaran berkala yang memerlukan konfirmasi sebelum dibukukan</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/60">
+                            {{ $recurringTransactions->where('status', 'active')->count() }} jadwal aktif
+                        </span>
+                        <button 
+                            type="button" 
+                            @click="openAddRecurringModal()"
+                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-sm shadow-purple-600/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            <span>Tambah Tagihan Rutin</span>
+                        </button>
+                    </div>
+                </div>
+
+                @if(isset($recurringTransactions) && $recurringTransactions->count() > 0)
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
+                        @foreach($recurringTransactions as $item)
+                            @php
+                                $isDue = $item->isDueToday();
+                                $alreadyPosted = $item->last_posted_at && $item->last_posted_at->isCurrentMonth();
+                            @endphp
+                            <div class="relative p-4 rounded-2xl border transition-all flex flex-col justify-between {{ $isDue ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700/80 shadow-md ring-1 ring-amber-400/40' : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-sm' }}">
+                                <div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="w-2 h-2 rounded-full {{ $item->status === 'active' ? 'bg-emerald-500' : 'bg-slate-400' }}"></span>
+                                            <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-lg {{ $item->status === 'active' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-slate-100 text-slate-600' }}">
+                                                {{ ucfirst($item->frequency) }} (Tgl {{ $item->day_of_month }})
+                                            </span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <button 
+                                                type="button" 
+                                                @click="openEditRecurringModal({{ Js::from($item) }})" 
+                                                class="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 dark:hover:text-blue-400 transition-colors"
+                                                title="Edit Tagihan"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                @click="openDeleteRecurringModal({{ Js::from($item) }})" 
+                                                class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 dark:hover:text-rose-400 transition-colors"
+                                                title="Hapus Tagihan"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <h3 class="text-sm font-extrabold text-slate-900 dark:text-white truncate" title="{{ $item->name }}">
+                                            {{ $item->name }}
+                                        </h3>
+                                        <div class="text-lg font-mono font-black text-slate-900 dark:text-white mt-1">
+                                            Rp {{ number_format($item->amount, 0, ',', '.') }}
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1">
+                                        <div class="flex items-center justify-between text-[11px]">
+                                            <span class="text-slate-500 dark:text-slate-400">Akun Beban:</span>
+                                            <span class="font-semibold text-slate-800 dark:text-slate-200 truncate">{{ $item->expenseAccount->name ?? '-' }}</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-[11px]">
+                                            <span class="text-slate-500 dark:text-slate-400">Kas / Bank:</span>
+                                            <span class="font-semibold text-slate-800 dark:text-slate-200 truncate">{{ $item->assetAccount->name ?? '-' }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Status / Approval Action Area -->
+                                <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    @if($isDue)
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 animate-pulse">
+                                                <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                                                Jatuh Tempo Hari Ini!
+                                            </span>
+                                            <form action="{{ route('recurring-transactions.approve', $item) }}" method="POST">
+                                                @csrf
+                                                <button 
+                                                    type="submit" 
+                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-xs transition-all hover:scale-105 active:scale-95"
+                                                    title="Bukukan ke Jurnal Sekarang"
+                                                >
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                    <span>Bukukan</span>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    @elseif($alreadyPosted)
+                                        <div class="flex items-center justify-between text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                                            <span class="flex items-center gap-1">
+                                                <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                Sudah dibukukan bulan ini
+                                            </span>
+                                            <span class="text-[10px] text-slate-400">{{ $item->last_posted_at->translatedFormat('d M') }}</span>
+                                        </div>
+                                    @else
+                                        <div class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                                            <span>Jatuh tempo berikutnya:</span>
+                                            <span class="font-bold text-slate-700 dark:text-slate-300">Tgl {{ $item->day_of_month }} {{ now()->translatedFormat('F') }}</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="text-center py-7">
+                        <div class="w-11 h-11 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto mb-2.5">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <h3 class="text-xs font-bold text-slate-800 dark:text-slate-200">Belum Ada Pengeluaran Rutin</h3>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 mb-3">Jadwalkan tagihan berkala seperti gaji, langganan server, atau sewa untuk mendapatkan pengingat otomatis.</p>
+                        <button 
+                            type="button" 
+                            @click="openAddRecurringModal()"
+                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-sm shadow-purple-600/20 transition-all"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            <span>Tambah Tagihan Pertama</span>
                         </button>
                     </div>
                 @endif
@@ -1180,6 +1382,298 @@
                                     class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-md shadow-rose-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
                                 >
                                     Ya, Hapus Akun
+                                </button>
+                            </form>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. MODAL TAMBAH & EDIT PENGELUARAN RUTIN -->
+        <div 
+            x-show="showRecurringModal" 
+            x-cloak 
+            class="fixed inset-0 z-50 overflow-y-auto" 
+            style="display: none;"
+        >
+            <!-- Backdrop -->
+            <div 
+                x-show="showRecurringModal" 
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                @click="closeRecurringModal()" 
+                class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            ></div>
+
+            <!-- Modal Panel -->
+            <div class="min-h-full flex items-center justify-center p-4">
+                <div 
+                    x-show="showRecurringModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="relative bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 transition-all text-slate-800 dark:text-slate-100"
+                >
+                    <!-- Header -->
+                    <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-purple-600/20">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-base font-extrabold text-slate-900 dark:text-white" x-text="isEditRecurring ? 'Edit Pengeluaran Rutin' : 'Tambah Pengeluaran Rutin'"></h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Jadwalkan tagihan berkala untuk reminder & approval otomatis</p>
+                            </div>
+                        </div>
+
+                        <button @click="closeRecurringModal()" type="button" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    <!-- Form -->
+                    <form :action="isEditRecurring ? ('/recurring-transactions/' + recurringForm.id) : '{{ route('recurring-transactions.store') }}'" method="POST" class="mt-5 space-y-4">
+                        @csrf
+                        <template x-if="isEditRecurring">
+                            <input type="hidden" name="_method" value="PUT">
+                        </template>
+
+                        <!-- Nama Tagihan -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                Nama Tagihan / Pengeluaran <span class="text-rose-500">*</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                name="name" 
+                                x-model="recurringForm.name" 
+                                required 
+                                placeholder="Misal: Gaji Karyawan, Langganan Server AWS, Sewa Kantor"
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all placeholder:text-slate-400"
+                            >
+                        </div>
+
+                        <!-- Nominal & Siklus Frekuensi -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                    Nominal Estimasi (Rp) <span class="text-rose-500">*</span>
+                                </label>
+                                <input 
+                                    type="number" 
+                                    name="amount" 
+                                    x-model="recurringForm.amount" 
+                                    min="1" 
+                                    required 
+                                    placeholder="Contoh: 15000000"
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all placeholder:text-slate-400 placeholder:font-sans"
+                                >
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                    Siklus / Frekuensi <span class="text-rose-500">*</span>
+                                </label>
+                                <select 
+                                    name="frequency" 
+                                    x-model="recurringForm.frequency" 
+                                    required
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                                >
+                                    <option value="monthly">Bulanan (Setiap Bulan)</option>
+                                    <option value="yearly">Tahunan (Setiap Tahun)</option>
+                                    <option value="weekly">Mingguan</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Tanggal Jatuh Tempo & Status -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                    Tanggal Jatuh Tempo (Hari ke- 1–31) <span class="text-rose-500">*</span>
+                                </label>
+                                <input 
+                                    type="number" 
+                                    name="day_of_month" 
+                                    x-model="recurringForm.day_of_month" 
+                                    min="1" 
+                                    max="31" 
+                                    required 
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                                >
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                    Status Jadwal <span class="text-rose-500">*</span>
+                                </label>
+                                <select 
+                                    name="status" 
+                                    x-model="recurringForm.status" 
+                                    required
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                                >
+                                    <option value="active">Aktif (Kirim Reminder & Approval)</option>
+                                    <option value="paused">Dijeda (Nonaktifkan Sementara)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Akun Beban & Akun Kas / Bank -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                    Akun Beban (Kategori) <span class="text-rose-500">*</span>
+                                </label>
+                                <select 
+                                    name="expense_account_id" 
+                                    x-model="recurringForm.expense_account_id" 
+                                    required
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                                >
+                                    @foreach($expenseAccounts as $acc)
+                                        <option value="{{ $acc->id }}">{{ $acc->code }} - {{ $acc->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                    Sumber Kas / Bank <span class="text-rose-500">*</span>
+                                </label>
+                                <select 
+                                    name="asset_account_id" 
+                                    x-model="recurringForm.asset_account_id" 
+                                    required
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                                >
+                                    @foreach($assetAccounts as $acc)
+                                        <option value="{{ $acc->id }}">{{ $acc->code }} - {{ $acc->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Catatan -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                Catatan Tambahan (Opsional)
+                            </label>
+                            <input 
+                                type="text" 
+                                name="notes" 
+                                x-model="recurringForm.notes" 
+                                placeholder="Misal: Tagihan debit otomatis kartu kredit / transfer manual"
+                                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all placeholder:text-slate-400"
+                            >
+                        </div>
+
+                        <!-- Footer Actions -->
+                        <div class="flex items-center justify-end gap-2.5 pt-4 mt-6 border-t border-slate-100 dark:border-slate-800">
+                            <button 
+                                @click="closeRecurringModal()" 
+                                type="button" 
+                                class="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+                            >
+                                Batal
+                            </button>
+                            <button 
+                                type="submit" 
+                                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                            >
+                                <template x-if="!isEditRecurring">
+                                    <span>Jadwalkan Pengeluaran</span>
+                                </template>
+                                <template x-if="isEditRecurring">
+                                    <span>Simpan Perubahan</span>
+                                </template>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. MODAL KONFIRMASI HAPUS PENGELUARAN RUTIN -->
+        <div 
+            x-show="showDeleteRecurringModal" 
+            x-cloak 
+            class="fixed inset-0 z-50 overflow-y-auto" 
+            style="display: none;"
+        >
+            <!-- Backdrop -->
+            <div 
+                x-show="showDeleteRecurringModal" 
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                @click="closeDeleteRecurringModal()" 
+                class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            ></div>
+
+            <!-- Modal Panel -->
+            <div class="min-h-full flex items-center justify-center p-4">
+                <div 
+                    x-show="showDeleteRecurringModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="relative bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 transition-all text-slate-800 dark:text-slate-100"
+                >
+                    <!-- Header -->
+                    <div class="flex items-center gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div class="w-11 h-11 rounded-2xl bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold shrink-0">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-extrabold text-slate-900 dark:text-white">Hapus Jadwal Pengeluaran</h3>
+                            <p class="text-xs text-slate-500 dark:text-slate-400" x-text="recurringToDelete ? recurringToDelete.name : ''"></p>
+                        </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="mt-4 space-y-3">
+                        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                            Apakah Anda yakin ingin menghapus jadwal pengeluaran rutin <strong class="font-bold text-slate-900 dark:text-white" x-text="recurringToDelete ? recurringToDelete.name : ''"></strong>?
+                        </p>
+                        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+                            Pengingat bot dan notifikasi untuk tagihan ini tidak akan dikirimkan lagi. Riwayat transaksi jurnal yang sudah dibukukan sebelumnya tidak akan terhapus.
+                        </div>
+                    </div>
+
+                    <!-- Footer Actions -->
+                    <div class="flex items-center justify-end gap-2.5 pt-4 mt-6 border-t border-slate-100 dark:border-slate-800">
+                        <button 
+                            @click="closeDeleteRecurringModal()" 
+                            type="button" 
+                            class="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+                        >
+                            Batal
+                        </button>
+                        <template x-if="recurringToDelete">
+                            <form :action="'/recurring-transactions/' + recurringToDelete.id" method="POST">
+                                @csrf
+                                @method('DELETE')
+                                <button 
+                                    type="submit" 
+                                    class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-md shadow-rose-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                                >
+                                    Ya, Hapus Jadwal
                                 </button>
                             </form>
                         </template>
