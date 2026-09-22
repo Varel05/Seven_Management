@@ -47,6 +47,7 @@ Route::get('/dashboard', function () {
         $credit = $acc->lines->sum('credit');
         $balance = in_array($acc->type, ['asset', 'expense']) ? ($debit - $credit) : ($credit - $debit);
         return [
+            'id'        => $acc->id,
             'code'      => $acc->code,
             'name'      => $acc->name,
             'type'      => $acc->type,
@@ -83,6 +84,11 @@ Route::middleware('auth')->group(function () {
         $journalEntry->update(['status' => 'rejected']);
         return back()->with('warning', 'Transaksi ' . $journalEntry->reference . ' ditandai ditolak (rejected).');
     })->name('journal-entries.reject');
+
+    // Manajemen Bagan Akun Keuangan (Chart of Accounts)
+    Route::post('/accounts', [\App\Http\Controllers\AccountController::class, 'store'])->name('accounts.store');
+    Route::put('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'update'])->name('accounts.update');
+    Route::delete('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'destroy'])->name('accounts.destroy');
 });
 
 require __DIR__.'/auth.php';

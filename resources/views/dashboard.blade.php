@@ -133,6 +133,37 @@
         closeModal() {
             this.showDetailModal = false;
             this.selectedTrx = null;
+        },
+        showAccountModal: false,
+        isEditAccount: false,
+        accountForm: {
+            id: null,
+            code: '',
+            name: '',
+            type: 'expense'
+        },
+        showDeleteAccountModal: false,
+        accountToDelete: null,
+        openAddAccountModal() {
+            this.isEditAccount = false;
+            this.accountForm = { id: null, code: '', name: '', type: 'expense' };
+            this.showAccountModal = true;
+        },
+        openEditAccountModal(acc) {
+            this.isEditAccount = true;
+            this.accountForm = { id: acc.id, code: acc.code, name: acc.name, type: acc.type };
+            this.showAccountModal = true;
+        },
+        closeAccountModal() {
+            this.showAccountModal = false;
+        },
+        openDeleteAccountModal(acc) {
+            this.accountToDelete = acc;
+            this.showDeleteAccountModal = true;
+        },
+        closeDeleteAccountModal() {
+            this.showDeleteAccountModal = false;
+            this.accountToDelete = null;
         }
     }">
     <div class="max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 space-y-8">
@@ -153,6 +184,22 @@
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                     </div>
                     <span>{{ session('warning') }}</span>
+                </div>
+            @endif
+
+            @if($errors->any())
+                <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-sm flex items-start gap-3 shadow-sm transition-all">
+                    <div class="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="font-bold mb-1">Terjadi Kesalahan Validasi:</h4>
+                        <ul class="list-disc list-inside text-xs space-y-0.5 text-rose-800 dark:text-rose-300">
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
                 </div>
             @endif
 
@@ -266,22 +313,32 @@
 
             </div>
 
-            <!-- 2. COLOR-CODED CHART OF ACCOUNTS (COA) SUMMARY BAR -->
-            @if(isset($accounts) && $accounts->count() > 0)
-                <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-2">
-                        <div>
-                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                Bagan Akun Finansial (Chart of Accounts)
-                            </h2>
-                            <p class="text-xs text-slate-500 dark:text-slate-400">Saldo kumulatif per akun buku besar utama</p>
-                        </div>
-                        <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+            <!-- 2. COLOR-CODED CHART OF ACCOUNTS (COA) SUMMARY BAR & MANAGEMENT -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
+                    <div>
+                        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            Bagan Akun Finansial (Chart of Accounts)
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Saldo kumulatif dan pengelolaan akun buku besar utama</p>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
                             {{ $accounts->count() }} akun aktif
                         </span>
+                        <button 
+                            type="button" 
+                            @click="openAddAccountModal()"
+                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-sm shadow-emerald-600/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            <span>Tambah Akun</span>
+                        </button>
                     </div>
+                </div>
 
+                @if(isset($accounts) && $accounts->count() > 0)
                     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3.5 mt-5">
                         @foreach($accounts as $acc)
                             @php
@@ -318,24 +375,68 @@
                                     'code' => 'text-slate-600',
                                 ];
                             @endphp
-                            <div class="p-3.5 rounded-2xl border {{ $cfg['box'] }} shadow-xs hover:shadow-sm transition-all">
-                                <div class="flex items-center justify-between">
-                                    <span class="font-mono text-xs font-bold {{ $cfg['code'] }}">{{ $acc['code'] }}</span>
-                                    <span class="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-md {{ $cfg['badge'] }}">
-                                        {{ $acc['type'] }}
+                            <div class="group relative p-3.5 rounded-2xl border {{ $cfg['box'] }} shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+                                <div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-mono text-xs font-bold {{ $cfg['code'] }}">{{ $acc['code'] }}</span>
+                                        <span class="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-md {{ $cfg['badge'] }}">
+                                            {{ $acc['type'] }}
+                                        </span>
+                                    </div>
+                                    <div class="text-xs font-semibold mt-2 text-slate-800 dark:text-slate-200 truncate" title="{{ $acc['name'] }}">
+                                        {{ $acc['name'] }}
+                                    </div>
+                                    <div class="font-mono text-xs font-extrabold mt-1.5 text-slate-900 dark:text-white">
+                                        Rp {{ number_format($acc['balance'], 0, ',', '.') }}
+                                    </div>
+                                </div>
+
+                                <!-- Action Bar & Transaction Count -->
+                                <div class="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[10px]">
+                                    <span class="text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium" title="{{ $acc['trx_count'] }} transaksi tercatat">
+                                        <svg class="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                        {{ $acc['trx_count'] }} trx
                                     </span>
-                                </div>
-                                <div class="text-xs font-semibold mt-2 text-slate-800 dark:text-slate-200 truncate" title="{{ $acc['name'] }}">
-                                    {{ $acc['name'] }}
-                                </div>
-                                <div class="font-mono text-xs font-extrabold mt-1.5 text-slate-900 dark:text-white">
-                                    Rp {{ number_format($acc['balance'], 0, ',', '.') }}
+                                    <div class="flex items-center gap-1">
+                                        <button 
+                                            type="button"
+                                            @click="openEditAccountModal({{ Js::from($acc) }})"
+                                            class="p-1 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 dark:hover:text-blue-400 transition-colors" 
+                                            title="Edit Akun {{ $acc['code'] }}"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            @click="openDeleteAccountModal({{ Js::from($acc) }})"
+                                            class="p-1 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 dark:hover:text-rose-400 transition-colors" 
+                                            title="Hapus Akun {{ $acc['code'] }}"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         @endforeach
                     </div>
-                </div>
-            @endif
+                @else
+                    <div class="text-center py-8">
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                        </div>
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">Belum Ada Akun Finansial</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-4">Tambahkan akun buku besar pertama Anda untuk mulai mengelola keuangan.</p>
+                        <button 
+                            type="button" 
+                            @click="openAddAccountModal()"
+                            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            <span>Tambah Akun Baru</span>
+                        </button>
+                    </div>
+                @endif
+            </div>
 
             <!-- 3. BUKU JURNAL UMUM & LEDGER TABLE -->
             <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
@@ -847,6 +948,241 @@
                                 Tutup
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. MODAL TAMBAH & EDIT AKUN KEUANGAN -->
+        <div 
+            x-show="showAccountModal" 
+            x-cloak 
+            class="fixed inset-0 z-50 overflow-y-auto" 
+            style="display: none;"
+        >
+            <!-- Backdrop -->
+            <div 
+                x-show="showAccountModal" 
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                @click="closeAccountModal()" 
+                class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            ></div>
+
+            <!-- Modal Panel -->
+            <div class="min-h-full flex items-center justify-center p-4">
+                <div 
+                    x-show="showAccountModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="relative bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 transition-all text-slate-800 dark:text-slate-100"
+                >
+                    <!-- Header -->
+                    <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-600/20">
+                                <template x-if="!isEditAccount">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                </template>
+                                <template x-if="isEditAccount">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                </template>
+                            </div>
+                            <div>
+                                <h3 class="text-base font-extrabold text-slate-900 dark:text-white" x-text="isEditAccount ? 'Edit Akun Keuangan' : 'Tambah Akun Baru'"></h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400" x-text="isEditAccount ? 'Perbarui informasi kode, nama, atau tipe akun' : 'Daftarkan akun buku besar baru ke sistem'"></p>
+                            </div>
+                        </div>
+
+                        <button @click="closeAccountModal()" type="button" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    <!-- Form -->
+                    <form :action="isEditAccount ? ('/accounts/' + accountForm.id) : '{{ route('accounts.store') }}'" method="POST" class="mt-5 space-y-4">
+                        @csrf
+                        <template x-if="isEditAccount">
+                            <input type="hidden" name="_method" value="PUT">
+                        </template>
+
+                        <!-- Kode Akun -->
+                        <div>
+                            <label for="acc_code" class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                Kode Akun (Chart of Account Code) <span class="text-rose-500">*</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                id="acc_code" 
+                                name="code" 
+                                x-model="accountForm.code" 
+                                required 
+                                placeholder="Misal: 1002, 2001, 5002"
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all placeholder:text-slate-400 placeholder:font-sans"
+                            >
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Gunakan kode angka unik, misal: 1xxx (Aset), 2xxx (Kewajiban), 3xxx (Ekuitas), 4xxx (Pendapatan), 5xxx (Beban).</p>
+                        </div>
+
+                        <!-- Nama Akun -->
+                        <div>
+                            <label for="acc_name" class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                Nama Akun <span class="text-rose-500">*</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                id="acc_name" 
+                                name="name" 
+                                x-model="accountForm.name" 
+                                required 
+                                placeholder="Misal: Kas Kecil, Bank BCA, Beban Listrik & Internet"
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all placeholder:text-slate-400"
+                            >
+                        </div>
+
+                        <!-- Tipe Akun -->
+                        <div>
+                            <label for="acc_type" class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                Tipe Akun (Klasifikasi Keuangan) <span class="text-rose-500">*</span>
+                            </label>
+                            <select 
+                                id="acc_type" 
+                                name="type" 
+                                x-model="accountForm.type" 
+                                required
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                            >
+                                <option value="asset">Aset (Kas, Bank, Piutang, Perlengkapan)</option>
+                                <option value="expense">Beban (Biaya Operasional, Gaji, Sewa, Server)</option>
+                                <option value="revenue">Pendapatan (Penjualan, Pendapatan Layanan / Jasa)</option>
+                                <option value="liability">Kewajiban (Hutang Usaha, Pinjaman Bank)</option>
+                                <option value="equity">Ekuitas (Modal Pemilik, Laba Ditahan, Prive)</option>
+                            </select>
+                        </div>
+
+                        <!-- Footer Actions -->
+                        <div class="flex items-center justify-end gap-2.5 pt-4 mt-6 border-t border-slate-100 dark:border-slate-800">
+                            <button 
+                                @click="closeAccountModal()" 
+                                type="button" 
+                                class="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+                            >
+                                Batal
+                            </button>
+                            <button 
+                                type="submit" 
+                                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                            >
+                                <template x-if="!isEditAccount">
+                                    <span>Simpan Akun Baru</span>
+                                </template>
+                                <template x-if="isEditAccount">
+                                    <span>Simpan Perubahan</span>
+                                </template>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. MODAL KONFIRMASI HAPUS AKUN -->
+        <div 
+            x-show="showDeleteAccountModal" 
+            x-cloak 
+            class="fixed inset-0 z-50 overflow-y-auto" 
+            style="display: none;"
+        >
+            <!-- Backdrop -->
+            <div 
+                x-show="showDeleteAccountModal" 
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                @click="closeDeleteAccountModal()" 
+                class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            ></div>
+
+            <!-- Modal Panel -->
+            <div class="min-h-full flex items-center justify-center p-4">
+                <div 
+                    x-show="showDeleteAccountModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="relative bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 transition-all text-slate-800 dark:text-slate-100"
+                >
+                    <!-- Header -->
+                    <div class="flex items-center gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div class="w-11 h-11 rounded-2xl bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold shrink-0">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-extrabold text-slate-900 dark:text-white">Konfirmasi Hapus Akun</h3>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 font-mono" x-text="accountToDelete ? accountToDelete.code + ' - ' + accountToDelete.name : ''"></p>
+                        </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="mt-4">
+                        <template x-if="accountToDelete && accountToDelete.trx_count > 0">
+                            <div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-2">
+                                <div class="flex items-center gap-2 font-bold text-xs">
+                                    <svg class="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                    <span>Akun Terkunci (Memiliki Transaksi)</span>
+                                </div>
+                                <p class="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
+                                    Akun ini telah memiliki <strong class="font-bold" x-text="accountToDelete.trx_count"></strong> riwayat transaksi jurnal. Demi kepatuhan akuntansi dan integritas buku besar, akun yang sudah mencatat transaksi <strong>tidak dapat dihapus</strong>.
+                                </p>
+                            </div>
+                        </template>
+
+                        <template x-if="accountToDelete && accountToDelete.trx_count === 0">
+                            <div class="space-y-3">
+                                <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                                    Apakah Anda yakin ingin menghapus akun <strong class="font-bold text-slate-900 dark:text-white" x-text="accountToDelete.code + ' (' + accountToDelete.name + ')'"></strong>?
+                                </p>
+                                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+                                    Akun ini belum memiliki transaksi dan akan dihapus secara permanen dari basis data.
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Footer Actions -->
+                    <div class="flex items-center justify-end gap-2.5 pt-4 mt-6 border-t border-slate-100 dark:border-slate-800">
+                        <button 
+                            @click="closeDeleteAccountModal()" 
+                            type="button" 
+                            class="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+                        >
+                            <span x-text="accountToDelete && accountToDelete.trx_count > 0 ? 'Mengerti & Tutup' : 'Batal'"></span>
+                        </button>
+                        <template x-if="accountToDelete && accountToDelete.trx_count === 0">
+                            <form :action="'/accounts/' + accountToDelete.id" method="POST">
+                                @csrf
+                                @method('DELETE')
+                                <button 
+                                    type="submit" 
+                                    class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-md shadow-rose-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                                >
+                                    Ya, Hapus Akun
+                                </button>
+                            </form>
+                        </template>
                     </div>
                 </div>
             </div>
