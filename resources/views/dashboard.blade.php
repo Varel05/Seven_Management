@@ -372,7 +372,289 @@
 
             </div>
 
-            <!-- 2. COLOR-CODED CHART OF ACCOUNTS (COA) SUMMARY BAR & MANAGEMENT -->
+            <!-- 2. DIAGRAM KOMBINASI ARUS KEUANGAN (COMBO CHART: BATANG PEMASUKAN & GARIS PENGELUARAN) -->
+            <div 
+                x-data="{
+                    chartMode: 'daily', // 'daily' atau 'monthly'
+                    chartInstance: null,
+                    dataPayload: {{ Js::from($chartData) }},
+                    formatRupiah(num) {
+                        return 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(num || 0));
+                    },
+                    get currentMeta() {
+                        return this.dataPayload[this.chartMode] || {};
+                    },
+                    renderChart() {
+                        const canvas = document.getElementById('financialTrendChart');
+                        if (!canvas || typeof Chart === 'undefined') return;
+
+                        // Pastikan instance grafik sebelumnya dihancurkan (destroy) agar tidak terjadi konflik metaset ukuran array
+                        const existingChart = Chart.getChart(canvas) || Chart.getChart('financialTrendChart');
+                        if (existingChart) {
+                            existingChart.destroy();
+                        }
+
+                        const isDark = document.documentElement.classList.contains('dark');
+                        const gridColor = isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(226, 232, 240, 0.7)';
+                        const textColor = isDark ? '#94a3b8' : '#64748b';
+
+                        const activeData = this.dataPayload[this.chartMode];
+                        if (!activeData) return;
+
+                        const ctx = canvas.getContext('2d');
+                        // Gradient halus untuk isian area di bawah garis pengeluaran (Rose)
+                        const expGradient = ctx.createLinearGradient(0, 0, 0, 300);
+                        expGradient.addColorStop(0, 'rgba(244, 63, 94, 0.18)');
+                        expGradient.addColorStop(1, 'rgba(244, 63, 94, 0.01)');
+
+                        const newChart = new Chart(canvas, {
+                            type: 'bar',
+                            data: {
+                                labels: [...activeData.labels],
+                                datasets: [
+                                    {
+                                        type: 'bar',
+                                        label: 'Total Pemasukan',
+                                        data: [...activeData.revenue],
+                                        backgroundColor: isDark ? 'rgba(16, 185, 129, 0.75)' : 'rgba(16, 185, 129, 0.85)',
+                                        borderColor: '#10b981',
+                                        borderWidth: 1.5,
+                                        borderRadius: 6,
+                                        borderSkipped: 'bottom',
+                                        hoverBackgroundColor: '#059669',
+                                        hoverBorderColor: '#047857',
+                                        barPercentage: this.chartMode === 'daily' ? 0.65 : 0.45,
+                                        categoryPercentage: 0.72,
+                                        order: 2,
+                                    },
+                                    {
+                                        type: 'line',
+                                        label: 'Laju Pengeluaran',
+                                        data: [...activeData.expense],
+                                        borderColor: '#f43f5e',
+                                        backgroundColor: expGradient,
+                                        borderWidth: 3,
+                                        fill: true,
+                                        tension: 0.35,
+                                        pointBackgroundColor: '#f43f5e',
+                                        pointBorderColor: isDark ? '#0f172a' : '#ffffff',
+                                        pointBorderWidth: 2,
+                                        pointRadius: this.chartMode === 'daily' ? 3 : 5,
+                                        pointHoverRadius: 7,
+                                        pointHoverBackgroundColor: '#e11d48',
+                                        pointHoverBorderColor: '#ffffff',
+                                        order: 1,
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                animation: {
+                                    duration: 500,
+                                    easing: 'easeOutQuart'
+                                },
+                                interaction: {
+                                    mode: 'index',
+                                    intersect: false,
+                                },
+                                plugins: {
+                                    legend: {
+                                        display: false,
+                                    },
+                                    tooltip: {
+                                        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.98)',
+                                        titleColor: isDark ? '#f8fafc' : '#0f172a',
+                                        bodyColor: isDark ? '#cbd5e1' : '#334155',
+                                        borderColor: isDark ? '#334155' : '#e2e8f0',
+                                        borderWidth: 1,
+                                        padding: 12,
+                                        boxPadding: 6,
+                                        usePointStyle: true,
+                                        titleFont: {
+                                            weight: 'bold',
+                                            size: 12
+                                        },
+                                        bodyFont: {
+                                            size: 12
+                                        },
+                                        callbacks: {
+                                            label: function(context) {
+                                                const label = context.dataset.label || '';
+                                                const val = context.parsed.y !== null ? context.parsed.y : 0;
+                                                const formatted = new Intl.NumberFormat('id-ID', {
+                                                    style: 'currency',
+                                                    currency: 'IDR',
+                                                    minimumFractionDigits: 0
+                                                }).format(val);
+                                                return `  ${label}: ${formatted}`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        grid: {
+                                            display: false,
+                                        },
+                                        ticks: {
+                                            color: textColor,
+                                            font: {
+                                                size: 11,
+                                                weight: 500
+                                            },
+                                            maxRotation: 45,
+                                            autoSkip: true,
+                                            maxTicksLimit: this.chartMode === 'daily' ? 16 : 12,
+                                        }
+                                    },
+                                    y: {
+                                        grid: {
+                                            color: gridColor,
+                                            borderDash: [4, 4],
+                                        },
+                                        ticks: {
+                                            color: textColor,
+                                            font: {
+                                                size: 11,
+                                            },
+                                            callback: function(value) {
+                                                if (value >= 1000000) {
+                                                    return 'Rp ' + (value / 1000000).toLocaleString('id-ID') + ' jt';
+                                                } else if (value >= 1000) {
+                                                    return 'Rp ' + (value / 1000).toLocaleString('id-ID') + ' rb';
+                                                }
+                                                return 'Rp ' + value.toLocaleString('id-ID');
+                                            }
+                                        },
+                                        beginAtZero: true
+                                    }
+                                }
+                            }
+                        });
+
+                        window.financialTrendChart = newChart;
+                    },
+                    switchMode(newMode) {
+                        if (this.chartMode === newMode) return;
+                        this.chartMode = newMode;
+                        this.$nextTick(() => {
+                            this.renderChart();
+                        });
+                    },
+                    updateTheme() {
+                        this.renderChart();
+                    },
+                    init() {
+                        this.$nextTick(() => {
+                            this.renderChart();
+                        });
+
+                        const observer = new MutationObserver(() => {
+                            this.updateTheme();
+                        });
+                        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+                    }
+                }"
+                class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm"
+            >
+                <!-- Chart Header: Judul & Tombol Switch Mode -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+                            <!-- Icon Combo Chart (Bars & Line) -->
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" stroke="#f43f5e" d="M3 13l5-5 4 4 9-9" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-base font-bold text-slate-900 dark:text-slate-100">
+                                    Grafik Kombinasi Arus Keuangan
+                                </h2>
+                                <span class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" x-text="currentMeta.period"></span>
+                            </div>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" x-text="chartMode === 'daily' ? 'Kolom vertikal: Total Pemasukan harian | Garis penghubung: Laju Pengeluaran harian (' + currentMeta.period + ')' : 'Kolom vertikal: Total Pemasukan bulanan | Garis penghubung: Laju Pengeluaran bulanan (' + currentMeta.period + ')'"></p>
+                        </div>
+                    </div>
+
+                    <!-- Trigger Switch: Harian (Bulan Ini) vs Bulanan (Tahun Ini) -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-500 dark:text-slate-400 hidden md:inline font-medium">Rentang Waktu:</span>
+                        <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold">
+                            <button 
+                                type="button"
+                                @click="switchMode('daily')" 
+                                :class="chartMode === 'daily' ? 'bg-emerald-600 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
+                                class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                <span>Harian (Bulan Ini)</span>
+                            </button>
+                            <button 
+                                type="button"
+                                @click="switchMode('monthly')" 
+                                :class="chartMode === 'monthly' ? 'bg-emerald-600 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
+                                class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                <span>Bulanan (Tahun Ini)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Baris 1: Metric Chips Finansial (Total Pemasukan, Total Pengeluaran, Surplus Bersih) -->
+                <div class="pt-3.5 pb-2">
+                    <div class="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
+                        <!-- Chip Pemasukan -->
+                        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 shadow-2xs">
+                            <span class="w-2.5 h-2.5 rounded-xs bg-emerald-500 shadow-2xs"></span>
+                            <span class="text-slate-600 dark:text-slate-400 font-medium">Total Pemasukan:</span>
+                            <strong class="font-mono font-bold text-emerald-700 dark:text-emerald-400" x-text="formatRupiah(currentMeta.totalRevenue)"></strong>
+                        </div>
+
+                        <!-- Chip Pengeluaran -->
+                        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-800/60 shadow-2xs">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-2xs"></span>
+                            <span class="text-slate-600 dark:text-slate-400 font-medium">Total Pengeluaran:</span>
+                            <strong class="font-mono font-bold text-rose-700 dark:text-rose-400" x-text="formatRupiah(currentMeta.totalExpense)"></strong>
+                        </div>
+
+                        <!-- Chip Laba / Surplus Bersih -->
+                        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border shadow-2xs" :class="currentMeta.netProfit >= 0 ? 'bg-teal-50 dark:bg-teal-950/40 border-teal-200/80 dark:border-teal-800/60 text-teal-800 dark:text-teal-300' : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200/80 dark:border-rose-800/60 text-rose-800 dark:text-rose-300'">
+                            <span class="w-2.5 h-2.5 rounded-full" :class="currentMeta.netProfit >= 0 ? 'bg-teal-500' : 'bg-rose-500'"></span>
+                            <span class="font-medium" x-text="currentMeta.netProfit >= 0 ? 'Surplus Bersih:' : 'Defisit Bersih:'"></span>
+                            <strong class="font-mono font-bold" x-text="formatRupiah(Math.abs(currentMeta.netProfit))"></strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Baris 2: Legenda Visual Grafik Kombinasi (Kolom Batang & Garis Penghubung) -->
+                <div class="pt-1.5 pb-2.5 border-b border-slate-100/90 dark:border-slate-800/80">
+                    <div class="flex flex-wrap items-center gap-4 sm:gap-6 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        <div class="inline-flex items-center gap-2">
+                            <span class="w-3.5 h-3.5 bg-emerald-500 rounded-xs shadow-2xs border border-emerald-600/30"></span>
+                            <span>Total Pemasukan (Kolom Batang)</span>
+                        </div>
+                        <div class="inline-flex items-center gap-2">
+                            <span class="relative flex items-center justify-center w-6 h-3">
+                                <span class="w-full h-[2.5px] bg-rose-500 rounded-full"></span>
+                                <span class="absolute w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-white dark:border-slate-900 shadow-xs"></span>
+                            </span>
+                            <span>Laju Pengeluaran (Garis Penghubung)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Canvas Area -->
+                <div class="relative w-full h-72 sm:h-80 mt-2">
+                    <canvas id="financialTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 3. COLOR-CODED CHART OF ACCOUNTS (COA) SUMMARY BAR & MANAGEMENT -->
             <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
                     <div>

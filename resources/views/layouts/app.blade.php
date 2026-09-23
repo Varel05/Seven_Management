@@ -24,6 +24,9 @@
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+        <!-- Chart.js for Financial Charts -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
     <body class="font-sans antialiased bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 relative selection:bg-emerald-500 selection:text-white">
         <!-- Ambient Color Lighting for Light & Dark Mode -->

@@ -64,6 +64,80 @@ Route::get('/dashboard', function () {
     $expenseAccounts = \App\Models\Account::where('type', 'expense')->orderBy('code')->get();
     $assetAccounts = \App\Models\Account::where('type', 'asset')->orderBy('code')->get();
 
+    // Data Diagram Garis Arus Keuangan (Pendapatan vs Pengeluaran: Harian Bulan Ini & Bulanan Tahun Ini)
+    $currentYear = (int)now()->format('Y');
+    $currentMonth = (int)now()->format('n');
+    $daysInMonth = (int)now()->daysInMonth;
+
+    $chartLines = \App\Models\JournalEntryLine::whereHas('account', function($q) {
+        $q->whereIn('type', ['revenue', 'expense']);
+    })
+    ->with(['account:id,type', 'journalEntry:id,date'])
+    ->get()
+    ->filter(function ($line) use ($currentYear) {
+        $date = $line->journalEntry?->date ?? $line->created_at;
+        return $date && (int)\Carbon\Carbon::parse($date)->format('Y') === $currentYear;
+    });
+
+    $dailyLabels = [];
+    $dailyRevenue = array_fill(1, $daysInMonth, 0.0);
+    $dailyExpense = array_fill(1, $daysInMonth, 0.0);
+
+    for ($d = 1; $d <= $daysInMonth; $d++) {
+        $dailyLabels[] = sprintf('%02d %s', $d, now()->translatedFormat('M'));
+    }
+
+    $monthlyLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    $monthlyRevenue = array_fill(1, 12, 0.0);
+    $monthlyExpense = array_fill(1, 12, 0.0);
+
+    foreach ($chartLines as $line) {
+        $date = \Carbon\Carbon::parse($line->journalEntry?->date ?? $line->created_at);
+        $month = (int)$date->format('n');
+        $day = (int)$date->format('j');
+
+        $isRev = $line->account?->type === 'revenue';
+        $isExp = $line->account?->type === 'expense';
+        $amount = $isRev ? (float)$line->credit : (float)$line->debit;
+
+        // Akumulasi bulanan
+        if ($isRev) {
+            $monthlyRevenue[$month] = ($monthlyRevenue[$month] ?? 0) + $amount;
+        } elseif ($isExp) {
+            $monthlyExpense[$month] = ($monthlyExpense[$month] ?? 0) + $amount;
+        }
+
+        // Akumulasi harian (khusus bulan berjalan)
+        if ($month === $currentMonth) {
+            if ($isRev) {
+                $dailyRevenue[$day] = ($dailyRevenue[$day] ?? 0) + $amount;
+            } elseif ($isExp) {
+                $dailyExpense[$day] = ($dailyExpense[$day] ?? 0) + $amount;
+            }
+        }
+    }
+
+    $chartData = [
+        'daily' => [
+            'period' => now()->translatedFormat('F Y'),
+            'labels' => $dailyLabels,
+            'revenue' => array_values($dailyRevenue),
+            'expense' => array_values($dailyExpense),
+            'totalRevenue' => (float)array_sum($dailyRevenue),
+            'totalExpense' => (float)array_sum($dailyExpense),
+            'netProfit' => (float)(array_sum($dailyRevenue) - array_sum($dailyExpense)),
+        ],
+        'monthly' => [
+            'period' => 'Tahun ' . $currentYear,
+            'labels' => $monthlyLabels,
+            'revenue' => array_values($monthlyRevenue),
+            'expense' => array_values($monthlyExpense),
+            'totalRevenue' => (float)array_sum($monthlyRevenue),
+            'totalExpense' => (float)array_sum($monthlyExpense),
+            'netProfit' => (float)(array_sum($monthlyRevenue) - array_sum($monthlyExpense)),
+        ],
+    ];
+
     return view('dashboard', compact(
         'transactions', 
         'totalKas', 
@@ -76,7 +150,8 @@ Route::get('/dashboard', function () {
         'accounts',
         'recurringTransactions',
         'expenseAccounts',
-        'assetAccounts'
+        'assetAccounts',
+        'chartData'
     ));
 })->middleware(['auth', 'verified'])->name('dashboard');
 
