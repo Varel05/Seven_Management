@@ -171,6 +171,10 @@ Route::middleware('auth')->group(function () {
         return back()->with('warning', 'Transaksi ' . $journalEntry->reference . ' ditandai ditolak (rejected).');
     })->name('journal-entries.reject');
 
+    // Ekspor Buku Jurnal Transaksi Bulanan ke Excel (.xls)
+    Route::get('/journal-entries/export-monthly', [\App\Http\Controllers\JournalExportController::class, 'exportMonthly'])
+        ->name('journal-entries.export-monthly');
+
     // Manajemen Bagan Akun Keuangan (Chart of Accounts)
     Route::post('/accounts', [\App\Http\Controllers\AccountController::class, 'store'])->name('accounts.store');
     Route::put('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'update'])->name('accounts.update');

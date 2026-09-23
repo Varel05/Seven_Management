@@ -37,6 +37,7 @@
         searchQuery: '',
         perPage: 10,
         currentPage: 1,
+        exportMonth: '{{ now()->format('Y-m') }}',
         selectedTrx: null,
         showDetailModal: false,
         items: {{ Js::from($transactions->map(function($t) {
@@ -925,24 +926,47 @@
             <!-- 3. BUKU JURNAL UMUM & LEDGER TABLE -->
             <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 
-                <!-- Table Controls Header (Search & Status Tabs) -->
-                <div class="p-5 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900">
-                    <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                <!-- Table Controls Header (Search & Status Tabs & Download Excel) -->
+                <div class="p-5 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 space-y-4">
+                    <!-- Baris Pertama: Judul & Keterangan (Kiri) dan Fitur Download Excel (Pojok Kanan) -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20 shrink-0">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-base font-bold text-slate-900 dark:text-slate-100">
+                                    Buku Jurnal Transaksi
+                                </h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">
+                                    Data mutasi debit dan kredit terlacak real-time
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 class="text-base font-bold text-slate-900 dark:text-slate-100">
-                                Buku Jurnal Transaksi
-                            </h3>
-                            <p class="text-xs text-slate-500 dark:text-slate-400">
-                                Data mutasi debit dan kredit terlacak real-time
-                            </p>
+
+                        <!-- Fitur Unduh Excel Jurnal Transaksi Bulanan (Pojok Kanan Baris Pertama) -->
+                        <div class="inline-flex items-center gap-1.5 p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800 border border-slate-300/60 dark:border-slate-700 text-xs shadow-2xs self-start sm:self-auto">
+                            <input 
+                                type="month" 
+                                x-model="exportMonth" 
+                                class="py-1 px-2.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-slate-300/60 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-2xs transition-all"
+                                title="Pilih bulan untuk ekspor buku jurnal transaksi"
+                            />
+                            <a 
+                                :href="'{{ route('journal-entries.export-monthly') }}?month=' + (exportMonth || 'all') + '&status=' + filterStatus + (searchQuery ? '&search=' + encodeURIComponent(searchQuery) : '')" 
+                                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold shadow-xs hover:shadow-md hover:shadow-emerald-600/25 transition-all active:scale-95"
+                                title="Unduh Buku Jurnal Transaksi Bulanan ke file Excel (.xlsx)"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                <span>Unduh Excel</span>
+                            </a>
                         </div>
                     </div>
 
-                    <!-- Search & Filter Controls -->
-                    <div class="flex flex-wrap items-center gap-3">
+                    <!-- Baris Kedua: Fitur Pengaturan Tabel (Menjorok ke Kanan) -->
+                    <div class="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200/70 dark:border-slate-800/80">
                         <!-- Per-Page Limit Selector -->
                         <div class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
                             <span class="hidden xl:inline font-medium">Batas Data:</span>
@@ -965,7 +989,7 @@
                                 x-model="searchQuery" 
                                 type="text" 
                                 placeholder="Cari keterangan / voucher..." 
-                                class="w-52 sm:w-60 pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 shadow-xs transition-all"
+                                class="w-52 sm:w-64 pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 shadow-xs transition-all"
                             />
                             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                         </div>
