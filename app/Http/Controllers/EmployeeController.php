@@ -127,7 +127,7 @@ class EmployeeController extends Controller
     public function pay(Request $request, Employee $employee)
     {
         $customAmount = $request->filled('amount') ? (float) $request->input('amount') : null;
-        $journalEntry = $employee->executePayrollPosting($customAmount, 'web_payroll');
+        $journalEntry = $employee->executePayrollPosting($customAmount, 'website');
 
         $formattedAmount = 'Rp ' . number_format($customAmount ?: (float) $employee->total_salary, 0, ',', '.');
 

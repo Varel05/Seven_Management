@@ -173,7 +173,7 @@ class EmployeePayrollTest extends TestCase
         $this->assertNotNull($employee->fresh()->last_paid_at);
 
         // Check Journal Entry
-        $journal = JournalEntry::where('source', 'web_payroll')->latest()->first();
+        $journal = JournalEntry::where('source', 'website')->latest()->first();
         $this->assertNotNull($journal);
         $this->assertStringContainsString('Dewi Lestari', $journal->description);
 

@@ -79,7 +79,7 @@ class RecurringTransactionTest extends TestCase
 
         // Pastikan jurnal tercipta
         $this->assertDatabaseHas('journal_entries', [
-            'source' => 'web_dashboard',
+            'source' => 'website',
         ]);
 
         // Pastikan double-entry seimbang

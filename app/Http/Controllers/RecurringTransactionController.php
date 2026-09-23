@@ -76,7 +76,7 @@ class RecurringTransactionController extends Controller
     public function approve(Request $request, RecurringTransaction $recurringTransaction)
     {
         $customAmount = $request->filled('amount') ? (float) $request->input('amount') : null;
-        $entry = $recurringTransaction->executePosting($customAmount, 'web_dashboard');
+        $entry = $recurringTransaction->executePosting($customAmount, 'website');
 
         return back()->with('success', "Tagihan '{$recurringTransaction->name}' berhasil dibukukan ke buku besar dengan nomor referensi {$entry->reference}.");
     }

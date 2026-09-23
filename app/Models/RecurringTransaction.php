@@ -84,7 +84,15 @@ class RecurringTransaction extends Model
                 : (float) $this->amount;
 
             $reference = 'RC-' . strtoupper(Str::random(8));
-            $normalizedSource = str_starts_with(strtolower($source), 'telegram') ? 'telegram' : $source;
+            
+            $lowerSource = strtolower($source);
+            if (str_starts_with($lowerSource, 'telegram')) {
+                $normalizedSource = 'telegram';
+            } elseif (str_starts_with($lowerSource, 'web')) {
+                $normalizedSource = 'website';
+            } else {
+                $normalizedSource = $source;
+            }
 
             $journalEntry = JournalEntry::create([
                 'reference'   => $reference,

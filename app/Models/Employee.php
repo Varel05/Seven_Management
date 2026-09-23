@@ -91,7 +91,7 @@ class Employee extends Model
      * Eksekusi pembukuan akuntansi penggajian karyawan ke buku besar.
      * Beban dicatat ke akun kode 5002 (Beban Gaji) dan kredit ke akun Kas/Bank.
      */
-    public function executePayrollPosting(?float $customAmount = null, string $source = 'web_payroll'): JournalEntry
+    public function executePayrollPosting(?float $customAmount = null, string $source = 'website'): JournalEntry
     {
         return DB::transaction(function () use ($customAmount, $source) {
             $finalAmount = $customAmount !== null && $customAmount > 0
@@ -111,7 +111,15 @@ class Employee extends Model
 
             $reference = 'PAY-' . strtoupper(Str::random(8));
             $period = now()->translatedFormat('F Y');
-            $normalizedSource = str_starts_with(strtolower($source), 'telegram') ? 'telegram' : $source;
+            
+            $lowerSource = strtolower($source);
+            if (str_starts_with($lowerSource, 'telegram')) {
+                $normalizedSource = 'telegram';
+            } elseif (str_starts_with($lowerSource, 'web')) {
+                $normalizedSource = 'website';
+            } else {
+                $normalizedSource = $source;
+            }
 
             $journalEntry = JournalEntry::create([
                 'reference'   => $reference,
