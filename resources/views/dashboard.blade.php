@@ -1219,13 +1219,13 @@
                 </div>
 
                 <!-- Table Content -->
-                <div class="w-full overflow-x-auto lg:overflow-x-visible">
+                <div class="w-full overflow-x-auto">
                     <table class="w-full text-left border-collapse table-auto lg:table-fixed">
                         <thead>
                             <tr class="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800/80 dark:to-slate-800/60 border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                                 <th class="px-4 py-3.5 w-32 lg:w-36">Tanggal</th>
-                                <th class="px-4 py-3.5 w-32 lg:w-36">No. Referensi</th>
-                                <th class="px-4 py-3.5 w-auto">Keterangan / Transaksi</th>
+                                <th class="px-4 py-3.5 w-36 lg:w-44">No. Referensi</th>
+                                <th class="px-4 py-3.5 min-w-[200px] w-auto">Keterangan / Transaksi</th>
                                 <th class="px-4 py-3.5 w-44 lg:w-48">Akun Terkait</th>
                                 <th class="px-4 py-3.5 w-28 lg:w-32">Sumber</th>
                                 <th class="px-4 py-3.5 text-right w-36 lg:w-44">Nominal</th>

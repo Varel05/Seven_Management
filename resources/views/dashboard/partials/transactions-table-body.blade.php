@@ -51,14 +51,17 @@
         </td>
 
         <!-- Referensi -->
-        <td class="px-4 py-3.5 whitespace-nowrap">
-            <span class="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+        <td class="px-4 py-3.5 whitespace-nowrap overflow-hidden max-w-[150px] lg:max-w-[180px]">
+            <span 
+                class="inline-block max-w-full truncate font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 align-middle"
+                title="{{ $trx->reference ?? '-' }}"
+            >
                 {{ $trx->reference ?? '-' }}
             </span>
         </td>
 
         <!-- Keterangan Transaksi -->
-        <td class="px-4 py-3.5 text-slate-900 dark:text-slate-100 font-medium">
+        <td class="px-4 py-3.5 text-slate-900 dark:text-slate-100 font-medium min-w-0">
             <div class="text-sm font-semibold truncate" title="{{ $trx->description }}">
                 {{ $trx->description }}
             </div>
