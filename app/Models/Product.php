@@ -34,6 +34,8 @@ class Product extends Model
         'color',
         'cost_price',
         'selling_price',
+        'rental_price',
+        'is_for_rent',
         'stock',
         'min_stock',
         'image',
@@ -43,9 +45,31 @@ class Product extends Model
     protected $casts = [
         'cost_price' => 'float',
         'selling_price' => 'float',
+        'rental_price' => 'float',
+        'is_for_rent' => 'boolean',
         'stock' => 'integer',
         'min_stock' => 'integer',
     ];
+
+    /**
+     * Tarif sewa efektif (jika belum diset manual, estimasi standar 30% harga jual).
+     */
+    public function getEffectiveRentalPriceAttribute(): float
+    {
+        if ($this->rental_price > 0) {
+            return (float) $this->rental_price;
+        }
+
+        return (float) (round(($this->selling_price * 0.3) / 1000) * 1000);
+    }
+
+    /**
+     * Format rupiah harga sewa.
+     */
+    public function getFormattedRentalPriceAttribute(): string
+    {
+        return 'Rp '.number_format($this->effective_rental_price, 0, ',', '.');
+    }
 
     /**
      * Relasi ke item transaksi penjualan retail.

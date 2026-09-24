@@ -65,6 +65,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/retail/products/{product}', [RetailController::class, 'updateProduct'])->name('retail.products.update');
     Route::delete('/retail/products/{product}', [RetailController::class, 'destroyProduct'])->name('retail.products.destroy');
     Route::post('/retail/sales', [RetailController::class, 'storeSale'])->name('retail.sales.store');
+    Route::post('/retail/rentals/{sale}/return', [RetailController::class, 'returnRental'])->name('retail.rentals.return');
 
     // Manajemen Jasa Pembuatan Jas Custom & AI Material Estimator
     Route::get('/custom-orders', [CustomSuitOrderController::class, 'index'])->name('custom-orders.index');

@@ -13,9 +13,11 @@ class RetailSaleItem extends Model
     protected $fillable = [
         'retail_sale_id',
         'product_id',
+        'transaction_type',
         'quantity',
         'unit_cost_price',
         'unit_selling_price',
+        'unit_rental_price',
         'subtotal',
     ];
 
@@ -23,6 +25,7 @@ class RetailSaleItem extends Model
         'quantity' => 'integer',
         'unit_cost_price' => 'float',
         'unit_selling_price' => 'float',
+        'unit_rental_price' => 'float',
         'subtotal' => 'float',
     ];
 
