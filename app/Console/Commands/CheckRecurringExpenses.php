@@ -30,10 +30,11 @@ class CheckRecurringExpenses extends Command
             ->active()
             ->get();
 
-        $dueList = $allActive->filter(fn($item) => $item->isDueToday())->values();
+        $dueList = $allActive->filter(fn ($item) => $item->isDueToday())->values();
 
         if ($dueList->isEmpty()) {
-            $this->info('Tidak ada pengeluaran rutin yang jatuh tempo hari ini (' . now()->translatedFormat('d F Y') . ').');
+            $this->info('Tidak ada pengeluaran rutin yang jatuh tempo hari ini ('.now()->translatedFormat('d F Y').').');
+
             return Command::SUCCESS;
         }
 
@@ -41,13 +42,13 @@ class CheckRecurringExpenses extends Command
 
         $tableData = $dueList->map(function ($item) {
             return [
-                'ID'             => $item->id,
-                'Nama Tagihan'   => $item->name,
-                'Nominal'        => 'Rp ' . number_format($item->amount, 0, ',', '.'),
-                'Siklus'         => ucfirst($item->frequency),
-                'Jatuh Tempo'    => 'Tgl ' . $item->day_of_month,
-                'Akun Beban'     => $item->expenseAccount->name ?? '-',
-                'Sumber Kas/Bank'=> $item->assetAccount->name ?? '-',
+                'ID' => $item->id,
+                'Nama Tagihan' => $item->name,
+                'Nominal' => 'Rp '.number_format($item->amount, 0, ',', '.'),
+                'Siklus' => ucfirst($item->frequency),
+                'Jatuh Tempo' => 'Tgl '.$item->day_of_month,
+                'Akun Beban' => $item->expenseAccount->name ?? '-',
+                'Sumber Kas/Bank' => $item->assetAccount->name ?? '-',
             ];
         });
 

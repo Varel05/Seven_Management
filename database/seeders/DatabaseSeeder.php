@@ -2,9 +2,13 @@
 
 namespace Database\Seeders;
 
+use App\Models\Account;
+use App\Models\JournalEntry;
+use App\Models\JournalEntryLine;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -21,7 +25,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@example.com'],
             [
                 'name' => 'Administrator',
-                'password' => \Illuminate\Support\Facades\Hash::make('password'),
+                'password' => Hash::make('password'),
                 'email_verified_at' => now(),
             ]
         );
@@ -36,19 +40,19 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($accounts as $acc) {
-            \App\Models\Account::updateOrCreate(['code' => $acc['code']], $acc);
+            Account::updateOrCreate(['code' => $acc['code']], $acc);
         }
 
         // Seed realistic sample transactions if database has fewer than 5 entries
-        if (\App\Models\JournalEntry::count() < 5) {
-            $kas = \App\Models\Account::where('code', '1001')->first();
-            $bca = \App\Models\Account::where('code', '1002')->first();
-            $pendapatan = \App\Models\Account::where('code', '4001')->first();
-            $bebanOps = \App\Models\Account::where('code', '5001')->first();
-            $bebanGaji = \App\Models\Account::where('code', '5002')->first();
-            $bebanPerlengkapan = \App\Models\Account::where('code', '5003')->first();
+        if (JournalEntry::count() < 5) {
+            $kas = Account::where('code', '1001')->first();
+            $bca = Account::where('code', '1002')->first();
+            $pendapatan = Account::where('code', '4001')->first();
+            $bebanOps = Account::where('code', '5001')->first();
+            $bebanGaji = Account::where('code', '5002')->first();
+            $bebanPerlengkapan = Account::where('code', '5003')->first();
 
-            $currentYear = (int)now()->format('Y');
+            $currentYear = (int) now()->format('Y');
 
             $samples = [
                 // Bulan-bulan sebelumnya di tahun berjalan
@@ -74,31 +78,31 @@ class DatabaseSeeder extends Seeder
             ];
 
             foreach ($samples as $s) {
-                $entry = \App\Models\JournalEntry::updateOrCreate(
+                $entry = JournalEntry::updateOrCreate(
                     ['reference' => $s['ref']],
                     [
                         'description' => $s['desc'],
-                        'date'        => $s['date'],
-                        'source'      => $s['src'],
-                        'status'      => 'verified',
+                        'date' => $s['date'],
+                        'source' => $s['src'],
+                        'status' => 'verified',
                     ]
                 );
 
-                \App\Models\JournalEntryLine::updateOrCreate(
+                JournalEntryLine::updateOrCreate(
                     ['journal_entry_id' => $entry->id, 'account_id' => $s['dr_acc']],
                     [
                         'description' => $s['desc'],
-                        'debit'       => $s['amount'],
-                        'credit'      => 0,
+                        'debit' => $s['amount'],
+                        'credit' => 0,
                     ]
                 );
 
-                \App\Models\JournalEntryLine::updateOrCreate(
+                JournalEntryLine::updateOrCreate(
                     ['journal_entry_id' => $entry->id, 'account_id' => $s['cr_acc']],
                     [
                         'description' => $s['desc'],
-                        'debit'       => 0,
-                        'credit'      => $s['amount'],
+                        'debit' => 0,
+                        'credit' => $s['amount'],
                     ]
                 );
             }

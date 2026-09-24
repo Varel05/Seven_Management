@@ -13,6 +13,7 @@ class RecurringTransactionTest extends TestCase
     use RefreshDatabase;
 
     protected Account $expenseAccount;
+
     protected Account $assetAccount;
 
     protected function setUp(): void
@@ -39,20 +40,20 @@ class RecurringTransactionTest extends TestCase
         $user = User::factory()->create();
 
         $response = $this->actingAs($user)->post('/recurring-transactions', [
-            'name'               => 'Gaji Karyawan',
-            'amount'             => 15000000,
-            'frequency'          => 'monthly',
-            'day_of_month'       => 25,
+            'name' => 'Gaji Karyawan',
+            'amount' => 15000000,
+            'frequency' => 'monthly',
+            'day_of_month' => 25,
             'expense_account_id' => $this->expenseAccount->id,
-            'asset_account_id'   => $this->assetAccount->id,
-            'status'             => 'active',
-            'notes'              => 'Gaji rutin bulanan',
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
+            'notes' => 'Gaji rutin bulanan',
         ]);
 
         $response->assertSessionHas('success');
         $this->assertDatabaseHas('recurring_transactions', [
-            'name'         => 'Gaji Karyawan',
-            'amount'       => 15000000,
+            'name' => 'Gaji Karyawan',
+            'amount' => 15000000,
             'day_of_month' => 25,
         ]);
     }
@@ -62,13 +63,13 @@ class RecurringTransactionTest extends TestCase
         $user = User::factory()->create();
 
         $recurring = RecurringTransaction::create([
-            'name'               => 'Langganan Server AWS',
-            'amount'             => 750000,
-            'frequency'          => 'monthly',
-            'day_of_month'       => now()->day,
+            'name' => 'Langganan Server AWS',
+            'amount' => 750000,
+            'frequency' => 'monthly',
+            'day_of_month' => now()->day,
             'expense_account_id' => $this->expenseAccount->id,
-            'asset_account_id'   => $this->assetAccount->id,
-            'status'             => 'active',
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
         ]);
 
         $this->assertTrue($recurring->isDueToday());
@@ -85,14 +86,14 @@ class RecurringTransactionTest extends TestCase
         // Pastikan double-entry seimbang
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => $this->expenseAccount->id,
-            'debit'      => 750000,
-            'credit'     => 0,
+            'debit' => 750000,
+            'credit' => 0,
         ]);
 
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => $this->assetAccount->id,
-            'debit'      => 0,
-            'credit'     => 750000,
+            'debit' => 0,
+            'credit' => 750000,
         ]);
 
         // Recurring tidak lagi due today karena sudah di-post periode ini
@@ -105,13 +106,13 @@ class RecurringTransactionTest extends TestCase
     {
         // Tagihan yang jatuh tempo hari ini
         $due = RecurringTransaction::create([
-            'name'               => 'Internet Kantor',
-            'amount'             => 500000,
-            'frequency'          => 'monthly',
-            'day_of_month'       => now()->day,
+            'name' => 'Internet Kantor',
+            'amount' => 500000,
+            'frequency' => 'monthly',
+            'day_of_month' => now()->day,
             'expense_account_id' => $this->expenseAccount->id,
-            'asset_account_id'   => $this->assetAccount->id,
-            'status'             => 'active',
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
         ]);
 
         // Tagihan yang jatuh tempo tanggal lain
@@ -121,13 +122,13 @@ class RecurringTransactionTest extends TestCase
         }
 
         RecurringTransaction::create([
-            'name'               => 'Sewa Ruko',
-            'amount'             => 3000000,
-            'frequency'          => 'monthly',
-            'day_of_month'       => $notDueDay,
+            'name' => 'Sewa Ruko',
+            'amount' => 3000000,
+            'frequency' => 'monthly',
+            'day_of_month' => $notDueDay,
             'expense_account_id' => $this->expenseAccount->id,
-            'asset_account_id'   => $this->assetAccount->id,
-            'status'             => 'active',
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
         ]);
 
         $response = $this->getJson('/api/webhook/recurring/due', [
@@ -137,7 +138,7 @@ class RecurringTransactionTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson([
             'status' => true,
-            'count'  => 1,
+            'count' => 1,
         ]);
         $response->assertJsonFragment([
             'name' => 'Internet Kantor',
@@ -147,13 +148,13 @@ class RecurringTransactionTest extends TestCase
     public function test_webhook_api_approve_recurring_creates_journal_entry(): void
     {
         $recurring = RecurringTransaction::create([
-            'name'               => 'Langganan Software Canva Pro',
-            'amount'             => 150000,
-            'frequency'          => 'monthly',
-            'day_of_month'       => now()->day,
+            'name' => 'Langganan Software Canva Pro',
+            'amount' => 150000,
+            'frequency' => 'monthly',
+            'day_of_month' => now()->day,
             'expense_account_id' => $this->expenseAccount->id,
-            'asset_account_id'   => $this->assetAccount->id,
-            'status'             => 'active',
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
         ]);
 
         $response = $this->postJson("/api/webhook/recurring/{$recurring->id}/approve", [], [
@@ -168,12 +169,12 @@ class RecurringTransactionTest extends TestCase
         // Cek database lines
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => $this->expenseAccount->id,
-            'debit'      => 150000,
+            'debit' => 150000,
         ]);
 
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => $this->assetAccount->id,
-            'credit'     => 150000,
+            'credit' => 150000,
         ]);
 
         $recurring->refresh();
@@ -187,13 +188,13 @@ class RecurringTransactionTest extends TestCase
         $upcomingDay = min(28, $today->day + 3);
 
         RecurringTransaction::create([
-            'name'               => 'Tagihan Hosting AWS',
-            'amount'             => 1200000,
-            'frequency'          => 'monthly',
-            'day_of_month'       => $upcomingDay,
+            'name' => 'Tagihan Hosting AWS',
+            'amount' => 1200000,
+            'frequency' => 'monthly',
+            'day_of_month' => $upcomingDay,
             'expense_account_id' => $this->expenseAccount->id,
-            'asset_account_id'   => $this->assetAccount->id,
-            'status'             => 'active',
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
         ]);
 
         $response = $this->getJson('/api/webhook/recurring/due', [
@@ -209,17 +210,17 @@ class RecurringTransactionTest extends TestCase
     public function test_manual_action_approves_recurring_by_id(): void
     {
         $recurring = RecurringTransaction::create([
-            'name'               => 'Listrik PLN',
-            'amount'             => 450000,
-            'frequency'          => 'monthly',
-            'day_of_month'       => now()->day,
+            'name' => 'Listrik PLN',
+            'amount' => 450000,
+            'frequency' => 'monthly',
+            'day_of_month' => now()->day,
             'expense_account_id' => $this->expenseAccount->id,
-            'asset_account_id'   => $this->assetAccount->id,
-            'status'             => 'active',
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
         ]);
 
         $response = $this->postJson('/api/webhook/recurring/manual-action', [
-            'query'  => (string) $recurring->id,
+            'query' => (string) $recurring->id,
             'action' => 'approve',
         ], [
             'X-Webhook-Secret' => 'test_secret_key',
@@ -228,7 +229,7 @@ class RecurringTransactionTest extends TestCase
         $response->assertStatus(201);
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => $this->expenseAccount->id,
-            'debit'      => 450000,
+            'debit' => 450000,
         ]);
 
         $recurring->refresh();
@@ -238,17 +239,17 @@ class RecurringTransactionTest extends TestCase
     public function test_manual_action_approves_recurring_by_name(): void
     {
         $recurring = RecurringTransaction::create([
-            'name'               => 'Gaji Staff Admin',
-            'amount'             => 3500000,
-            'frequency'          => 'monthly',
-            'day_of_month'       => now()->day,
+            'name' => 'Gaji Staff Admin',
+            'amount' => 3500000,
+            'frequency' => 'monthly',
+            'day_of_month' => now()->day,
             'expense_account_id' => $this->expenseAccount->id,
-            'asset_account_id'   => $this->assetAccount->id,
-            'status'             => 'active',
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
         ]);
 
         $response = $this->postJson('/api/webhook/recurring/manual-action', [
-            'query'  => 'Staff Admin',
+            'query' => 'Staff Admin',
             'action' => 'approve',
         ], [
             'X-Webhook-Secret' => 'test_secret_key',
@@ -257,7 +258,7 @@ class RecurringTransactionTest extends TestCase
         $response->assertStatus(201);
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => $this->expenseAccount->id,
-            'debit'      => 3500000,
+            'debit' => 3500000,
         ]);
 
         $recurring->refresh();

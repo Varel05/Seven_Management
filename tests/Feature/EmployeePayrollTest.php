@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Account;
 use App\Models\Employee;
 use App\Models\JournalEntry;
-use App\Models\JournalEntryLine;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -15,6 +14,7 @@ class EmployeePayrollTest extends TestCase
     use RefreshDatabase;
 
     protected Account $assetAccount;
+
     protected Account $salaryExpenseAccount;
 
     protected function setUp(): void
@@ -41,14 +41,14 @@ class EmployeePayrollTest extends TestCase
         $user = User::factory()->create();
 
         Employee::create([
-            'name'             => 'Budi Santoso',
-            'position'         => 'Senior Developer',
-            'base_salary'      => 8000000,
-            'current_points'   => 10,
-            'rate_per_point'   => 50000,
-            'pay_day'          => 25,
+            'name' => 'Budi Santoso',
+            'position' => 'Senior Developer',
+            'base_salary' => 8000000,
+            'current_points' => 10,
+            'rate_per_point' => 50000,
+            'pay_day' => 25,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         $response = $this->actingAs($user)->get('/employees');
@@ -68,23 +68,23 @@ class EmployeePayrollTest extends TestCase
         $user = User::factory()->create();
 
         $response = $this->actingAs($user)->post('/employees', [
-            'name'             => 'Siti Aminah',
-            'position'         => 'Finance Officer',
-            'phone'            => '08123456789',
-            'base_salary'      => 6000000,
-            'current_points'   => 5,
-            'rate_per_point'   => 100000,
-            'pay_day'          => 28,
+            'name' => 'Siti Aminah',
+            'position' => 'Finance Officer',
+            'phone' => '08123456789',
+            'base_salary' => 6000000,
+            'current_points' => 5,
+            'rate_per_point' => 100000,
+            'pay_day' => 28,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         $response->assertSessionHas('success');
         $this->assertDatabaseHas('employees', [
-            'name'        => 'Siti Aminah',
-            'position'    => 'Finance Officer',
+            'name' => 'Siti Aminah',
+            'position' => 'Finance Officer',
             'base_salary' => 6000000,
-            'pay_day'     => 28,
+            'pay_day' => 28,
         ]);
     }
 
@@ -93,32 +93,32 @@ class EmployeePayrollTest extends TestCase
         $user = User::factory()->create();
 
         $employee = Employee::create([
-            'name'             => 'Asep Sunandar',
-            'position'         => 'Staff Gudang',
-            'base_salary'      => 4500000,
-            'current_points'   => 0,
-            'rate_per_point'   => 25000,
-            'pay_day'          => 20,
+            'name' => 'Asep Sunandar',
+            'position' => 'Staff Gudang',
+            'base_salary' => 4500000,
+            'current_points' => 0,
+            'rate_per_point' => 25000,
+            'pay_day' => 20,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         $response = $this->actingAs($user)->put("/employees/{$employee->id}", [
-            'name'             => 'Asep Sunandar Pratama',
-            'position'         => 'Kepala Gudang',
-            'base_salary'      => 5500000,
-            'current_points'   => 4,
-            'rate_per_point'   => 30000,
-            'pay_day'          => 20,
+            'name' => 'Asep Sunandar Pratama',
+            'position' => 'Kepala Gudang',
+            'base_salary' => 5500000,
+            'current_points' => 4,
+            'rate_per_point' => 30000,
+            'pay_day' => 20,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         $response->assertSessionHas('success');
         $this->assertDatabaseHas('employees', [
-            'id'          => $employee->id,
-            'name'        => 'Asep Sunandar Pratama',
-            'position'    => 'Kepala Gudang',
+            'id' => $employee->id,
+            'name' => 'Asep Sunandar Pratama',
+            'position' => 'Kepala Gudang',
             'base_salary' => 5500000,
         ]);
     }
@@ -128,20 +128,20 @@ class EmployeePayrollTest extends TestCase
         $user = User::factory()->create();
 
         $employee = Employee::create([
-            'name'             => 'Rian Hidayat',
-            'position'         => 'Marketing',
-            'base_salary'      => 5000000,
-            'current_points'   => 5,
-            'rate_per_point'   => 50000,
-            'pay_day'          => 25,
+            'name' => 'Rian Hidayat',
+            'position' => 'Marketing',
+            'base_salary' => 5000000,
+            'current_points' => 5,
+            'rate_per_point' => 50000,
+            'pay_day' => 25,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         // Add 3 points
         $response = $this->actingAs($user)->patch("/employees/{$employee->id}/points", [
             'points' => 3,
-            'mode'   => 'add',
+            'mode' => 'add',
         ]);
 
         $response->assertSessionHas('success');
@@ -156,14 +156,14 @@ class EmployeePayrollTest extends TestCase
         $user = User::factory()->create();
 
         $employee = Employee::create([
-            'name'             => 'Dewi Lestari',
-            'position'         => 'Designer',
-            'base_salary'      => 6000000,
-            'current_points'   => 4,
-            'rate_per_point'   => 100000,
-            'pay_day'          => 25,
+            'name' => 'Dewi Lestari',
+            'position' => 'Designer',
+            'base_salary' => 6000000,
+            'current_points' => 4,
+            'rate_per_point' => 100000,
+            'pay_day' => 25,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         // Total salary = 6,000,000 + 400,000 = 6,400,000
@@ -180,31 +180,31 @@ class EmployeePayrollTest extends TestCase
         // Check Debit 5002 (Beban Gaji)
         $this->assertDatabaseHas('journal_entry_lines', [
             'journal_entry_id' => $journal->id,
-            'account_id'       => $this->salaryExpenseAccount->id,
-            'debit'            => 6400000,
-            'credit'           => 0,
+            'account_id' => $this->salaryExpenseAccount->id,
+            'debit' => 6400000,
+            'credit' => 0,
         ]);
 
         // Check Credit Asset Account
         $this->assertDatabaseHas('journal_entry_lines', [
             'journal_entry_id' => $journal->id,
-            'account_id'       => $this->assetAccount->id,
-            'debit'            => 0,
-            'credit'           => 6400000,
+            'account_id' => $this->assetAccount->id,
+            'debit' => 0,
+            'credit' => 6400000,
         ]);
     }
 
     public function test_due_recurring_api_includes_employee_payroll(): void
     {
         Employee::create([
-            'name'             => 'Hendra Wijaya',
-            'position'         => 'Backend Engineer',
-            'base_salary'      => 7500000,
-            'current_points'   => 10,
-            'rate_per_point'   => 50000,
-            'pay_day'          => (int) now()->day, // due today
+            'name' => 'Hendra Wijaya',
+            'position' => 'Backend Engineer',
+            'base_salary' => 7500000,
+            'current_points' => 10,
+            'rate_per_point' => 50000,
+            'pay_day' => (int) now()->day, // due today
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         $response = $this->withHeaders([
@@ -225,29 +225,29 @@ class EmployeePayrollTest extends TestCase
     public function test_manual_action_can_pay_employee_salary(): void
     {
         $employee = Employee::create([
-            'name'             => 'Bambang Pamungkas',
-            'position'         => 'Operations Lead',
-            'base_salary'      => 9000000,
-            'current_points'   => 2,
-            'rate_per_point'   => 250000,
-            'pay_day'          => 25,
+            'name' => 'Bambang Pamungkas',
+            'position' => 'Operations Lead',
+            'base_salary' => 9000000,
+            'current_points' => 2,
+            'rate_per_point' => 250000,
+            'pay_day' => 25,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         // Total = 9,000,000 + 500,000 = 9,500,000
         $response = $this->withHeaders([
             'X-Webhook-Secret' => 'test_secret_key',
         ])->postJson('/api/webhook/recurring/manual-action', [
-            'query'  => 'gaji bambang',
+            'query' => 'gaji bambang',
             'action' => 'approve',
         ]);
 
         $response->assertStatus(201)
             ->assertJson([
                 'status' => true,
-                'data'   => [
-                    'name'   => 'Bambang Pamungkas',
+                'data' => [
+                    'name' => 'Bambang Pamungkas',
                     'amount' => 9500000,
                 ],
             ]);
@@ -257,37 +257,37 @@ class EmployeePayrollTest extends TestCase
         // Check Debit Account 5002 (Beban Gaji)
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => $this->salaryExpenseAccount->id,
-            'debit'      => 9500000,
-            'credit'     => 0,
+            'debit' => 9500000,
+            'credit' => 0,
         ]);
     }
 
     public function test_manual_action_can_pay_employee_by_name_fallback(): void
     {
         $employee = Employee::create([
-            'name'             => 'Chandra Darusman',
-            'position'         => 'Content Creator',
-            'base_salary'      => 4000000,
-            'current_points'   => 0,
-            'rate_per_point'   => 50000,
-            'pay_day'          => 25,
+            'name' => 'Chandra Darusman',
+            'position' => 'Content Creator',
+            'base_salary' => 4000000,
+            'current_points' => 0,
+            'rate_per_point' => 50000,
+            'pay_day' => 25,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         // When query is just the name without 'gaji' prefix, e.g. /bayar chandra
         $response = $this->withHeaders([
             'X-Webhook-Secret' => 'test_secret_key',
         ])->postJson('/api/webhook/recurring/manual-action', [
-            'query'  => 'chandra',
+            'query' => 'chandra',
             'action' => 'approve',
         ]);
 
         $response->assertStatus(201)
             ->assertJson([
                 'status' => true,
-                'data'   => [
-                    'name'   => 'Chandra Darusman',
+                'data' => [
+                    'name' => 'Chandra Darusman',
                     'amount' => 4000000,
                 ],
             ]);
@@ -298,14 +298,14 @@ class EmployeePayrollTest extends TestCase
     public function test_approve_payroll_webhook_endpoint(): void
     {
         $employee = Employee::create([
-            'name'             => 'Fitriani',
-            'position'         => 'Customer Support',
-            'base_salary'      => 3500000,
-            'current_points'   => 6,
-            'rate_per_point'   => 50000,
-            'pay_day'          => 25,
+            'name' => 'Fitriani',
+            'position' => 'Customer Support',
+            'base_salary' => 3500000,
+            'current_points' => 6,
+            'rate_per_point' => 50000,
+            'pay_day' => 25,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         // Total = 3,500,000 + 300,000 = 3,800,000
@@ -316,9 +316,9 @@ class EmployeePayrollTest extends TestCase
         $response->assertStatus(201)
             ->assertJson([
                 'status' => true,
-                'data'   => [
-                    'name'         => 'Fitriani',
-                    'amount'       => 3800000,
+                'data' => [
+                    'name' => 'Fitriani',
+                    'amount' => 3800000,
                     'expense_code' => '5002',
                 ],
             ]);
@@ -329,14 +329,14 @@ class EmployeePayrollTest extends TestCase
     public function test_skip_payroll_webhook_endpoint(): void
     {
         $employee = Employee::create([
-            'name'             => 'Gani',
-            'position'         => 'Intern',
-            'base_salary'      => 2000000,
-            'current_points'   => 0,
-            'rate_per_point'   => 0,
-            'pay_day'          => 25,
+            'name' => 'Gani',
+            'position' => 'Intern',
+            'base_salary' => 2000000,
+            'current_points' => 0,
+            'rate_per_point' => 0,
+            'pay_day' => 25,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         $response = $this->withHeaders([
@@ -356,14 +356,14 @@ class EmployeePayrollTest extends TestCase
     public function test_manual_action_with_gaji_query_displays_payroll_list_and_status(): void
     {
         Employee::create([
-            'name'             => 'Doni Salman',
-            'position'         => 'Staff Gudang',
-            'base_salary'      => 3500000,
-            'current_points'   => 10,
-            'rate_per_point'   => 10000,
-            'pay_day'          => 20,
+            'name' => 'Doni Salman',
+            'position' => 'Staff Gudang',
+            'base_salary' => 3500000,
+            'current_points' => 10,
+            'rate_per_point' => 10000,
+            'pay_day' => 20,
             'asset_account_id' => $this->assetAccount->id,
-            'status'           => 'active',
+            'status' => 'active',
         ]);
 
         // Test with 'gaji'
@@ -376,7 +376,7 @@ class EmployeePayrollTest extends TestCase
         $response->assertStatus(200)
             ->assertJson([
                 'status' => true,
-                'count'  => 1,
+                'count' => 1,
             ])
             ->assertJsonPath('status', true);
 
@@ -393,7 +393,7 @@ class EmployeePayrollTest extends TestCase
         $responseSlash->assertStatus(200)
             ->assertJson([
                 'status' => true,
-                'count'  => 1,
+                'count' => 1,
             ]);
 
         // Test direct endpoint /api/webhook/payroll/due
@@ -404,7 +404,7 @@ class EmployeePayrollTest extends TestCase
         $responseDue->assertStatus(200)
             ->assertJson([
                 'status' => true,
-                'count'  => 1,
+                'count' => 1,
             ]);
     }
 }

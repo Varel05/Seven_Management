@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -13,11 +12,11 @@ class Employee extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'base_salary'    => 'decimal:2',
+        'base_salary' => 'decimal:2',
         'rate_per_point' => 'decimal:2',
         'current_points' => 'integer',
-        'pay_day'        => 'integer',
-        'last_paid_at'   => 'datetime',
+        'pay_day' => 'integer',
+        'last_paid_at' => 'datetime',
     ];
 
     public function assetAccount(): BelongsTo
@@ -51,7 +50,7 @@ class Employee extends Model
      */
     public function getFormattedBaseSalaryAttribute(): string
     {
-        return 'Rp ' . number_format($this->base_salary, 0, ',', '.');
+        return 'Rp '.number_format($this->base_salary, 0, ',', '.');
     }
 
     /**
@@ -59,7 +58,7 @@ class Employee extends Model
      */
     public function getFormattedBonusSalaryAttribute(): string
     {
-        return 'Rp ' . number_format($this->bonus_salary, 0, ',', '.');
+        return 'Rp '.number_format($this->bonus_salary, 0, ',', '.');
     }
 
     /**
@@ -67,7 +66,7 @@ class Employee extends Model
      */
     public function getFormattedTotalSalaryAttribute(): string
     {
-        return 'Rp ' . number_format($this->total_salary, 0, ',', '.');
+        return 'Rp '.number_format($this->total_salary, 0, ',', '.');
     }
 
     /**
@@ -84,7 +83,7 @@ class Employee extends Model
         $isMatchingDay = ((int) $today->day === $targetDay);
         $alreadyPaidThisMonth = $this->last_paid_at && $this->last_paid_at->isCurrentMonth() && $this->last_paid_at->isCurrentYear();
 
-        return $isMatchingDay && !$alreadyPaidThisMonth;
+        return $isMatchingDay && ! $alreadyPaidThisMonth;
     }
 
     /**
@@ -105,13 +104,13 @@ class Employee extends Model
             );
 
             // Akun kas/bank pembayaran (default ke Kas Operasional 1001 jika belum diisi)
-            $assetAccount = $this->assetAccount 
-                ?? Account::where('code', '1001')->first() 
+            $assetAccount = $this->assetAccount
+                ?? Account::where('code', '1001')->first()
                 ?? Account::where('type', 'asset')->first();
 
-            $reference = 'PAY-' . strtoupper(Str::random(8));
+            $reference = 'PAY-'.strtoupper(Str::random(8));
             $period = now()->translatedFormat('F Y');
-            
+
             $lowerSource = strtolower($source);
             if (str_starts_with($lowerSource, 'telegram')) {
                 $normalizedSource = 'telegram';
@@ -122,33 +121,33 @@ class Employee extends Model
             }
 
             $journalEntry = JournalEntry::create([
-                'reference'   => $reference,
+                'reference' => $reference,
                 'description' => "Penggajian Karyawan: {$this->name} ({$period})",
-                'date'        => now(),
-                'source'      => $normalizedSource,
-                'status'      => 'verified',
+                'date' => now(),
+                'source' => $normalizedSource,
+                'status' => 'verified',
             ]);
 
-            $bonusText = $this->bonus_salary > 0 
-                ? ", Bonus: " . $this->formatted_bonus_salary . " ({$this->current_points} poin)" 
-                : "";
+            $bonusText = $this->bonus_salary > 0
+                ? ', Bonus: '.$this->formatted_bonus_salary." ({$this->current_points} poin)"
+                : '';
 
             // 1. Debit Akun Beban Gaji (5002)
             JournalEntryLine::create([
                 'journal_entry_id' => $journalEntry->id,
-                'account_id'       => $expenseAccount->id,
-                'description'      => "Gaji {$this->name} (Pokok: {$this->formatted_base_salary}{$bonusText})",
-                'debit'            => $finalAmount,
-                'credit'           => 0,
+                'account_id' => $expenseAccount->id,
+                'description' => "Gaji {$this->name} (Pokok: {$this->formatted_base_salary}{$bonusText})",
+                'debit' => $finalAmount,
+                'credit' => 0,
             ]);
 
             // 2. Kredit Akun Kas/Bank
             JournalEntryLine::create([
                 'journal_entry_id' => $journalEntry->id,
-                'account_id'       => $assetAccount->id,
-                'description'      => "Pembayaran Gaji {$this->name} via {$assetAccount->name}",
-                'debit'            => 0,
-                'credit'           => $finalAmount,
+                'account_id' => $assetAccount->id,
+                'description' => "Pembayaran Gaji {$this->name} via {$assetAccount->name}",
+                'debit' => 0,
+                'credit' => $finalAmount,
             ]);
 
             // Tandai sudah dibayarkan untuk periode ini

@@ -19,12 +19,12 @@ class AccountController extends Controller
             'type' => ['required', 'string', Rule::in(['asset', 'liability', 'equity', 'revenue', 'expense'])],
         ], [
             'code.required' => 'Kode akun wajib diisi.',
-            'code.unique'   => 'Kode akun sudah digunakan oleh akun lain.',
-            'code.max'      => 'Kode akun maksimal 20 karakter.',
+            'code.unique' => 'Kode akun sudah digunakan oleh akun lain.',
+            'code.max' => 'Kode akun maksimal 20 karakter.',
             'name.required' => 'Nama akun wajib diisi.',
-            'name.max'      => 'Nama akun maksimal 255 karakter.',
+            'name.max' => 'Nama akun maksimal 255 karakter.',
             'type.required' => 'Tipe akun wajib dipilih.',
-            'type.in'       => 'Tipe akun yang dipilih tidak valid.',
+            'type.in' => 'Tipe akun yang dipilih tidak valid.',
         ]);
 
         $account = Account::create($validated);
@@ -43,12 +43,12 @@ class AccountController extends Controller
             'type' => ['required', 'string', Rule::in(['asset', 'liability', 'equity', 'revenue', 'expense'])],
         ], [
             'code.required' => 'Kode akun wajib diisi.',
-            'code.unique'   => 'Kode akun sudah digunakan oleh akun lain.',
-            'code.max'      => 'Kode akun maksimal 20 karakter.',
+            'code.unique' => 'Kode akun sudah digunakan oleh akun lain.',
+            'code.max' => 'Kode akun maksimal 20 karakter.',
             'name.required' => 'Nama akun wajib diisi.',
-            'name.max'      => 'Nama akun maksimal 255 karakter.',
+            'name.max' => 'Nama akun maksimal 255 karakter.',
             'type.required' => 'Tipe akun wajib dipilih.',
-            'type.in'       => 'Tipe akun yang dipilih tidak valid.',
+            'type.in' => 'Tipe akun yang dipilih tidak valid.',
         ]);
 
         $oldCode = $account->code;

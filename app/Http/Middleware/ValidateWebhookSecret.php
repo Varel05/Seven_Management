@@ -11,7 +11,7 @@ class ValidateWebhookSecret
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -27,7 +27,7 @@ class ValidateWebhookSecret
         // Check X-Webhook-Secret header or Bearer token
         $providedSecret = $request->header('X-Webhook-Secret') ?? $request->bearerToken();
 
-        if (empty($providedSecret) || !hash_equals((string) $expectedSecret, (string) $providedSecret)) {
+        if (empty($providedSecret) || ! hash_equals((string) $expectedSecret, (string) $providedSecret)) {
             return response()->json([
                 'status' => false,
                 'message' => 'Unauthorized: Invalid or missing webhook secret token.',

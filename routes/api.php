@@ -1,9 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\WebhookTransactionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-
-use App\Http\Controllers\Api\WebhookTransactionController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -30,4 +29,3 @@ Route::middleware('webhook.secret')->group(function () {
     Route::get('/webhook/balance', [WebhookTransactionController::class, 'balance']);
     Route::get('/webhook/summary', [WebhookTransactionController::class, 'summary']);
 });
-

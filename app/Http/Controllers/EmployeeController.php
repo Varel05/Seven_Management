@@ -27,10 +27,10 @@ class EmployeeController extends Controller
         $totalBonusSalary = $activeEmployees->sum('bonus_salary');
         $totalPayrollEstimate = $totalBaseSalary + $totalBonusSalary;
 
-        $paidThisMonth = $activeEmployees->filter(fn($e) => $e->last_paid_at && $e->last_paid_at->isCurrentMonth());
+        $paidThisMonth = $activeEmployees->filter(fn ($e) => $e->last_paid_at && $e->last_paid_at->isCurrentMonth());
         $totalPaidThisMonth = $paidThisMonth->sum('total_salary');
 
-        $dueOrUpcomingThisMonth = $activeEmployees->filter(fn($e) => !$e->last_paid_at || !$e->last_paid_at->isCurrentMonth());
+        $dueOrUpcomingThisMonth = $activeEmployees->filter(fn ($e) => ! $e->last_paid_at || ! $e->last_paid_at->isCurrentMonth());
         $totalPendingPayroll = $dueOrUpcomingThisMonth->sum('total_salary');
 
         return view('employees.index', compact(
@@ -51,15 +51,15 @@ class EmployeeController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'             => 'required|string|max:255',
-            'position'         => 'required|string|max:100',
-            'phone'            => 'nullable|string|max:50',
-            'base_salary'      => 'required|numeric|min:0',
-            'current_points'   => 'nullable|integer|min:0',
-            'rate_per_point'   => 'nullable|numeric|min:0',
-            'pay_day'          => 'required|integer|min:1|max:31',
+            'name' => 'required|string|max:255',
+            'position' => 'required|string|max:100',
+            'phone' => 'nullable|string|max:50',
+            'base_salary' => 'required|numeric|min:0',
+            'current_points' => 'nullable|integer|min:0',
+            'rate_per_point' => 'nullable|numeric|min:0',
+            'pay_day' => 'required|integer|min:1|max:31',
             'asset_account_id' => 'nullable|exists:accounts,id',
-            'status'           => 'required|in:active,inactive',
+            'status' => 'required|in:active,inactive',
         ]);
 
         $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
@@ -76,15 +76,15 @@ class EmployeeController extends Controller
     public function update(Request $request, Employee $employee)
     {
         $validated = $request->validate([
-            'name'             => 'required|string|max:255',
-            'position'         => 'required|string|max:100',
-            'phone'            => 'nullable|string|max:50',
-            'base_salary'      => 'required|numeric|min:0',
-            'current_points'   => 'nullable|integer|min:0',
-            'rate_per_point'   => 'nullable|numeric|min:0',
-            'pay_day'          => 'required|integer|min:1|max:31',
+            'name' => 'required|string|max:255',
+            'position' => 'required|string|max:100',
+            'phone' => 'nullable|string|max:50',
+            'base_salary' => 'required|numeric|min:0',
+            'current_points' => 'nullable|integer|min:0',
+            'rate_per_point' => 'nullable|numeric|min:0',
+            'pay_day' => 'required|integer|min:1|max:31',
             'asset_account_id' => 'nullable|exists:accounts,id',
-            'status'           => 'required|in:active,inactive',
+            'status' => 'required|in:active,inactive',
         ]);
 
         $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
@@ -102,7 +102,7 @@ class EmployeeController extends Controller
     {
         $validated = $request->validate([
             'points' => 'required|integer',
-            'mode'   => 'required|in:set,add,subtract',
+            'mode' => 'required|in:set,add,subtract',
         ]);
 
         $points = (int) $validated['points'];
@@ -129,7 +129,7 @@ class EmployeeController extends Controller
         $customAmount = $request->filled('amount') ? (float) $request->input('amount') : null;
         $journalEntry = $employee->executePayrollPosting($customAmount, 'website');
 
-        $formattedAmount = 'Rp ' . number_format($customAmount ?: (float) $employee->total_salary, 0, ',', '.');
+        $formattedAmount = 'Rp '.number_format($customAmount ?: (float) $employee->total_salary, 0, ',', '.');
 
         return back()->with('success', "Gaji {$employee->name} sebesar {$formattedAmount} berhasil dibukukan ke akun Beban Gaji (5002). Ref: {$journalEntry->reference}");
     }

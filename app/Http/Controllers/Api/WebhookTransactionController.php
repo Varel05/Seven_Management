@@ -3,13 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-
 use App\Models\Account;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\RecurringTransaction;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -38,21 +37,21 @@ class WebhookTransactionController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'description'          => 'required|string|max:255',
-            'amount'               => 'nullable|min:0',
-            'type'                 => 'nullable|string',        // normalize type
-            'date'                 => 'nullable|string',
-            'source'               => 'nullable|string|max:50',
-            'reference'            => 'nullable|string|max:100',
-            'account'              => 'nullable|string|max:100',
-            'account_code'         => 'nullable|string|max:20',
-            'category'             => 'nullable|string|max:100',
-            'status'               => 'nullable|string|in:pending,verified,rejected',
-            'lines'                => 'nullable|array',
+            'description' => 'required|string|max:255',
+            'amount' => 'nullable|min:0',
+            'type' => 'nullable|string',        // normalize type
+            'date' => 'nullable|string',
+            'source' => 'nullable|string|max:50',
+            'reference' => 'nullable|string|max:100',
+            'account' => 'nullable|string|max:100',
+            'account_code' => 'nullable|string|max:20',
+            'category' => 'nullable|string|max:100',
+            'status' => 'nullable|string|in:pending,verified,rejected',
+            'lines' => 'nullable|array',
             'lines.*.account_code' => 'required_with:lines|string',
-            'lines.*.debit'        => 'nullable|numeric|min:0',
-            'lines.*.credit'       => 'nullable|numeric|min:0',
-            'lines.*.description'  => 'nullable|string',
+            'lines.*.debit' => 'nullable|numeric|min:0',
+            'lines.*.credit' => 'nullable|numeric|min:0',
+            'lines.*.description' => 'nullable|string',
         ]);
 
         // Cast amount ke float
@@ -61,12 +60,12 @@ class WebhookTransactionController extends Controller
         // Normalize type — support bahasa Indonesia & Inggris
         $typeMap = [
             'pengeluaran' => 'expense',
-            'pemasukan'   => 'income',
-            'masuk'       => 'income',
-            'keluar'      => 'expense',
-            'transfer'    => 'transfer',
-            'expense'     => 'expense',
-            'income'      => 'income',
+            'pemasukan' => 'income',
+            'masuk' => 'income',
+            'keluar' => 'expense',
+            'transfer' => 'transfer',
+            'expense' => 'expense',
+            'income' => 'income',
         ];
 
         $rawType = strtolower(trim($validated['type'] ?? 'expense'));
@@ -74,7 +73,7 @@ class WebhookTransactionController extends Controller
 
         return DB::transaction(function () use ($validated) {
             $transactionDate = now();
-            if (!empty($validated['date'])) {
+            if (! empty($validated['date'])) {
                 try {
                     $parsed = Carbon::parse($validated['date']);
                     // Hanya gunakan jika tahunnya valid (minimal tahun ini) agar terhindar dari halusinasi model AI
@@ -86,42 +85,42 @@ class WebhookTransactionController extends Controller
                 }
             }
 
-            $reference = $validated['reference'] ?? ('TG-' . strtoupper(Str::random(8)));
+            $reference = $validated['reference'] ?? ('TG-'.strtoupper(Str::random(8)));
 
             $rawSource = $validated['source'] ?? 'telegram';
             $source = str_starts_with(strtolower($rawSource), 'telegram') ? 'telegram' : $rawSource;
 
             $journalEntry = JournalEntry::create([
-                'reference'   => $reference,
+                'reference' => $reference,
                 'description' => $validated['description'],
-                'date'        => $transactionDate,
-                'source'      => $source,
-                'status'      => $validated['status'] ?? 'verified',
+                'date' => $transactionDate,
+                'source' => $source,
+                'status' => $validated['status'] ?? 'verified',
             ]);
 
             // Double-entry mode jika lines eksplisit disediakan
-            if (!empty($validated['lines']) && count($validated['lines']) > 0) {
+            if (! empty($validated['lines']) && count($validated['lines']) > 0) {
                 foreach ($validated['lines'] as $line) {
                     $account = Account::firstOrCreate(
                         ['code' => $line['account_code']],
                         [
-                            'name' => $line['account_name'] ?? ('Akun ' . $line['account_code']),
+                            'name' => $line['account_name'] ?? ('Akun '.$line['account_code']),
                             'type' => 'expense',
                         ]
                     );
 
                     JournalEntryLine::create([
                         'journal_entry_id' => $journalEntry->id,
-                        'account_id'       => $account->id,
-                        'description'      => $line['description'] ?? $journalEntry->description,
-                        'debit'            => $line['debit'] ?? 0,
-                        'credit'           => $line['credit'] ?? 0,
+                        'account_id' => $account->id,
+                        'description' => $line['description'] ?? $journalEntry->description,
+                        'debit' => $line['debit'] ?? 0,
+                        'credit' => $line['credit'] ?? 0,
                     ]);
                 }
             } else {
                 // Simple mode: auto generate double-entry sesuai database Chart of Accounts
                 $amount = $validated['amount'];
-                $type   = $validated['type'];
+                $type = $validated['type'];
 
                 $assetAccount = $this->resolveAssetAccount($validated);
 
@@ -131,18 +130,18 @@ class WebhookTransactionController extends Controller
                     // Debit Akun Beban, Credit Akun Kas/Bank
                     JournalEntryLine::create([
                         'journal_entry_id' => $journalEntry->id,
-                        'account_id'       => $expenseAccount->id,
-                        'description'      => $journalEntry->description,
-                        'debit'            => $amount,
-                        'credit'           => 0,
+                        'account_id' => $expenseAccount->id,
+                        'description' => $journalEntry->description,
+                        'debit' => $amount,
+                        'credit' => 0,
                     ]);
 
                     JournalEntryLine::create([
                         'journal_entry_id' => $journalEntry->id,
-                        'account_id'       => $assetAccount->id,
-                        'description'      => 'Pembayaran via ' . $assetAccount->name,
-                        'debit'            => 0,
-                        'credit'           => $amount,
+                        'account_id' => $assetAccount->id,
+                        'description' => 'Pembayaran via '.$assetAccount->name,
+                        'debit' => 0,
+                        'credit' => $amount,
                     ]);
 
                 } elseif ($type === 'income') {
@@ -151,26 +150,26 @@ class WebhookTransactionController extends Controller
                     // Debit Akun Kas/Bank (Asset bertambah), Credit Akun Pendapatan
                     JournalEntryLine::create([
                         'journal_entry_id' => $journalEntry->id,
-                        'account_id'       => $assetAccount->id,
-                        'description'      => 'Penerimaan ke ' . $assetAccount->name,
-                        'debit'            => $amount,
-                        'credit'           => 0,
+                        'account_id' => $assetAccount->id,
+                        'description' => 'Penerimaan ke '.$assetAccount->name,
+                        'debit' => $amount,
+                        'credit' => 0,
                     ]);
 
                     JournalEntryLine::create([
                         'journal_entry_id' => $journalEntry->id,
-                        'account_id'       => $incomeAccount->id,
-                        'description'      => $journalEntry->description,
-                        'debit'            => 0,
-                        'credit'           => $amount,
+                        'account_id' => $incomeAccount->id,
+                        'description' => $journalEntry->description,
+                        'debit' => 0,
+                        'credit' => $amount,
                     ]);
                 }
             }
 
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => 'Transaksi berhasil dicatat ke sistem akuntansi',
-                'data'    => $journalEntry->load('lines.account'),
+                'data' => $journalEntry->load('lines.account'),
             ], 201);
         });
     }
@@ -183,9 +182,11 @@ class WebhookTransactionController extends Controller
         $assetAccounts = Account::where('type', 'asset')->get();
 
         // 1. Cek jika kode akun langsung diberikan dan cocok dengan akun asset
-        if (!empty($validated['account_code'])) {
+        if (! empty($validated['account_code'])) {
             $found = $assetAccounts->firstWhere('code', $validated['account_code']);
-            if ($found) return $found;
+            if ($found) {
+                return $found;
+            }
         }
 
         // 2. Gabungkan teks petunjuk (account, category, description)
@@ -206,7 +207,7 @@ class WebhookTransactionController extends Controller
             $accCodeLower = strtolower($acc->code);
 
             // A. Kecocokan kode akun eksak
-            if (preg_match('/\b' . preg_quote($accCodeLower, '/') . '\b/', $fullSearchText)) {
+            if (preg_match('/\b'.preg_quote($accCodeLower, '/').'\b/', $fullSearchText)) {
                 $score += 100;
             }
 
@@ -217,11 +218,11 @@ class WebhookTransactionController extends Controller
 
             // C. Kecocokan kata kunci unik (misal "bca", "mandiri", "bri", "gopay", "ovo")
             $cleanName = trim(str_replace(['bank', 'kas', 'dompet', 'rekening'], '', $accNameLower));
-            if (!empty($cleanName)) {
+            if (! empty($cleanName)) {
                 // Split jika ada beberapa kata
                 $keywords = array_filter(explode(' ', $cleanName));
                 foreach ($keywords as $kw) {
-                    if (strlen($kw) >= 2 && preg_match('/\b' . preg_quote($kw, '/') . '\b/i', $fullSearchText)) {
+                    if (strlen($kw) >= 2 && preg_match('/\b'.preg_quote($kw, '/').'\b/i', $fullSearchText)) {
                         $score += 60;
                     }
                 }
@@ -265,9 +266,11 @@ class WebhookTransactionController extends Controller
         $fullSearchText = strtolower(implode(' ', $searchSources));
 
         // 1. Cek jika kode akun langsung diberikan dan cocok
-        if (!empty($validated['account_code'])) {
+        if (! empty($validated['account_code'])) {
             $found = $accounts->firstWhere('code', $validated['account_code']);
-            if ($found) return $found;
+            if ($found) {
+                return $found;
+            }
         }
 
         $bestAccount = null;
@@ -279,7 +282,7 @@ class WebhookTransactionController extends Controller
             $accCodeLower = strtolower($acc->code);
 
             // A. Kecocokan kode akun eksak
-            if (preg_match('/\b' . preg_quote($accCodeLower, '/') . '\b/', $fullSearchText)) {
+            if (preg_match('/\b'.preg_quote($accCodeLower, '/').'\b/', $fullSearchText)) {
                 $score += 100;
             }
 
@@ -292,7 +295,7 @@ class WebhookTransactionController extends Controller
             $cleanName = trim(str_replace(['beban', 'biaya', 'pendapatan', 'akun'], '', $accNameLower));
             $keywords = array_filter(explode(' ', $cleanName));
             foreach ($keywords as $kw) {
-                if (strlen($kw) >= 3 && preg_match('/\b' . preg_quote($kw, '/') . '\b/i', $fullSearchText)) {
+                if (strlen($kw) >= 3 && preg_match('/\b'.preg_quote($kw, '/').'\b/i', $fullSearchText)) {
                     $score += 50;
                 }
             }
@@ -359,29 +362,29 @@ class WebhookTransactionController extends Controller
                 $isThisMonth = true;
             }
 
-            if (!$isThisMonth) {
+            if (! $isThisMonth) {
                 continue;
             }
 
-            $alreadyPostedThisMonth = $item->last_posted_at 
-                && $item->last_posted_at->isCurrentMonth() 
+            $alreadyPostedThisMonth = $item->last_posted_at
+                && $item->last_posted_at->isCurrentMonth()
                 && $item->last_posted_at->isCurrentYear();
 
             $daysLeft = (int) $today->diffInDays($targetDate, false);
 
             $itemData = [
-                'id'                   => $item->id,
-                'name'                 => $item->name,
-                'amount'               => (float) $item->amount,
-                'formatted_amount'     => 'Rp ' . number_format($item->amount, 0, ',', '.'),
-                'frequency'            => $item->frequency,
-                'day_of_month'         => $item->day_of_month,
-                'due_date'             => $targetDate->translatedFormat('d F Y'),
-                'days_left'            => $daysLeft,
+                'id' => $item->id,
+                'name' => $item->name,
+                'amount' => (float) $item->amount,
+                'formatted_amount' => 'Rp '.number_format($item->amount, 0, ',', '.'),
+                'frequency' => $item->frequency,
+                'day_of_month' => $item->day_of_month,
+                'due_date' => $targetDate->translatedFormat('d F Y'),
+                'days_left' => $daysLeft,
                 'expense_account_name' => $item->expenseAccount->name ?? 'Beban Operasional',
-                'asset_account_name'   => $item->assetAccount->name ?? 'Kas Operasional',
-                'notes'                => $item->notes,
-                'last_posted_at'       => $item->last_posted_at ? $item->last_posted_at->translatedFormat('d M Y') : null,
+                'asset_account_name' => $item->assetAccount->name ?? 'Kas Operasional',
+                'notes' => $item->notes,
+                'last_posted_at' => $item->last_posted_at ? $item->last_posted_at->translatedFormat('d M Y') : null,
             ];
 
             if ($alreadyPostedThisMonth) {
@@ -412,28 +415,28 @@ class WebhookTransactionController extends Controller
             $targetDay = min((int) $emp->pay_day, $daysInMonth);
             $targetDate = Carbon::create($today->year, $today->month, $targetDay)->startOfDay();
 
-            $alreadyPaidThisMonth = $emp->last_paid_at 
-                && $emp->last_paid_at->isCurrentMonth() 
+            $alreadyPaidThisMonth = $emp->last_paid_at
+                && $emp->last_paid_at->isCurrentMonth()
                 && $emp->last_paid_at->isCurrentYear();
 
             $daysLeft = (int) $today->diffInDays($targetDate, false);
 
             $empData = [
-                'id'                   => $emp->id,
-                'name'                 => $emp->name,
-                'position'             => $emp->position,
-                'base_salary'          => (float) $emp->base_salary,
-                'current_points'       => (int) $emp->current_points,
-                'rate_per_point'       => (float) $emp->rate_per_point,
-                'bonus_salary'         => (float) $emp->bonus_salary,
-                'total_salary'         => (float) $emp->total_salary,
-                'amount'               => (float) $emp->total_salary,
-                'formatted_amount'     => $emp->formatted_total_salary,
-                'pay_day'              => $emp->pay_day,
-                'due_date'             => $targetDate->translatedFormat('d F Y'),
-                'days_left'            => $daysLeft,
-                'asset_account_name'   => $emp->assetAccount->name ?? 'Kas Operasional',
-                'last_paid_at'         => $emp->last_paid_at ? $emp->last_paid_at->translatedFormat('d M Y') : null,
+                'id' => $emp->id,
+                'name' => $emp->name,
+                'position' => $emp->position,
+                'base_salary' => (float) $emp->base_salary,
+                'current_points' => (int) $emp->current_points,
+                'rate_per_point' => (float) $emp->rate_per_point,
+                'bonus_salary' => (float) $emp->bonus_salary,
+                'total_salary' => (float) $emp->total_salary,
+                'amount' => (float) $emp->total_salary,
+                'formatted_amount' => $emp->formatted_total_salary,
+                'pay_day' => $emp->pay_day,
+                'due_date' => $targetDate->translatedFormat('d F Y'),
+                'days_left' => $daysLeft,
+                'asset_account_name' => $emp->assetAccount->name ?? 'Kas Operasional',
+                'last_paid_at' => $emp->last_paid_at ? $emp->last_paid_at->translatedFormat('d M Y') : null,
             ];
 
             if ($alreadyPaidThisMonth) {
@@ -461,45 +464,45 @@ class WebhookTransactionController extends Controller
         // Susun teks respon Telegram yang informatif
         $messageLines = ["📅 *Jadwal Pengeluaran & Gaji ({$monthName})*\n"];
 
-        if (!empty($dueToday) || !empty($payrollDueToday)) {
-            $messageLines[] = "🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*";
+        if (! empty($dueToday) || ! empty($payrollDueToday)) {
+            $messageLines[] = '🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*';
             foreach ($dueToday as $d) {
                 $messageLines[] = "• #{$d['id']} *{$d['name']}*: {$d['formatted_amount']}";
             }
             foreach ($payrollDueToday as $pd) {
                 $messageLines[] = "• 👤 *Gaji {$pd['name']}* (#{$pd['id']}): {$pd['formatted_amount']}";
             }
-            $messageLines[] = "";
+            $messageLines[] = '';
         }
 
-        if (!empty($overdue) || !empty($payrollOverdue)) {
-            $messageLines[] = "⚠️ *Terlewat (Belum Dibayar):*";
+        if (! empty($overdue) || ! empty($payrollOverdue)) {
+            $messageLines[] = '⚠️ *Terlewat (Belum Dibayar):*';
             foreach ($overdue as $o) {
                 $messageLines[] = "• #{$o['id']} *{$o['name']}*: {$o['formatted_amount']} (Tgl {$o['day_of_month']} {$now->translatedFormat('M')})";
             }
             foreach ($payrollOverdue as $po) {
                 $messageLines[] = "• 👤 *Gaji {$po['name']}* (#{$po['id']}): {$po['formatted_amount']} (Tgl {$po['pay_day']} {$now->translatedFormat('M')})";
             }
-            $messageLines[] = "";
+            $messageLines[] = '';
         }
 
-        if (!empty($actionable) || !empty($payrollActionable)) {
-            $messageLines[] = "💡 *Cara Bayar Cepat:*";
-            if (!empty($actionable)) {
+        if (! empty($actionable) || ! empty($payrollActionable)) {
+            $messageLines[] = '💡 *Cara Bayar Cepat:*';
+            if (! empty($actionable)) {
                 $firstId = $actionable[0]['id'];
                 $firstName = strtolower(explode(' ', $actionable[0]['name'])[0]);
                 $messageLines[] = "• Tagihan Rutin: `/bayar {$firstId}` atau `/bayar {$firstName}`";
             }
-            if (!empty($payrollActionable)) {
+            if (! empty($payrollActionable)) {
                 $firstEmpName = strtolower(explode(' ', $payrollActionable[0]['name'])[0]);
                 $messageLines[] = "• Gaji Karyawan: `/bayar gaji {$firstEmpName}` atau `/bayar gaji {$payrollActionable[0]['id']}`";
             }
-            $messageLines[] = "• Untuk lewati: `/lewati <id>`";
-            $messageLines[] = "";
+            $messageLines[] = '• Untuk lewati: `/lewati <id>`';
+            $messageLines[] = '';
         }
 
-        if (!empty($upcoming) || !empty($payrollUpcoming)) {
-            $messageLines[] = "⏳ *Mendatang Bulan Ini:*";
+        if (! empty($upcoming) || ! empty($payrollUpcoming)) {
+            $messageLines[] = '⏳ *Mendatang Bulan Ini:*';
             foreach ($upcoming as $u) {
                 $daysLeft = (int) $u['days_left'];
                 $daysText = $daysLeft === 1 ? 'Besok' : "{$daysLeft} hari lagi";
@@ -510,18 +513,18 @@ class WebhookTransactionController extends Controller
                 $daysText = $daysLeft === 1 ? 'Besok' : "{$daysLeft} hari lagi";
                 $messageLines[] = "• 👤 *Gaji {$pu['name']}*: {$pu['formatted_amount']} (Tgl {$pu['pay_day']} {$now->translatedFormat('M')} • {$daysText})";
             }
-            $messageLines[] = "";
+            $messageLines[] = '';
         }
 
-        if (!empty($alreadyPaid) || !empty($payrollAlreadyPaid)) {
-            $messageLines[] = "🟢 *Sudah Dibayar Bulan Ini:*";
+        if (! empty($alreadyPaid) || ! empty($payrollAlreadyPaid)) {
+            $messageLines[] = '🟢 *Sudah Dibayar Bulan Ini:*';
             foreach ($alreadyPaid as $p) {
                 $messageLines[] = "• #{$p['id']} *{$p['name']}*: {$p['formatted_amount']} (Dibayar {$p['last_posted_at']})";
             }
             foreach ($payrollAlreadyPaid as $pp) {
                 $messageLines[] = "• 👤 *Gaji {$pp['name']}*: {$pp['formatted_amount']} (Dibayar {$pp['last_paid_at']})";
             }
-            $messageLines[] = "";
+            $messageLines[] = '';
         }
 
         if (empty($dueToday) && empty($overdue) && empty($upcoming) && empty($alreadyPaid)
@@ -541,36 +544,36 @@ class WebhookTransactionController extends Controller
 
         $totalAll = $totalRecurring + $totalPayroll;
 
-        $messageLines[] = "───────────────────";
-        $messageLines[] = "💰 *Total Estimasi Bulan Ini*: Rp " . number_format($totalAll, 0, ',', '.');
+        $messageLines[] = '───────────────────';
+        $messageLines[] = '💰 *Total Estimasi Bulan Ini*: Rp '.number_format($totalAll, 0, ',', '.');
         if ($totalPayroll > 0) {
-            $messageLines[] = "  • Beban Rutin: Rp " . number_format($totalRecurring, 0, ',', '.');
-            $messageLines[] = "  • Beban Gaji (5002): Rp " . number_format($totalPayroll, 0, ',', '.');
+            $messageLines[] = '  • Beban Rutin: Rp '.number_format($totalRecurring, 0, ',', '.');
+            $messageLines[] = '  • Beban Gaji (5002): Rp '.number_format($totalPayroll, 0, ',', '.');
         }
 
         return response()->json([
-            'status'                 => true,
-            'period'                 => $monthName,
-            'count'                  => count($actionable) + count($payrollActionable),
-            'data'                   => $actionable,
-            'due_today'              => $dueToday,
-            'overdue'                => $overdue,
-            'upcoming'               => $upcoming,
-            'already_paid'           => $alreadyPaid,
-            'payroll'                => [
-                'count'        => count($payrollActionable),
-                'due_today'    => $payrollDueToday,
-                'overdue'      => $payrollOverdue,
-                'upcoming'     => $payrollUpcoming,
+            'status' => true,
+            'period' => $monthName,
+            'count' => count($actionable) + count($payrollActionable),
+            'data' => $actionable,
+            'due_today' => $dueToday,
+            'overdue' => $overdue,
+            'upcoming' => $upcoming,
+            'already_paid' => $alreadyPaid,
+            'payroll' => [
+                'count' => count($payrollActionable),
+                'due_today' => $payrollDueToday,
+                'overdue' => $payrollOverdue,
+                'upcoming' => $payrollUpcoming,
                 'already_paid' => $payrollAlreadyPaid,
                 'total_amount' => $totalPayroll,
-                'formatted_total_amount' => 'Rp ' . number_format($totalPayroll, 0, ',', '.'),
+                'formatted_total_amount' => 'Rp '.number_format($totalPayroll, 0, ',', '.'),
             ],
-            'total_recurring'        => $totalRecurring,
-            'total_payroll'          => $totalPayroll,
-            'total_amount'           => $totalAll,
-            'formatted_total_amount' => 'Rp ' . number_format($totalAll, 0, ',', '.'),
-            'message'                => implode("\n", $messageLines),
+            'total_recurring' => $totalRecurring,
+            'total_payroll' => $totalPayroll,
+            'total_amount' => $totalAll,
+            'formatted_total_amount' => 'Rp '.number_format($totalAll, 0, ',', '.'),
+            'message' => implode("\n", $messageLines),
         ]);
     }
 
@@ -590,11 +593,11 @@ class WebhookTransactionController extends Controller
 
         if ($activeEmployees->isEmpty()) {
             return response()->json([
-                'status'  => true,
-                'period'  => $monthName,
-                'count'   => 0,
+                'status' => true,
+                'period' => $monthName,
+                'count' => 0,
                 'message' => "ℹ️ Belum ada data karyawan aktif di sistem Seven Management.\n\n💡 Silakan tambahkan data staf melalui menu Karyawan & Payroll di dashboard web.",
-                'data'    => [],
+                'data' => [],
             ]);
         }
 
@@ -607,30 +610,30 @@ class WebhookTransactionController extends Controller
             $targetDay = min((int) $emp->pay_day, $daysInMonth);
             $targetDate = Carbon::create($today->year, $today->month, $targetDay)->startOfDay();
 
-            $alreadyPaidThisMonth = $emp->last_paid_at 
-                && $emp->last_paid_at->isCurrentMonth() 
+            $alreadyPaidThisMonth = $emp->last_paid_at
+                && $emp->last_paid_at->isCurrentMonth()
                 && $emp->last_paid_at->isCurrentYear();
 
             $daysLeft = (int) $today->diffInDays($targetDate, false);
 
             $empData = [
-                'id'                 => $emp->id,
-                'name'               => $emp->name,
-                'position'           => $emp->position,
-                'base_salary'        => (float) $emp->base_salary,
-                'formatted_base'     => $emp->formatted_base_salary,
-                'current_points'     => (int) $emp->current_points,
-                'rate_per_point'     => (float) $emp->rate_per_point,
-                'bonus_salary'       => (float) $emp->bonus_salary,
-                'formatted_bonus'    => $emp->formatted_bonus_salary,
-                'total_salary'       => (float) $emp->total_salary,
-                'amount'             => (float) $emp->total_salary,
-                'formatted_amount'   => $emp->formatted_total_salary,
-                'pay_day'            => $emp->pay_day,
-                'due_date'           => $targetDate->translatedFormat('d F Y'),
-                'days_left'          => $daysLeft,
+                'id' => $emp->id,
+                'name' => $emp->name,
+                'position' => $emp->position,
+                'base_salary' => (float) $emp->base_salary,
+                'formatted_base' => $emp->formatted_base_salary,
+                'current_points' => (int) $emp->current_points,
+                'rate_per_point' => (float) $emp->rate_per_point,
+                'bonus_salary' => (float) $emp->bonus_salary,
+                'formatted_bonus' => $emp->formatted_bonus_salary,
+                'total_salary' => (float) $emp->total_salary,
+                'amount' => (float) $emp->total_salary,
+                'formatted_amount' => $emp->formatted_total_salary,
+                'pay_day' => $emp->pay_day,
+                'due_date' => $targetDate->translatedFormat('d F Y'),
+                'days_left' => $daysLeft,
                 'asset_account_name' => $emp->assetAccount->name ?? 'Kas Operasional',
-                'last_paid_at'       => $emp->last_paid_at ? $emp->last_paid_at->translatedFormat('d M Y') : null,
+                'last_paid_at' => $emp->last_paid_at ? $emp->last_paid_at->translatedFormat('d M Y') : null,
             ];
 
             if ($alreadyPaidThisMonth) {
@@ -648,49 +651,49 @@ class WebhookTransactionController extends Controller
 
         $messageLines = ["👥 *Daftar Gaji Karyawan & Status ({$monthName})*\n"];
 
-        if (!empty($dueToday)) {
-            $messageLines[] = "🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*";
+        if (! empty($dueToday)) {
+            $messageLines[] = '🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*';
             foreach ($dueToday as $d) {
-                $bonusStr = $d['current_points'] > 0 ? " • Bonus: {$d['formatted_bonus']} ({$d['current_points']} pt)" : "";
+                $bonusStr = $d['current_points'] > 0 ? " • Bonus: {$d['formatted_bonus']} ({$d['current_points']} pt)" : '';
                 $messageLines[] = "• 👤 *#{$d['id']} {$d['name']}* ({$d['position']})";
                 $messageLines[] = "  💵 Gaji: {$d['formatted_base']}{$bonusStr} ➔ *{$d['formatted_amount']}*";
                 $messageLines[] = "  💳 Bayar via: {$d['asset_account_name']}";
                 $messageLines[] = "  👉 Bayar cepat: `/bayar gaji {$d['id']}`";
             }
-            $messageLines[] = "";
+            $messageLines[] = '';
         }
 
-        if (!empty($overdue)) {
-            $messageLines[] = "⚠️ *Terlewat (Belum Dibayar):*";
+        if (! empty($overdue)) {
+            $messageLines[] = '⚠️ *Terlewat (Belum Dibayar):*';
             foreach ($overdue as $o) {
-                $bonusStr = $o['current_points'] > 0 ? " • Bonus: {$o['formatted_bonus']} ({$o['current_points']} pt)" : "";
+                $bonusStr = $o['current_points'] > 0 ? " • Bonus: {$o['formatted_bonus']} ({$o['current_points']} pt)" : '';
                 $messageLines[] = "• 👤 *#{$o['id']} {$o['name']}* ({$o['position']})";
                 $messageLines[] = "  💵 Gaji: {$o['formatted_base']}{$bonusStr} ➔ *{$o['formatted_amount']}*";
                 $messageLines[] = "  📅 Jatuh Tempo: Tgl {$o['pay_day']} {$today->translatedFormat('M')}";
                 $messageLines[] = "  💳 Bayar via: {$o['asset_account_name']}";
                 $messageLines[] = "  👉 Bayar cepat: `/bayar gaji {$o['id']}`";
             }
-            $messageLines[] = "";
+            $messageLines[] = '';
         }
 
-        if (!empty($upcoming)) {
-            $messageLines[] = "⏳ *Mendatang Bulan Ini:*";
+        if (! empty($upcoming)) {
+            $messageLines[] = '⏳ *Mendatang Bulan Ini:*';
             foreach ($upcoming as $u) {
                 $daysLeft = (int) $u['days_left'];
                 $daysText = $daysLeft === 1 ? 'Besok' : "{$daysLeft} hari lagi";
-                $bonusStr = $u['current_points'] > 0 ? " • Bonus: {$u['formatted_bonus']}" : "";
+                $bonusStr = $u['current_points'] > 0 ? " • Bonus: {$u['formatted_bonus']}" : '';
                 $messageLines[] = "• 👤 *#{$u['id']} {$u['name']}* ({$u['position']}): *{$u['formatted_amount']}*";
                 $messageLines[] = "  📅 Tgl {$u['pay_day']} {$today->translatedFormat('M')} ({$daysText}) • via {$u['asset_account_name']}";
             }
-            $messageLines[] = "";
+            $messageLines[] = '';
         }
 
-        if (!empty($alreadyPaid)) {
-            $messageLines[] = "🟢 *Sudah Dibayar Bulan Ini (Lunas):*";
+        if (! empty($alreadyPaid)) {
+            $messageLines[] = '🟢 *Sudah Dibayar Bulan Ini (Lunas):*';
             foreach ($alreadyPaid as $p) {
                 $messageLines[] = "• 👤 *#{$p['id']} {$p['name']}* ({$p['position']}): *{$p['formatted_amount']}* (Lunas tgl {$p['last_paid_at']})";
             }
-            $messageLines[] = "";
+            $messageLines[] = '';
         }
 
         $totalPaid = array_sum(array_column($alreadyPaid, 'amount'));
@@ -699,30 +702,30 @@ class WebhookTransactionController extends Controller
                      + array_sum(array_column($upcoming, 'amount'));
         $totalAll = $totalPaid + $totalUnpaid;
 
-        $messageLines[] = "───────────────────";
-        $messageLines[] = "💰 *Total Beban Gaji (5002)*: Rp " . number_format($totalAll, 0, ',', '.');
-        $messageLines[] = "  • 🟢 Lunas Dibayar: Rp " . number_format($totalPaid, 0, ',', '.') . " (" . count($alreadyPaid) . " staf)";
-        $messageLines[] = "  • ⏳ Belum Dibayar: Rp " . number_format($totalUnpaid, 0, ',', '.') . " (" . (count($dueToday) + count($overdue) + count($upcoming)) . " staf)";
+        $messageLines[] = '───────────────────';
+        $messageLines[] = '💰 *Total Beban Gaji (5002)*: Rp '.number_format($totalAll, 0, ',', '.');
+        $messageLines[] = '  • 🟢 Lunas Dibayar: Rp '.number_format($totalPaid, 0, ',', '.').' ('.count($alreadyPaid).' staf)';
+        $messageLines[] = '  • ⏳ Belum Dibayar: Rp '.number_format($totalUnpaid, 0, ',', '.').' ('.(count($dueToday) + count($overdue) + count($upcoming)).' staf)';
 
         if ($totalUnpaid > 0) {
-            $messageLines[] = "";
-            $messageLines[] = "💡 *Ketik `/bayar gaji <nama/id>` untuk eksekusi pembayaran gaji.*";
+            $messageLines[] = '';
+            $messageLines[] = '💡 *Ketik `/bayar gaji <nama/id>` untuk eksekusi pembayaran gaji.*';
         }
 
         return response()->json([
-            'status'                 => true,
-            'period'                 => $monthName,
-            'count'                  => $activeEmployees->count(),
-            'due_today'              => $dueToday,
-            'overdue'                => $overdue,
-            'upcoming'               => $upcoming,
-            'already_paid'           => $alreadyPaid,
-            'actionable'             => array_merge($dueToday, $overdue),
-            'total_amount'           => $totalAll,
-            'total_paid'             => $totalPaid,
-            'total_unpaid'           => $totalUnpaid,
-            'formatted_total_amount' => 'Rp ' . number_format($totalAll, 0, ',', '.'),
-            'message'                => implode("\n", $messageLines),
+            'status' => true,
+            'period' => $monthName,
+            'count' => $activeEmployees->count(),
+            'due_today' => $dueToday,
+            'overdue' => $overdue,
+            'upcoming' => $upcoming,
+            'already_paid' => $alreadyPaid,
+            'actionable' => array_merge($dueToday, $overdue),
+            'total_amount' => $totalAll,
+            'total_paid' => $totalPaid,
+            'total_unpaid' => $totalUnpaid,
+            'formatted_total_amount' => 'Rp '.number_format($totalAll, 0, ',', '.'),
+            'message' => implode("\n", $messageLines),
         ]);
     }
 
@@ -738,15 +741,15 @@ class WebhookTransactionController extends Controller
         $journalEntry = $recurringTransaction->executePosting($customAmount, $source);
 
         return response()->json([
-            'status'  => true,
+            'status' => true,
             'message' => "Pengeluaran rutin '{$recurringTransaction->name}' berhasil dibukukan.",
-            'data'    => [
-                'reference'       => $journalEntry->reference,
-                'name'            => $recurringTransaction->name,
-                'amount'          => $customAmount ?: (float) $recurringTransaction->amount,
+            'data' => [
+                'reference' => $journalEntry->reference,
+                'name' => $recurringTransaction->name,
+                'amount' => $customAmount ?: (float) $recurringTransaction->amount,
                 'expense_account' => $recurringTransaction->expenseAccount->name ?? '',
-                'asset_account'   => $recurringTransaction->assetAccount->name ?? '',
-                'journal_entry'   => $journalEntry,
+                'asset_account' => $recurringTransaction->assetAccount->name ?? '',
+                'journal_entry' => $journalEntry,
             ],
         ], 201);
     }
@@ -763,14 +766,14 @@ class WebhookTransactionController extends Controller
         $journalEntry = $employee->executePayrollPosting($customAmount, $source);
 
         return response()->json([
-            'status'  => true,
+            'status' => true,
             'message' => "Penggajian karyawan '{$employee->name}' berhasil dibukukan.",
-            'data'    => [
-                'reference'     => $journalEntry->reference,
-                'name'          => $employee->name,
-                'amount'        => $customAmount ?: (float) $employee->total_salary,
-                'expense_code'  => '5002',
-                'expense_name'  => 'Beban Gaji',
+            'data' => [
+                'reference' => $journalEntry->reference,
+                'name' => $employee->name,
+                'amount' => $customAmount ?: (float) $employee->total_salary,
+                'expense_code' => '5002',
+                'expense_name' => 'Beban Gaji',
                 'asset_account' => $employee->assetAccount->name ?? 'Kas Operasional',
                 'journal_entry' => $journalEntry,
             ],
@@ -785,7 +788,7 @@ class WebhookTransactionController extends Controller
         $employee->update(['last_paid_at' => now()]);
 
         return response()->json([
-            'status'  => true,
+            'status' => true,
             'message' => "Penggajian karyawan '{$employee->name}' telah dilewati untuk periode ini.",
         ]);
     }
@@ -798,7 +801,7 @@ class WebhookTransactionController extends Controller
         $recurringTransaction->update(['last_posted_at' => now()]);
 
         return response()->json([
-            'status'  => true,
+            'status' => true,
             'message' => "Pengeluaran rutin '{$recurringTransaction->name}' telah dilewati untuk periode ini.",
         ]);
     }
@@ -810,14 +813,14 @@ class WebhookTransactionController extends Controller
     public function manualRecurringAction(Request $request)
     {
         $validated = $request->validate([
-            'query'  => 'required|string',
+            'query' => 'required|string',
             'action' => 'nullable|string|in:approve,skip,list',
             'amount' => 'nullable|numeric|min:0',
         ]);
 
         $rawQuery = trim($validated['query']);
         $action = strtolower($validated['action'] ?? 'approve');
-        $customAmount = !empty($validated['amount']) ? (float) $validated['amount'] : null;
+        $customAmount = ! empty($validated['amount']) ? (float) $validated['amount'] : null;
 
         // Cek jika perintah secara spesifik menargetkan gaji karyawan (misal: "gaji budi", "/gaji", "salary 1", "karyawan asep", atau "gaji")
         $isExplicitPayroll = false;
@@ -838,15 +841,15 @@ class WebhookTransactionController extends Controller
             if (is_numeric($cleanQuery)) {
                 $employee = Employee::with('assetAccount')->find((int) $cleanQuery);
             }
-            if (!$employee && !empty($cleanQuery)) {
+            if (! $employee && ! empty($cleanQuery)) {
                 $employee = Employee::with('assetAccount')
                     ->where('name', 'LIKE', "%{$cleanQuery}%")
                     ->first();
             }
 
-            if (!$employee) {
+            if (! $employee) {
                 return response()->json([
-                    'status'  => false,
+                    'status' => false,
                     'message' => "❌ Karyawan dengan kata kunci '{$cleanQuery}' tidak ditemukan.\n\n💡 Ketik /rutin untuk melihat daftar karyawan & jadwal gaji.",
                 ], 404);
             }
@@ -860,7 +863,7 @@ class WebhookTransactionController extends Controller
             $recurring = RecurringTransaction::with(['expenseAccount', 'assetAccount'])->find((int) $rawQuery);
         }
 
-        if (!$recurring && !empty($rawQuery)) {
+        if (! $recurring && ! empty($rawQuery)) {
             $recurring = RecurringTransaction::with(['expenseAccount', 'assetAccount'])
                 ->active()
                 ->where('name', 'LIKE', "%{$rawQuery}%")
@@ -868,7 +871,7 @@ class WebhookTransactionController extends Controller
         }
 
         // 3. Jika di RecurringTransaction tidak ada, periksa apakah cocok dengan nama Employee
-        if (!$recurring && !empty($rawQuery)) {
+        if (! $recurring && ! empty($rawQuery)) {
             $employee = Employee::with('assetAccount')
                 ->where('name', 'LIKE', "%{$rawQuery}%")
                 ->first();
@@ -878,17 +881,18 @@ class WebhookTransactionController extends Controller
             }
         }
 
-        if (!$recurring) {
+        if (! $recurring) {
             return response()->json([
-                'status'  => false,
+                'status' => false,
                 'message' => "❌ Tagihan atau gaji dengan kata kunci '{$rawQuery}' tidak ditemukan.\n\n💡 Ketik /rutin untuk melihat daftar tagihan & jadwal gaji aktif.",
             ], 404);
         }
 
         if ($action === 'skip') {
             $recurring->update(['last_posted_at' => now()]);
+
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => "⏭️ Pengeluaran rutin '#{$recurring->id} {$recurring->name}' telah dilewati untuk periode ini.",
             ]);
         }
@@ -897,22 +901,22 @@ class WebhookTransactionController extends Controller
         $journalEntry = $recurring->executePosting($customAmount, 'telegram');
 
         $finalAmount = $customAmount ?: (float) $recurring->amount;
-        $formattedAmount = 'Rp ' . number_format($finalAmount, 0, ',', '.');
+        $formattedAmount = 'Rp '.number_format($finalAmount, 0, ',', '.');
         $assetName = $recurring->assetAccount->name ?? 'Kas Operasional';
         $expenseName = $recurring->expenseAccount->name ?? 'Beban Operasional';
 
         return response()->json([
-            'status'  => true,
-            'message' => "✅ *Pengeluaran Rutin Berhasil Dibukukan!*\n\n" .
-                         "🏢 *#{$recurring->id} {$recurring->name}*\n" .
-                         "💰 *{$formattedAmount}*\n" .
-                         "📂 Beban: {$expenseName}\n" .
-                         "💳 Bayar dari: {$assetName}\n" .
+            'status' => true,
+            'message' => "✅ *Pengeluaran Rutin Berhasil Dibukukan!*\n\n".
+                         "🏢 *#{$recurring->id} {$recurring->name}*\n".
+                         "💰 *{$formattedAmount}*\n".
+                         "📂 Beban: {$expenseName}\n".
+                         "💳 Bayar dari: {$assetName}\n".
                          "🔖 Ref: `{$journalEntry->reference}`",
-            'data'    => [
+            'data' => [
                 'reference' => $journalEntry->reference,
-                'name'      => $recurring->name,
-                'amount'    => $finalAmount,
+                'name' => $recurring->name,
+                'amount' => $finalAmount,
             ],
         ], 201);
     }
@@ -924,8 +928,9 @@ class WebhookTransactionController extends Controller
     {
         if ($action === 'skip') {
             $employee->update(['last_paid_at' => now()]);
+
             return response()->json([
-                'status'  => true,
+                'status' => true,
                 'message' => "⏭️ Penggajian karyawan '#{$employee->id} {$employee->name}' telah dilewati untuk periode ini.",
             ]);
         }
@@ -935,28 +940,28 @@ class WebhookTransactionController extends Controller
         $finalAmount = $customAmount !== null && $customAmount > 0
             ? $customAmount
             : (float) $employee->total_salary;
-        $formattedAmount = 'Rp ' . number_format($finalAmount, 0, ',', '.');
+        $formattedAmount = 'Rp '.number_format($finalAmount, 0, ',', '.');
         $assetName = $employee->assetAccount->name ?? 'Kas Operasional';
 
-        $bonusInfo = "";
+        $bonusInfo = '';
         if ($employee->current_points > 0) {
-            $bonusInfo = "⭐ Bonus Poin: {$employee->formatted_bonus_salary} ({$employee->current_points} poin @ Rp " . number_format($employee->rate_per_point, 0, ',', '.') . ")\n";
+            $bonusInfo = "⭐ Bonus Poin: {$employee->formatted_bonus_salary} ({$employee->current_points} poin @ Rp ".number_format($employee->rate_per_point, 0, ',', '.').")\n";
         }
 
         return response()->json([
-            'status'  => true,
-            'message' => "✅ *Gaji Karyawan Berhasil Dibukukan!*\n\n" .
-                         "👤 *#{$employee->id} {$employee->name}* ({$employee->position})\n" .
-                         "💵 Gaji Pokok: {$employee->formatted_base_salary}\n" .
-                         $bonusInfo .
-                         "💰 *Total Dibayar: {$formattedAmount}*\n" .
-                         "📂 Beban: Beban Gaji (5002)\n" .
-                         "💳 Bayar dari: {$assetName}\n" .
+            'status' => true,
+            'message' => "✅ *Gaji Karyawan Berhasil Dibukukan!*\n\n".
+                         "👤 *#{$employee->id} {$employee->name}* ({$employee->position})\n".
+                         "💵 Gaji Pokok: {$employee->formatted_base_salary}\n".
+                         $bonusInfo.
+                         "💰 *Total Dibayar: {$formattedAmount}*\n".
+                         "📂 Beban: Beban Gaji (5002)\n".
+                         "💳 Bayar dari: {$assetName}\n".
                          "🔖 Ref: `{$journalEntry->reference}`",
-            'data'    => [
+            'data' => [
                 'reference' => $journalEntry->reference,
-                'name'      => $employee->name,
-                'amount'    => $finalAmount,
+                'name' => $employee->name,
+                'amount' => $finalAmount,
             ],
         ], 201);
     }
@@ -974,17 +979,18 @@ class WebhookTransactionController extends Controller
                 $debit = (float) $acc->lines->sum('debit');
                 $credit = (float) $acc->lines->sum('credit');
                 $balance = $debit - $credit;
+
                 return [
-                    'id'                => $acc->id,
-                    'code'              => $acc->code,
-                    'name'              => $acc->name,
-                    'balance'           => $balance,
-                    'formatted_balance' => 'Rp ' . number_format($balance, 0, ',', '.'),
+                    'id' => $acc->id,
+                    'code' => $acc->code,
+                    'name' => $acc->name,
+                    'balance' => $balance,
+                    'formatted_balance' => 'Rp '.number_format($balance, 0, ',', '.'),
                 ];
             });
 
-        $totalDebit = (float) JournalEntryLine::whereHas('account', fn($q) => $q->where('type', 'asset'))->sum('debit');
-        $totalCredit = (float) JournalEntryLine::whereHas('account', fn($q) => $q->where('type', 'asset'))->sum('credit');
+        $totalDebit = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('debit');
+        $totalCredit = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('credit');
         $totalLiquidity = $totalDebit - $totalCredit;
 
         $messageLines = ["💳 *Saldo Kas & Bank Terkini:*\n"];
@@ -992,14 +998,14 @@ class WebhookTransactionController extends Controller
             $messageLines[] = "• *{$acc['name']}*: {$acc['formatted_balance']}";
         }
         $messageLines[] = "\n───────────────────";
-        $messageLines[] = "💰 *Total Aset Likuid*: Rp " . number_format($totalLiquidity, 0, ',', '.');
+        $messageLines[] = '💰 *Total Aset Likuid*: Rp '.number_format($totalLiquidity, 0, ',', '.');
 
         return response()->json([
-            'status'          => true,
-            'total'           => $totalLiquidity,
-            'formatted_total' => 'Rp ' . number_format($totalLiquidity, 0, ',', '.'),
-            'accounts'        => $accounts,
-            'message'         => implode("\n", $messageLines),
+            'status' => true,
+            'total' => $totalLiquidity,
+            'formatted_total' => 'Rp '.number_format($totalLiquidity, 0, ',', '.'),
+            'accounts' => $accounts,
+            'message' => implode("\n", $messageLines),
         ]);
     }
 
@@ -1011,12 +1017,12 @@ class WebhookTransactionController extends Controller
         $now = Carbon::now();
         $monthName = $now->translatedFormat('F Y');
 
-        $revenue = (float) JournalEntryLine::whereHas('account', fn($q) => $q->where('type', 'revenue'))
+        $revenue = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'revenue'))
             ->whereMonth('created_at', $now->month)
             ->whereYear('created_at', $now->year)
             ->sum('credit');
 
-        $expense = (float) JournalEntryLine::whereHas('account', fn($q) => $q->where('type', 'expense'))
+        $expense = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'expense'))
             ->whereMonth('created_at', $now->month)
             ->whereYear('created_at', $now->year)
             ->sum('debit');
@@ -1027,24 +1033,24 @@ class WebhookTransactionController extends Controller
 
         $messageLines = [
             "📊 *Ringkasan Keuangan ({$monthName})*\n",
-            "🟢 *Pemasukan*: Rp " . number_format($revenue, 0, ',', '.'),
-            "🔴 *Pengeluaran*: Rp " . number_format($expense, 0, ',', '.'),
-            "───────────────────",
-            ($netProfit >= 0 ? "📈" : "📉") . " *Laba Bersih*: Rp " . number_format($netProfit, 0, ',', '.'),
+            '🟢 *Pemasukan*: Rp '.number_format($revenue, 0, ',', '.'),
+            '🔴 *Pengeluaran*: Rp '.number_format($expense, 0, ',', '.'),
+            '───────────────────',
+            ($netProfit >= 0 ? '📈' : '📉').' *Laba Bersih*: Rp '.number_format($netProfit, 0, ',', '.'),
             "\n⏳ *Status Transaksi Bulan Ini*:",
             "• Menunggu Verifikasi: {$pendingCount}",
             "• Terverifikasi: {$verifiedCount}",
         ];
 
         return response()->json([
-            'status'         => true,
-            'period'         => $monthName,
-            'revenue'        => $revenue,
-            'expense'        => $expense,
-            'net_profit'     => $netProfit,
-            'pending_count'  => $pendingCount,
+            'status' => true,
+            'period' => $monthName,
+            'revenue' => $revenue,
+            'expense' => $expense,
+            'net_profit' => $netProfit,
+            'pending_count' => $pendingCount,
             'verified_count' => $verifiedCount,
-            'message'        => implode("\n", $messageLines),
+            'message' => implode("\n", $messageLines),
         ]);
     }
 }

@@ -15,118 +15,307 @@
                 </p>
             </div>
 
-            <!-- Header Quick Stats / Sync Status -->
-            <div class="flex items-center gap-3">
-                <div class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-900/80 dark:bg-emerald-950/60 border border-emerald-700/80 dark:border-emerald-800 text-emerald-200 dark:text-emerald-300 text-xs font-semibold shadow-xs backdrop-blur-md">
+            <!-- Header Quick Stats & Real-Time Sync Status -->
+            <div 
+                x-data="{ 
+                    isFetching: false, 
+                    lastUpdated: 'Baru saja',
+                    verifiedCount: {{ $verifiedCount ?? 0 }},
+                    triggerRefresh() {
+                        this.isFetching = true;
+                        window.dispatchEvent(new CustomEvent('dashboard-manual-refresh'));
+                    }
+                }"
+                @dashboard-refresh-start.window="isFetching = true"
+                @dashboard-refresh-done.window="isFetching = false; if ($event.detail?.time) lastUpdated = $event.detail.time"
+                @dashboard-kpi-updated.window="if ($event.detail?.verifiedCount !== undefined) verifiedCount = $event.detail.verifiedCount"
+                class="flex flex-wrap items-center gap-2.5 sm:gap-3"
+            >
+                <!-- Live Sync (5s) Active Indicator -->
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-900/80 dark:bg-emerald-950/60 border border-emerald-700/80 dark:border-emerald-800 text-emerald-200 dark:text-emerald-300 text-xs font-semibold shadow-xs backdrop-blur-md">
                     <span class="relative flex h-2 w-2">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-300"></span>
                     </span>
-                    Webhook Telegram Terhubung
+                    <span>Live Sync (5 dtk)</span>
                 </div>
-                <span class="text-xs text-emerald-600 dark:text-slate-700">|</span>
-                <span class="text-xs text-emerald-200/90 dark:text-slate-400 font-medium">
-                    <strong class="font-extrabold text-white dark:text-slate-200 text-sm">{{ $verifiedCount ?? 0 }}</strong> Terverifikasi
-                </span>
+
+                <!-- Tombol Segarkan Manual -->
+                <button 
+                    type="button" 
+                    @click="triggerRefresh()" 
+                    :disabled="isFetching"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-800/90 hover:bg-emerald-700 active:bg-emerald-900 text-emerald-100 hover:text-white border border-emerald-600/70 text-xs font-bold shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+                    title="Segarkan data sekarang secara manual"
+                >
+                    <svg 
+                        class="w-3.5 h-3.5 transition-transform" 
+                        :class="isFetching ? 'animate-spin text-emerald-300' : 'text-emerald-300'"
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                    >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span x-text="isFetching ? 'Memperbarui...' : 'Segarkan'">Segarkan</span>
+                </button>
+
+                <!-- Last Updated & Verified Stats -->
+                <div class="hidden sm:flex items-center gap-2 text-xs text-emerald-200/90 dark:text-slate-400 font-medium">
+                    <span class="text-emerald-600 dark:text-slate-700">|</span>
+                    <span class="text-[11px] text-emerald-300/80" x-text="'Diperbarui: ' + lastUpdated">Diperbarui: Baru saja</span>
+                    <span class="text-emerald-600 dark:text-slate-700">|</span>
+                    <span>
+                        <strong class="font-extrabold text-white dark:text-slate-200 text-sm" x-text="verifiedCount">{{ $verifiedCount ?? 0 }}</strong> Terverifikasi
+                    </span>
+                </div>
             </div>
         </div>
     </x-slot>
 
-    <div class="py-8" x-data="{
-        filterStatus: 'all',
-        searchQuery: '',
-        perPage: 10,
-        currentPage: 1,
-        exportMonth: '{{ now()->format('Y-m') }}',
-        selectedTrx: null,
-        showDetailModal: false,
-        items: {{ Js::from($transactions->map(function($t) {
-            $firstLine = $t->lines->first();
-            $expenseLine = $t->lines->first(fn($l) => $l->account && $l->account->type === 'expense');
-            $revenueLine = $t->lines->first(fn($l) => $l->account && $l->account->type === 'revenue');
-            $accountName = $expenseLine ? ($expenseLine->account->name ?? '') : ($revenueLine ? ($revenueLine->account->name ?? '') : ($firstLine->account->name ?? ''));
-            return [
-                'id'     => $t->id,
-                'status' => $t->status,
-                'search' => strtolower($t->description . ' ' . $t->reference . ' ' . $accountName),
-            ];
-        })) }},
-        get filteredItems() {
-            return this.items.filter(item => {
-                const matchStatus = this.filterStatus === 'all' || this.filterStatus === item.status;
-                const matchSearch = !this.searchQuery || item.search.includes(this.searchQuery.toLowerCase().trim());
-                return matchStatus && matchSearch;
-            });
-        },
-        get visibleCount() {
-            return this.filteredItems.length;
-        },
-        get totalPages() {
-            if (this.perPage === 'all') return 1;
-            const limit = Number(this.perPage);
-            return Math.max(1, Math.ceil(this.filteredItems.length / limit));
-        },
-        get paginatedItemIds() {
-            if (this.perPage === 'all') {
-                return this.filteredItems.map(i => i.id);
-            }
-            const limit = Number(this.perPage);
-            const start = (this.currentPage - 1) * limit;
-            return this.filteredItems.slice(start, start + limit).map(i => i.id);
-        },
-        isRowVisible(id) {
-            return this.paginatedItemIds.includes(id);
-        },
-        get displayStart() {
-            if (this.filteredItems.length === 0) return 0;
-            if (this.perPage === 'all') return 1;
-            return (this.currentPage - 1) * Number(this.perPage) + 1;
-        },
-        get displayEnd() {
-            if (this.filteredItems.length === 0) return 0;
-            if (this.perPage === 'all') return this.filteredItems.length;
-            return Math.min(this.currentPage * Number(this.perPage), this.filteredItems.length);
-        },
-        goToPage(p) {
-            if (p >= 1 && p <= this.totalPages) {
-                this.currentPage = p;
-            }
-        },
-        prevPage() {
-            if (this.currentPage > 1) {
-                this.currentPage--;
-            }
-        },
-        nextPage() {
-            if (this.currentPage < this.totalPages) {
-                this.currentPage++;
-            }
-        },
-        get pageNumbers() {
-            const total = this.totalPages;
-            const current = this.currentPage;
-            const delta = 2;
-            const range = [];
-            for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
-                range.push(i);
-            }
-            if (current - delta > 2) {
-                range.unshift('...');
-            }
-            if (current + delta < total - 1) {
-                range.push('...');
-            }
-            range.unshift(1);
-            if (total > 1) {
-                range.push(total);
-            }
-            return range;
-        },
-        init() {
-            this.$watch('filterStatus', () => { this.currentPage = 1; });
-            this.$watch('searchQuery', () => { this.currentPage = 1; });
-            this.$watch('perPage', () => { this.currentPage = 1; });
-        },
+    <div 
+        class="py-8" 
+        @dashboard-manual-refresh.window="fetchLiveData(true)"
+        x-data="{
+            filterStatus: 'all',
+            searchQuery: '',
+            perPage: 10,
+            currentPage: 1,
+            exportMonth: '{{ now()->format('Y-m') }}',
+            selectedTrx: null,
+            showDetailModal: false,
+            items: {{ Js::from($transactions->map(function($t) {
+                $firstLine = $t->lines->first();
+                $expenseLine = $t->lines->first(fn($l) => $l->account && $l->account->type === 'expense');
+                $revenueLine = $t->lines->first(fn($l) => $l->account && $l->account->type === 'revenue');
+                $accountName = $expenseLine ? ($expenseLine->account->name ?? '') : ($revenueLine ? ($revenueLine->account->name ?? '') : ($firstLine->account->name ?? ''));
+                return [
+                    'id'     => $t->id,
+                    'status' => $t->status,
+                    'search' => strtolower($t->description . ' ' . $t->reference . ' ' . $accountName),
+                ];
+            })) }},
+            // Live Real-Time Polling State
+            isFetching: false,
+            dataHash: '',
+            latestEntryId: {{ $transactions->first()->id ?? 0 }},
+            lastUpdatedTime: '{{ now()->translatedFormat('H:i:s') }}',
+            pollingTimer: null,
+            toast: {
+                show: false,
+                title: '',
+                description: '',
+                amount: '',
+                source: '',
+                reference: '',
+                timeout: null
+            },
+            kpi: {
+                totalKasDanBank: 'Rp {{ number_format($totalKasDanBank ?? $totalKas ?? 0, 0, ',', '.') }}',
+                totalKas: 'Rp {{ number_format($totalKas ?? 0, 0, ',', '.') }}',
+                pemasukanBulanIni: 'Rp {{ number_format($pemasukanBulanIni ?? 0, 0, ',', '.') }}',
+                pengeluaranBulanIni: 'Rp {{ number_format($pengeluaranBulanIni ?? 0, 0, ',', '.') }}',
+                labaBersihBulanIni: '{{ ($labaBersihBulanIni ?? 0) >= 0 ? '+' : '-' }} Rp {{ number_format(abs($labaBersihBulanIni ?? 0), 0, ',', '.') }}',
+                isProfit: {{ ($labaBersihBulanIni ?? 0) >= 0 ? 'true' : 'false' }},
+                pendingCount: {{ $pendingCount ?? 0 }},
+                verifiedCount: {{ $verifiedCount ?? 0 }}
+            },
+            accountsData: {{ Js::from($accounts) }},
+            getAccountBalance(code) {
+                const acc = this.accountsData.find(a => a.code === code);
+                return acc ? 'Rp ' + new Intl.NumberFormat('id-ID').format(acc.balance) : 'Rp 0';
+            },
+            getAccountTrxCount(code) {
+                const acc = this.accountsData.find(a => a.code === code);
+                return acc ? acc.trx_count : 0;
+            },
+            async fetchLiveData(force = false) {
+                if (this.isFetching) return;
+                this.isFetching = true;
+                window.dispatchEvent(new CustomEvent('dashboard-refresh-start'));
+
+                try {
+                    const url = '{{ route('dashboard.live-data') }}' + 
+                        '?hash=' + encodeURIComponent(this.dataHash) + 
+                        '&last_entry_id=' + this.latestEntryId + 
+                        '&force=' + (force ? 1 : 0);
+
+                    const res = await fetch(url, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const data = await res.json();
+
+                    if (data.timestamp) {
+                        this.lastUpdatedTime = data.timestamp;
+                    }
+
+                    if (data.has_changes) {
+                        this.dataHash = data.hash;
+
+                        if (data.kpi) {
+                            this.kpi = data.kpi;
+                        }
+
+                        if (data.accounts) {
+                            this.accountsData = data.accounts;
+                        }
+
+                        if (data.latest_entry_id) {
+                            this.latestEntryId = data.latest_entry_id;
+                        }
+
+                        if (data.items) {
+                            this.items = data.items;
+                        }
+
+                        if (data.table_html) {
+                            const tbody = document.getElementById('transactionsTableBody');
+                            if (tbody) {
+                                tbody.innerHTML = data.table_html;
+                                if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+                                    window.Alpine.initTree(tbody);
+                                }
+                            }
+                        }
+
+                        if (data.chartData) {
+                            window.dispatchEvent(new CustomEvent('chart-data-updated', { detail: data.chartData }));
+                        }
+
+                        if (data.new_transaction) {
+                            this.showToastNotification(data.new_transaction);
+                        }
+                    }
+
+                    window.dispatchEvent(new CustomEvent('dashboard-refresh-done', { 
+                        detail: { 
+                            time: this.lastUpdatedTime,
+                            verifiedCount: this.kpi.verifiedCount
+                        } 
+                    }));
+                    window.dispatchEvent(new CustomEvent('dashboard-kpi-updated', { 
+                        detail: { verifiedCount: this.kpi.verifiedCount } 
+                    }));
+                } catch (err) {
+                    console.warn('[Dashboard Auto-Refresh] Polling error:', err);
+                    window.dispatchEvent(new CustomEvent('dashboard-refresh-done', { 
+                        detail: { time: this.lastUpdatedTime } 
+                    }));
+                } finally {
+                    this.isFetching = false;
+                }
+            },
+            showToastNotification(trx) {
+                if (this.toast.timeout) clearTimeout(this.toast.timeout);
+                this.toast.title = trx.is_telegram ? 'Transaksi Telegram Baru!' : 'Transaksi Baru Masuk!';
+                this.toast.description = trx.description;
+                this.toast.amount = trx.amount_formatted;
+                this.toast.reference = trx.reference;
+                this.toast.source = trx.source;
+                this.toast.show = true;
+                this.toast.timeout = setTimeout(() => {
+                    this.toast.show = false;
+                }, 6000);
+            },
+            startPolling() {
+                if (this.pollingTimer) clearInterval(this.pollingTimer);
+                this.pollingTimer = setInterval(() => {
+                    if (!document.hidden) {
+                        this.fetchLiveData(false);
+                    }
+                }, 5000);
+            },
+            get filteredItems() {
+                return this.items.filter(item => {
+                    const matchStatus = this.filterStatus === 'all' || this.filterStatus === item.status;
+                    const matchSearch = !this.searchQuery || item.search.includes(this.searchQuery.toLowerCase().trim());
+                    return matchStatus && matchSearch;
+                });
+            },
+            get visibleCount() {
+                return this.filteredItems.length;
+            },
+            get totalPages() {
+                if (this.perPage === 'all') return 1;
+                const limit = Number(this.perPage);
+                return Math.max(1, Math.ceil(this.filteredItems.length / limit));
+            },
+            get paginatedItemIds() {
+                if (this.perPage === 'all') {
+                    return this.filteredItems.map(i => i.id);
+                }
+                const limit = Number(this.perPage);
+                const start = (this.currentPage - 1) * limit;
+                return this.filteredItems.slice(start, start + limit).map(i => i.id);
+            },
+            isRowVisible(id) {
+                return this.paginatedItemIds.includes(id);
+            },
+            get displayStart() {
+                if (this.filteredItems.length === 0) return 0;
+                if (this.perPage === 'all') return 1;
+                return (this.currentPage - 1) * Number(this.perPage) + 1;
+            },
+            get displayEnd() {
+                if (this.filteredItems.length === 0) return 0;
+                if (this.perPage === 'all') return this.filteredItems.length;
+                return Math.min(this.currentPage * Number(this.perPage), this.filteredItems.length);
+            },
+            goToPage(p) {
+                if (p >= 1 && p <= this.totalPages) {
+                    this.currentPage = p;
+                }
+            },
+            prevPage() {
+                if (this.currentPage > 1) {
+                    this.currentPage--;
+                }
+            },
+            nextPage() {
+                if (this.currentPage < this.totalPages) {
+                    this.currentPage++;
+                }
+            },
+            get pageNumbers() {
+                const total = this.totalPages;
+                const current = this.currentPage;
+                const delta = 2;
+                const range = [];
+                for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+                    range.push(i);
+                }
+                if (current - delta > 2) {
+                    range.unshift('...');
+                }
+                if (current + delta < total - 1) {
+                    range.push('...');
+                }
+                range.unshift(1);
+                if (total > 1) {
+                    range.push(total);
+                }
+                return range;
+            },
+            init() {
+                this.$watch('filterStatus', () => { this.currentPage = 1; });
+                this.$watch('searchQuery', () => { this.currentPage = 1; });
+                this.$watch('perPage', () => { this.currentPage = 1; });
+
+                // Mulai polling real-time 5 detik
+                this.startPolling();
+
+                // Tangani event visibility change (jeda saat tab tidak aktif, fetch saat tab aktif kembali)
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) {
+                        this.fetchLiveData(false);
+                    }
+                });
+            },
         openModal(trx) {
             this.selectedTrx = trx;
             this.showDetailModal = true;
@@ -276,12 +465,12 @@
                         </div>
                     </div>
                     <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white">
+                        <div class="text-2xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white" x-text="kpi.totalKasDanBank">
                             Rp {{ number_format($totalKasDanBank ?? $totalKas ?? 0, 0, ',', '.') }}
                         </div>
                         <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                            <span>Kas Ops: Rp {{ number_format($totalKas ?? 0, 0, ',', '.') }}</span>
+                            <span>Kas Ops: <span x-text="kpi.totalKas">Rp {{ number_format($totalKas ?? 0, 0, ',', '.') }}</span></span>
                         </div>
                     </div>
                 </div>
@@ -296,7 +485,7 @@
                         </div>
                     </div>
                     <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight text-emerald-700 dark:text-emerald-400">
+                        <div class="text-2xl font-extrabold font-mono tracking-tight text-emerald-700 dark:text-emerald-400" x-text="kpi.pemasukanBulanIni">
                             Rp {{ number_format($pemasukanBulanIni ?? 0, 0, ',', '.') }}
                         </div>
                         <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -316,7 +505,7 @@
                         </div>
                     </div>
                     <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight text-rose-700 dark:text-rose-400">
+                        <div class="text-2xl font-extrabold font-mono tracking-tight text-rose-700 dark:text-rose-400" x-text="kpi.pengeluaranBulanIni">
                             Rp {{ number_format($pengeluaranBulanIni ?? 0, 0, ',', '.') }}
                         </div>
                         <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -341,12 +530,12 @@
                         </div>
                     </div>
                     <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight {{ $isProfit ? 'text-teal-700 dark:text-teal-400' : 'text-rose-700 dark:text-rose-400' }}">
+                        <div class="text-2xl font-extrabold font-mono tracking-tight" :class="kpi.isProfit ? 'text-teal-700 dark:text-teal-400' : 'text-rose-700 dark:text-rose-400'" x-text="kpi.labaBersihBulanIni">
                             {{ $isProfit ? '+' : '-' }} Rp {{ number_format(abs($labaBersihBulanIni ?? 0), 0, ',', '.') }}
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs {{ $isProfit ? 'text-teal-700/80 dark:text-teal-400' : 'text-rose-700/80 dark:text-rose-400' }} font-medium">
-                            <span class="w-1.5 h-1.5 rounded-full {{ $isProfit ? 'bg-teal-500' : 'bg-rose-500' }}"></span>
-                            <span>{{ $isProfit ? 'Surplus (Untung)' : 'Defisit (Rugi)' }}</span>
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs font-medium" :class="kpi.isProfit ? 'text-teal-700/80 dark:text-teal-400' : 'text-rose-700/80 dark:text-rose-400'">
+                            <span class="w-1.5 h-1.5 rounded-full" :class="kpi.isProfit ? 'bg-teal-500' : 'bg-rose-500'"></span>
+                            <span x-text="kpi.isProfit ? 'Surplus (Untung)' : 'Defisit (Rugi)'">{{ $isProfit ? 'Surplus (Untung)' : 'Defisit (Rugi)' }}</span>
                         </div>
                     </div>
                 </div>
@@ -362,7 +551,7 @@
                     </div>
                     <div class="mt-3.5">
                         <div class="text-2xl font-extrabold font-mono tracking-tight text-amber-700 dark:text-amber-400">
-                            {{ $pendingCount ?? 0 }} <span class="text-sm font-sans font-normal text-slate-500 dark:text-slate-400">Trx</span>
+                            <span x-text="kpi.pendingCount">{{ $pendingCount ?? 0 }}</span> <span class="text-sm font-sans font-normal text-slate-500 dark:text-slate-400">Trx</span>
                         </div>
                         <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
@@ -557,6 +746,7 @@
                         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
                     }
                 }"
+                @chart-data-updated.window="dataPayload = $event.detail; renderChart();"
                 class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm"
             >
                 <!-- Chart Header: Judul & Tombol Switch Mode -->
@@ -728,7 +918,7 @@
                                     <div class="text-xs font-semibold mt-2 text-slate-800 dark:text-slate-200 truncate" title="{{ $acc['name'] }}">
                                         {{ $acc['name'] }}
                                     </div>
-                                    <div class="font-mono text-xs font-extrabold mt-1.5 text-slate-900 dark:text-white">
+                                    <div class="font-mono text-xs font-extrabold mt-1.5 text-slate-900 dark:text-white" x-text="getAccountBalance('{{ $acc['code'] }}')">
                                         Rp {{ number_format($acc['balance'], 0, ',', '.') }}
                                     </div>
                                 </div>
@@ -737,7 +927,7 @@
                                 <div class="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[10px]">
                                     <span class="text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium" title="{{ $acc['trx_count'] }} transaksi tercatat">
                                         <svg class="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                                        {{ $acc['trx_count'] }} trx
+                                        <span x-text="getAccountTrxCount('{{ $acc['code'] }}') + ' trx'">{{ $acc['trx_count'] }} trx</span>
                                     </span>
                                     <div class="flex items-center gap-1">
                                         <button 
@@ -1043,194 +1233,8 @@
                                 <th class="px-4 py-3.5 text-center w-28">Aksi</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-200/60 dark:divide-slate-800/80 text-sm">
-                            @forelse($transactions as $trx)
-                                @php
-                                    $firstLine = $trx->lines->first();
-                                    $expenseLine = $trx->lines->first(fn($l) => $l->account && $l->account->type === 'expense');
-                                    $revenueLine = $trx->lines->first(fn($l) => $l->account && $l->account->type === 'revenue');
-                                    $isExpense = (bool)$expenseLine;
-                                    $amount = $isExpense 
-                                        ? ($expenseLine->debit ?? 0) 
-                                        : ($revenueLine->credit ?? $trx->lines->sum('debit'));
-                                    $primaryAccount = $isExpense 
-                                        ? ($expenseLine->account->name ?? 'Beban Operasional') 
-                                        : ($revenueLine->account->name ?? ($firstLine->account->name ?? '-'));
-                                    $primaryAccountCode = $isExpense 
-                                        ? ($expenseLine->account->code ?? '5001') 
-                                        : ($revenueLine->account->code ?? ($firstLine->account->code ?? '1001'));
-                                    
-                                    // Json data for modal
-                                    $trxJson = json_encode([
-                                        'id' => $trx->id,
-                                        'reference' => $trx->reference,
-                                        'description' => $trx->description,
-                                        'date' => $trx->date ? \Carbon\Carbon::parse($trx->date)->translatedFormat('d F Y, H:i') : '-',
-                                        'source' => $trx->source,
-                                        'status' => $trx->status,
-                                        'amount' => $amount,
-                                        'isExpense' => $isExpense,
-                                        'lines' => $trx->lines->map(function($line) {
-                                            return [
-                                                'account_code' => $line->account->code ?? '-',
-                                                'account_name' => $line->account->name ?? 'Akun',
-                                                'account_type' => $line->account->type ?? '-',
-                                                'description'  => $line->description,
-                                                'debit'        => (float)$line->debit,
-                                                'credit'       => (float)$line->credit,
-                                            ];
-                                        })
-                                    ]);
-                                @endphp
-                                <tr 
-                                    x-show="isRowVisible({{ $trx->id }})"
-                                    class="hover:bg-emerald-50/40 dark:hover:bg-slate-800/40 transition-colors group"
-                                >
-                                    <!-- Tanggal -->
-                                    <td class="px-4 py-3.5 whitespace-nowrap text-xs text-slate-600 dark:text-slate-400">
-                                        <div class="font-semibold text-slate-900 dark:text-slate-200">
-                                            {{ $trx->date ? \Carbon\Carbon::parse($trx->date)->translatedFormat('d M Y') : '-' }}
-                                        </div>
-                                        <div class="text-[11px] text-slate-500 dark:text-slate-400">
-                                            {{ $trx->date ? \Carbon\Carbon::parse($trx->date)->format('H:i') : '' }} WIB
-                                        </div>
-                                    </td>
-
-                                    <!-- Referensi -->
-                                    <td class="px-4 py-3.5 whitespace-nowrap">
-                                        <span class="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-                                            {{ $trx->reference ?? '-' }}
-                                        </span>
-                                    </td>
-
-                                    <!-- Keterangan Transaksi -->
-                                    <td class="px-4 py-3.5 text-slate-900 dark:text-slate-100 font-medium">
-                                        <div class="text-sm font-semibold truncate" title="{{ $trx->description }}">
-                                            {{ $trx->description }}
-                                        </div>
-                                    </td>
-
-                                    <!-- Akun Terkait -->
-                                    <td class="px-4 py-3.5 whitespace-nowrap text-xs">
-                                        <div class="inline-flex items-center gap-1.5 max-w-full">
-                                            <span class="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
-                                                {{ $primaryAccountCode }}
-                                            </span>
-                                            <span class="truncate text-slate-700 dark:text-slate-300 font-medium" title="{{ $primaryAccount }}">
-                                                {{ $primaryAccount }}
-                                            </span>
-                                        </div>
-                                    </td>
-
-                                    <!-- Sumber -->
-                                    <td class="px-4 py-3.5 whitespace-nowrap text-xs">
-                                        @if(str_starts_with(strtolower($trx->source ?? ''), 'telegram'))
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/15 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-300/80 dark:border-sky-800 shadow-2xs">
-                                                <svg class="w-3.5 h-3.5 text-sky-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
-                                                Telegram
-                                            </span>
-                                        @elseif(str_starts_with(strtolower($trx->source ?? ''), 'web'))
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-300/80 dark:border-indigo-800 shadow-2xs">
-                                                <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
-                                                </svg>
-                                                Website
-                                            </span>
-                                        @else
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                                {{ ucfirst($trx->source ?? 'Manual') }}
-                                            </span>
-                                        @endif
-                                    </td>
-
-                                    <!-- Nominal -->
-                                    <td class="px-4 py-3.5 whitespace-nowrap text-right font-mono font-extrabold text-sm">
-                                        @if($isExpense)
-                                            <span class="inline-block px-2 py-0.5 rounded-lg text-rose-700 dark:text-rose-400 bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/50 shadow-2xs">
-                                                - Rp {{ number_format($amount, 0, ',', '.') }}
-                                            </span>
-                                        @else
-                                            <span class="inline-block px-2 py-0.5 rounded-lg text-emerald-700 dark:text-emerald-400 bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 shadow-2xs">
-                                                + Rp {{ number_format($amount, 0, ',', '.') }}
-                                            </span>
-                                        @endif
-                                    </td>
-
-                                    <!-- Status -->
-                                    <td class="px-4 py-3.5 whitespace-nowrap text-center text-xs">
-                                        @if($trx->status === 'verified')
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800">
-                                                ✓ Verified
-                                            </span>
-                                        @elseif($trx->status === 'rejected')
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300/80 dark:border-rose-800">
-                                                ✗ Rejected
-                                            </span>
-                                        @else
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/80 dark:border-amber-800 animate-pulse">
-                                                ⏳ Pending
-                                            </span>
-                                        @endif
-                                    </td>
-
-                                    <!-- Aksi / Audit Button -->
-                                    <td class="px-4 py-3.5 whitespace-nowrap text-center text-xs">
-                                        <button 
-                                            @click='openModal({!! $trxJson !!})' 
-                                            type="button" 
-                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border border-slate-200 hover:border-emerald-300 dark:border-slate-700 shadow-xs transition-all"
-                                            title="Buka rincian debit-kredit jurnal"
-                                        >
-                                            <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                            Audit
-                                        </button>
-                                    </td>
-                                </tr>
-                            @empty
-                                <!-- Kasus 1: Database Kosong (Belum ada data di database) -->
-                                <tr>
-                                    <td colspan="8" class="px-6 py-14 text-center">
-                                        <div class="max-w-md mx-auto flex flex-col items-center">
-                                            <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3.5 border border-amber-200/80 dark:border-amber-800/60 shadow-xs">
-                                                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                                                </svg>
-                                            </div>
-                                            <h4 class="text-base font-bold text-slate-900 dark:text-slate-100">Data Tidak Ditemukan di Database</h4>
-                                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
-                                                Belum ada mutasi transaksi yang tersimpan di dalam database buku besar. Silakan kirim transaksi melalui Bot Telegram atau webhook n8n untuk mulai mencatat.
-                                            </p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endforelse
-
-                            <!-- Kasus 2: Data Ada di Database, tetapi Tidak Ditemukan pada Filter / Pencarian Tertentu -->
-                            @if($transactions->isNotEmpty())
-                                <tr x-show="visibleCount === 0" x-cloak>
-                                    <td colspan="8" class="px-6 py-12 text-center">
-                                        <div class="max-w-md mx-auto flex flex-col items-center">
-                                            <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-700 shadow-xs">
-                                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                                </svg>
-                                            </div>
-                                            <h4 class="text-sm font-bold text-slate-900 dark:text-slate-100">Data Tidak Ditemukan</h4>
-                                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                                Tidak ditemukan transaksi yang cocok dengan kata kunci atau filter status yang dipilih.
-                                            </p>
-                                            <button 
-                                                type="button" 
-                                                @click="filterStatus = 'all'; searchQuery = ''" 
-                                                class="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors shadow-2xs"
-                                            >
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                                Reset Filter & Pencarian
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endif
+                        <tbody id="transactionsTableBody" class="divide-y divide-slate-200/60 dark:divide-slate-800/80 text-sm">
+                            @include('dashboard.partials.transactions-table-body')
                         </tbody>
                     </table>
                 </div>
@@ -1991,6 +1995,40 @@
                             </form>
                         </template>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Real-time Notification Toast (New Telegram Transaction) -->
+        <div 
+            x-show="toast.show" 
+            x-transition:enter="transform ease-out duration-300 transition"
+            x-transition:enter-start="translate-y-4 opacity-0 scale-95"
+            x-transition:enter-end="translate-y-0 opacity-100 scale-100"
+            x-transition:leave="transition ease-in duration-200"
+            x-transition:leave-start="opacity-100 scale-100"
+            x-transition:leave-end="translate-y-2 opacity-0 scale-95"
+            x-cloak
+            class="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-slate-900/95 dark:bg-slate-900/95 text-white backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-emerald-500/50 flex items-start gap-3.5 ring-1 ring-emerald-400/30"
+            style="display: none;"
+        >
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-1">
+                    <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span x-text="toast.title">Transaksi Telegram Baru</span>
+                    </h4>
+                    <button @click="toast.show = false" class="text-slate-400 hover:text-white p-0.5 rounded transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <p class="text-xs font-semibold text-slate-100 mt-1 truncate" x-text="toast.description"></p>
+                <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-800 text-[11px]">
+                    <span class="font-mono text-emerald-400 font-bold" x-text="toast.amount"></span>
+                    <span class="font-mono text-slate-400 text-[10px]" x-text="toast.reference"></span>
                 </div>
             </div>
         </div>

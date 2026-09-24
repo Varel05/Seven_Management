@@ -29,8 +29,8 @@ class WebhookTransactionCategorizationTest extends TestCase
     {
         $response = $this->postJson('/api/webhook/transaction', [
             'description' => 'uang masuk bca 50000',
-            'amount'      => 50000,
-            'type'        => 'income',
+            'amount' => 50000,
+            'type' => 'income',
         ], [
             'X-Webhook-Secret' => 'test_secret_key',
         ]);
@@ -40,15 +40,15 @@ class WebhookTransactionCategorizationTest extends TestCase
         // Pastikan baris debit masuk ke Bank BCA (1002)
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => Account::where('code', '1002')->first()->id,
-            'debit'      => 50000,
-            'credit'     => 0,
+            'debit' => 50000,
+            'credit' => 0,
         ]);
 
         // Pastikan baris kredit masuk ke Pendapatan Usaha (4001)
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => Account::where('code', '4001')->first()->id,
-            'debit'      => 0,
-            'credit'     => 50000,
+            'debit' => 0,
+            'credit' => 50000,
         ]);
     }
 
@@ -56,8 +56,8 @@ class WebhookTransactionCategorizationTest extends TestCase
     {
         $response = $this->postJson('/api/webhook/transaction', [
             'description' => 'uang masuk penjualan 75000',
-            'amount'      => 75000,
-            'type'        => 'income',
+            'amount' => 75000,
+            'type' => 'income',
         ], [
             'X-Webhook-Secret' => 'test_secret_key',
         ]);
@@ -67,8 +67,8 @@ class WebhookTransactionCategorizationTest extends TestCase
         // Default ke Kas Operasional (1001)
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => Account::where('code', '1001')->first()->id,
-            'debit'      => 75000,
-            'credit'     => 0,
+            'debit' => 75000,
+            'credit' => 0,
         ]);
     }
 
@@ -76,8 +76,8 @@ class WebhookTransactionCategorizationTest extends TestCase
     {
         $response = $this->postJson('/api/webhook/transaction', [
             'description' => 'beli perlengkapan kantor via bca 30000',
-            'amount'      => 30000,
-            'type'        => 'expense',
+            'amount' => 30000,
+            'type' => 'expense',
         ], [
             'X-Webhook-Secret' => 'test_secret_key',
         ]);
@@ -87,15 +87,15 @@ class WebhookTransactionCategorizationTest extends TestCase
         // Beban Perlengkapan Kantor (5003) didebit
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => Account::where('code', '5003')->first()->id,
-            'debit'      => 30000,
-            'credit'     => 0,
+            'debit' => 30000,
+            'credit' => 0,
         ]);
 
         // Bank BCA (1002) dikredit
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => Account::where('code', '1002')->first()->id,
-            'debit'      => 0,
-            'credit'     => 30000,
+            'debit' => 0,
+            'credit' => 30000,
         ]);
     }
 
@@ -103,8 +103,8 @@ class WebhookTransactionCategorizationTest extends TestCase
     {
         $response = $this->postJson('/api/webhook/transaction', [
             'description' => 'bayar gaji staff 1200000',
-            'amount'      => 1200000,
-            'type'        => 'expense',
+            'amount' => 1200000,
+            'type' => 'expense',
         ], [
             'X-Webhook-Secret' => 'test_secret_key',
         ]);
@@ -114,15 +114,15 @@ class WebhookTransactionCategorizationTest extends TestCase
         // Beban Gaji (5002) didebit
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => Account::where('code', '5002')->first()->id,
-            'debit'      => 1200000,
-            'credit'     => 0,
+            'debit' => 1200000,
+            'credit' => 0,
         ]);
 
         // Kas Operasional (1001) dikredit
         $this->assertDatabaseHas('journal_entry_lines', [
             'account_id' => Account::where('code', '1001')->first()->id,
-            'debit'      => 0,
-            'credit'     => 1200000,
+            'debit' => 0,
+            'credit' => 1200000,
         ]);
     }
 }

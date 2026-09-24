@@ -76,7 +76,7 @@ class AccountManagementTest extends TestCase
 
         $response->assertSessionHas('success');
         $this->assertDatabaseHas('accounts', [
-            'id'   => $account->id,
+            'id' => $account->id,
             'name' => 'Beban Listrik & Air PAM',
         ]);
     }
@@ -108,19 +108,19 @@ class AccountManagementTest extends TestCase
         ]);
 
         $entry = JournalEntry::create([
-            'reference'   => 'TG-TEST001',
+            'reference' => 'TG-TEST001',
             'description' => 'Test Transaksi',
-            'date'        => now(),
-            'source'      => 'test',
-            'status'      => 'verified',
+            'date' => now(),
+            'source' => 'test',
+            'status' => 'verified',
         ]);
 
         JournalEntryLine::create([
             'journal_entry_id' => $entry->id,
-            'account_id'       => $account->id,
-            'description'      => 'Test',
-            'debit'            => 100000,
-            'credit'           => 0,
+            'account_id' => $account->id,
+            'description' => 'Test',
+            'debit' => 100000,
+            'credit' => 0,
         ]);
 
         $response = $this->actingAs($user)->delete("/accounts/{$account->id}");

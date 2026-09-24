@@ -38,20 +38,20 @@ class WebhookInfoEndpointsTest extends TestCase
 
         // Transaksi 1: Kas bertambah Rp 50.000
         $entry1 = JournalEntry::create([
-            'reference'   => 'TRX-001',
-            'date'        => now()->toDateString(),
+            'reference' => 'TRX-001',
+            'date' => now()->toDateString(),
             'description' => 'Pendapatan tunai',
-            'status'      => 'verified',
+            'status' => 'verified',
         ]);
         JournalEntryLine::create(['journal_entry_id' => $entry1->id, 'account_id' => $kas->id, 'debit' => 50000, 'credit' => 0]);
         JournalEntryLine::create(['journal_entry_id' => $entry1->id, 'account_id' => $revenue->id, 'debit' => 0, 'credit' => 50000]);
 
         // Transaksi 2: BCA bertambah Rp 150.000
         $entry2 = JournalEntry::create([
-            'reference'   => 'TRX-002',
-            'date'        => now()->toDateString(),
+            'reference' => 'TRX-002',
+            'date' => now()->toDateString(),
             'description' => 'Pendapatan transfer BCA',
-            'status'      => 'verified',
+            'status' => 'verified',
         ]);
         JournalEntryLine::create(['journal_entry_id' => $entry2->id, 'account_id' => $bca->id, 'debit' => 150000, 'credit' => 0]);
         JournalEntryLine::create(['journal_entry_id' => $entry2->id, 'account_id' => $revenue->id, 'debit' => 0, 'credit' => 150000]);
@@ -79,20 +79,20 @@ class WebhookInfoEndpointsTest extends TestCase
 
         // Pemasukan Rp 500.000
         $entryRev = JournalEntry::create([
-            'reference'   => 'TRX-REV',
-            'date'        => now()->toDateString(),
+            'reference' => 'TRX-REV',
+            'date' => now()->toDateString(),
             'description' => 'Penjualan',
-            'status'      => 'verified',
+            'status' => 'verified',
         ]);
         JournalEntryLine::create(['journal_entry_id' => $entryRev->id, 'account_id' => $kas->id, 'debit' => 500000, 'credit' => 0]);
         JournalEntryLine::create(['journal_entry_id' => $entryRev->id, 'account_id' => $revenue->id, 'debit' => 0, 'credit' => 500000]);
 
         // Beban Rp 200.000
         $entryExp = JournalEntry::create([
-            'reference'   => 'TRX-EXP',
-            'date'        => now()->toDateString(),
+            'reference' => 'TRX-EXP',
+            'date' => now()->toDateString(),
             'description' => 'Biaya listrik',
-            'status'      => 'pending',
+            'status' => 'pending',
         ]);
         JournalEntryLine::create(['journal_entry_id' => $entryExp->id, 'account_id' => $expense->id, 'debit' => 200000, 'credit' => 0]);
         JournalEntryLine::create(['journal_entry_id' => $entryExp->id, 'account_id' => $kas->id, 'debit' => 0, 'credit' => 200000]);

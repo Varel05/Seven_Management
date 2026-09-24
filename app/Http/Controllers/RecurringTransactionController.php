@@ -14,22 +14,22 @@ class RecurringTransactionController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'               => ['required', 'string', 'max:255'],
-            'amount'             => ['required', 'numeric', 'min:1'],
-            'frequency'          => ['required', Rule::in(['monthly', 'yearly', 'weekly'])],
-            'day_of_month'       => ['required', 'integer', 'min:1', 'max:31'],
-            'month_of_year'      => ['nullable', 'integer', 'min:1', 'max:12'],
+            'name' => ['required', 'string', 'max:255'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'frequency' => ['required', Rule::in(['monthly', 'yearly', 'weekly'])],
+            'day_of_month' => ['required', 'integer', 'min:1', 'max:31'],
+            'month_of_year' => ['nullable', 'integer', 'min:1', 'max:12'],
             'expense_account_id' => ['required', 'exists:accounts,id'],
-            'asset_account_id'   => ['required', 'exists:accounts,id'],
-            'status'             => ['required', Rule::in(['active', 'paused'])],
-            'notes'              => ['nullable', 'string', 'max:1000'],
+            'asset_account_id' => ['required', 'exists:accounts,id'],
+            'status' => ['required', Rule::in(['active', 'paused'])],
+            'notes' => ['nullable', 'string', 'max:1000'],
         ], [
-            'name.required'               => 'Nama pengeluaran rutin wajib diisi.',
-            'amount.required'             => 'Nominal tagihan wajib diisi.',
-            'amount.min'                  => 'Nominal harus lebih dari 0.',
+            'name.required' => 'Nama pengeluaran rutin wajib diisi.',
+            'amount.required' => 'Nominal tagihan wajib diisi.',
+            'amount.min' => 'Nominal harus lebih dari 0.',
             'expense_account_id.required' => 'Akun beban wajib dipilih.',
-            'asset_account_id.required'   => 'Akun kas/bank wajib dipilih.',
-            'day_of_month.required'       => 'Tanggal jatuh tempo wajib ditentukan.',
+            'asset_account_id.required' => 'Akun kas/bank wajib dipilih.',
+            'day_of_month.required' => 'Tanggal jatuh tempo wajib ditentukan.',
         ]);
 
         $recurring = RecurringTransaction::create($validated);
@@ -43,15 +43,15 @@ class RecurringTransactionController extends Controller
     public function update(Request $request, RecurringTransaction $recurringTransaction)
     {
         $validated = $request->validate([
-            'name'               => ['required', 'string', 'max:255'],
-            'amount'             => ['required', 'numeric', 'min:1'],
-            'frequency'          => ['required', Rule::in(['monthly', 'yearly', 'weekly'])],
-            'day_of_month'       => ['required', 'integer', 'min:1', 'max:31'],
-            'month_of_year'      => ['nullable', 'integer', 'min:1', 'max:12'],
+            'name' => ['required', 'string', 'max:255'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'frequency' => ['required', Rule::in(['monthly', 'yearly', 'weekly'])],
+            'day_of_month' => ['required', 'integer', 'min:1', 'max:31'],
+            'month_of_year' => ['nullable', 'integer', 'min:1', 'max:12'],
             'expense_account_id' => ['required', 'exists:accounts,id'],
-            'asset_account_id'   => ['required', 'exists:accounts,id'],
-            'status'             => ['required', Rule::in(['active', 'paused'])],
-            'notes'              => ['nullable', 'string', 'max:1000'],
+            'asset_account_id' => ['required', 'exists:accounts,id'],
+            'status' => ['required', Rule::in(['active', 'paused'])],
+            'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $recurringTransaction->update($validated);
