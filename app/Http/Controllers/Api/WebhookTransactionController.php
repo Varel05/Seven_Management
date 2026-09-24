@@ -739,19 +739,60 @@ class WebhookTransactionController extends Controller
      */
     public function approveRecurring(Request $request, RecurringTransaction $recurringTransaction)
     {
+        // 1. Cek database sebelum eksekusi bayar apakah tagihan sudah dibayar pada periode berjalan
+        if ($recurringTransaction->isPaidForCurrentPeriod()) {
+            $existingEntry = $recurringTransaction->findExistingCurrentPeriodJournal();
+            $paidAt = $recurringTransaction->last_posted_at
+                ? $recurringTransaction->last_posted_at->translatedFormat('d F Y, H:i').' WIB'
+                : ($existingEntry ? Carbon::parse($existingEntry->date)->translatedFormat('d F Y, H:i').' WIB' : 'Periode ini');
+
+            $reference = $existingEntry?->reference ?? 'Sudah Dibukukan';
+            $formattedAmount = 'Rp '.number_format($recurringTransaction->amount, 0, ',', '.');
+            $periodName = now()->translatedFormat('F Y');
+
+            return response()->json([
+                'status' => false,
+                'already_paid' => true,
+                'message' => "⚠️ *Pengeluaran Bulanan Sudah Dibayar!*\n\n".
+                             "🏢 *{$recurringTransaction->name}*\n".
+                             "💰 *{$formattedAmount}* ({$recurringTransaction->frequency})\n".
+                             "📅 Periode: {$periodName}\n".
+                             "⏰ Waktu Bayar: {$paidAt}\n".
+                             "🔖 Ref: `{$reference}`\n\n".
+                             "💡 *Info:* Pengeluaran ini sudah tercatat sebelumnya di buku besar database. Pembayaran tidak diproses ulang untuk mencegah duplikasi transaksi.",
+                'data' => [
+                    'already_paid' => true,
+                    'reference' => $reference,
+                    'name' => $recurringTransaction->name,
+                    'amount' => (float) $recurringTransaction->amount,
+                    'paid_at' => $paidAt,
+                    'journal_entry' => $existingEntry,
+                ],
+            ], 200);
+        }
+
         $customAmount = $request->filled('amount') ? (float) $request->input('amount') : null;
         $rawSource = $request->input('source', 'telegram');
         $source = str_starts_with(strtolower($rawSource), 'telegram') ? 'telegram' : $rawSource;
 
         $journalEntry = $recurringTransaction->executePosting($customAmount, $source);
+        $finalAmount = $customAmount ?: (float) $recurringTransaction->amount;
+        $formattedAmount = 'Rp '.number_format($finalAmount, 0, ',', '.');
+        $periodName = now()->translatedFormat('F Y');
 
         return response()->json([
             'status' => true,
-            'message' => "Pengeluaran rutin '{$recurringTransaction->name}' berhasil dibukukan.",
+            'message' => "✅ *Pengeluaran Rutin Berhasil Dibukukan!*\n\n".
+                         "🏢 *{$recurringTransaction->name}*\n".
+                         "💰 *{$formattedAmount}*\n".
+                         "📅 Periode: {$periodName}\n".
+                         "📂 Beban: ".($recurringTransaction->expenseAccount->name ?? 'Beban Operasional')."\n".
+                         "💳 Bayar dari: ".($recurringTransaction->assetAccount->name ?? 'Kas Operasional')."\n".
+                         "🔖 Ref: `{$journalEntry->reference}`",
             'data' => [
                 'reference' => $journalEntry->reference,
                 'name' => $recurringTransaction->name,
-                'amount' => $customAmount ?: (float) $recurringTransaction->amount,
+                'amount' => $finalAmount,
                 'expense_account' => $recurringTransaction->expenseAccount->name ?? '',
                 'asset_account' => $recurringTransaction->assetAccount->name ?? '',
                 'journal_entry' => $journalEntry,
@@ -764,6 +805,36 @@ class WebhookTransactionController extends Controller
      */
     public function approvePayroll(Request $request, Employee $employee)
     {
+        // Cek database sebelum eksekusi bayar apakah gaji bulan ini sudah dibayar
+        if ($employee->isPaidThisMonth()) {
+            $existingEntry = $employee->findExistingCurrentMonthPayrollJournal();
+            $paidAt = $employee->last_paid_at
+                ? $employee->last_paid_at->translatedFormat('d F Y, H:i').' WIB'
+                : ($existingEntry ? Carbon::parse($existingEntry->date)->translatedFormat('d F Y, H:i').' WIB' : 'Bulan ini');
+
+            $reference = $existingEntry?->reference ?? 'Sudah Dibukukan';
+            $formattedAmount = 'Rp '.number_format($employee->total_salary, 0, ',', '.');
+            $periodName = now()->translatedFormat('F Y');
+
+            return response()->json([
+                'status' => false,
+                'already_paid' => true,
+                'message' => "⚠️ *Gaji Karyawan Sudah Dibayar!*\n\n".
+                             "👤 *{$employee->name}* ({$employee->position})\n".
+                             "💰 *{$formattedAmount}*\n".
+                             "📅 Periode: {$periodName}\n".
+                             "⏰ Waktu Bayar: {$paidAt}\n".
+                             "🔖 Ref: `{$reference}`\n\n".
+                             "💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar. Pembayaran tidak diproses ulang untuk mencegah duplikasi.",
+                'data' => [
+                    'already_paid' => true,
+                    'reference' => $reference,
+                    'name' => $employee->name,
+                    'amount' => (float) $employee->total_salary,
+                ],
+            ], 200);
+        }
+
         $customAmount = $request->filled('amount') ? (float) $request->input('amount') : null;
         $rawSource = $request->input('source', 'telegram');
         $source = str_starts_with(strtolower($rawSource), 'telegram') ? 'telegram' : $rawSource;
@@ -772,7 +843,10 @@ class WebhookTransactionController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => "Penggajian karyawan '{$employee->name}' berhasil dibukukan.",
+            'message' => "✅ *Penggajian Karyawan Berhasil Dibukukan!*\n\n".
+                         "👤 *{$employee->name}*\n".
+                         "💰 *Rp ".number_format($customAmount ?: (float) $employee->total_salary, 0, ',', '.')."*\n".
+                         "🔖 Ref: `{$journalEntry->reference}`",
             'data' => [
                 'reference' => $journalEntry->reference,
                 'name' => $employee->name,
@@ -790,11 +864,19 @@ class WebhookTransactionController extends Controller
      */
     public function skipPayroll(Request $request, Employee $employee)
     {
+        if ($employee->isPaidThisMonth()) {
+            return response()->json([
+                'status' => false,
+                'already_paid' => true,
+                'message' => "ℹ️ Penggajian karyawan '{$employee->name}' sudah berstatus dibayar untuk periode ini.",
+            ], 200);
+        }
+
         $employee->update(['last_paid_at' => now()]);
 
         return response()->json([
             'status' => true,
-            'message' => "Penggajian karyawan '{$employee->name}' telah dilewati untuk periode ini.",
+            'message' => "⏭️ Penggajian karyawan '{$employee->name}' telah dilewati untuk periode ini.",
         ]);
     }
 
@@ -803,11 +885,19 @@ class WebhookTransactionController extends Controller
      */
     public function skipRecurring(Request $request, RecurringTransaction $recurringTransaction)
     {
+        if ($recurringTransaction->isPaidForCurrentPeriod()) {
+            return response()->json([
+                'status' => false,
+                'already_paid' => true,
+                'message' => "ℹ️ Pengeluaran rutin '{$recurringTransaction->name}' sudah berstatus dibayar untuk periode ini.",
+            ], 200);
+        }
+
         $recurringTransaction->update(['last_posted_at' => now()]);
 
         return response()->json([
             'status' => true,
-            'message' => "Pengeluaran rutin '{$recurringTransaction->name}' telah dilewati untuk periode ini.",
+            'message' => "⏭️ Pengeluaran rutin '{$recurringTransaction->name}' telah dilewati untuk periode ini.",
         ]);
     }
 
@@ -894,12 +984,50 @@ class WebhookTransactionController extends Controller
         }
 
         if ($action === 'skip') {
+            if ($recurring->isPaidForCurrentPeriod()) {
+                return response()->json([
+                    'status' => false,
+                    'already_paid' => true,
+                    'message' => "ℹ️ Pengeluaran rutin '#{$recurring->id} {$recurring->name}' sudah berstatus dibayar untuk periode ini.",
+                ], 200);
+            }
+
             $recurring->update(['last_posted_at' => now()]);
 
             return response()->json([
                 'status' => true,
                 'message' => "⏭️ Pengeluaran rutin '#{$recurring->id} {$recurring->name}' telah dilewati untuk periode ini.",
             ]);
+        }
+
+        // Cek database sebelum eksekusi bayar apakah tagihan sudah dibayar pada periode berjalan
+        if ($recurring->isPaidForCurrentPeriod()) {
+            $existingEntry = $recurring->findExistingCurrentPeriodJournal();
+            $paidAt = $recurring->last_posted_at
+                ? $recurring->last_posted_at->translatedFormat('d F Y, H:i').' WIB'
+                : ($existingEntry ? Carbon::parse($existingEntry->date)->translatedFormat('d F Y, H:i').' WIB' : 'Periode ini');
+
+            $reference = $existingEntry?->reference ?? 'Sudah Dibukukan';
+            $formattedAmount = 'Rp '.number_format($recurring->amount, 0, ',', '.');
+            $periodName = now()->translatedFormat('F Y');
+
+            return response()->json([
+                'status' => false,
+                'already_paid' => true,
+                'message' => "⚠️ *Pengeluaran Bulanan Sudah Dibayar!*\n\n".
+                             "🏢 *#{$recurring->id} {$recurring->name}*\n".
+                             "💰 *{$formattedAmount}* ({$recurring->frequency})\n".
+                             "📅 Periode: {$periodName}\n".
+                             "⏰ Waktu Bayar: {$paidAt}\n".
+                             "🔖 Ref: `{$reference}`\n\n".
+                             "💡 *Info:* Pengeluaran ini sudah tercatat sebelumnya di buku besar database. Pembayaran tidak diproses ulang untuk mencegah duplikasi.",
+                'data' => [
+                    'already_paid' => true,
+                    'reference' => $reference,
+                    'name' => $recurring->name,
+                    'amount' => (float) $recurring->amount,
+                ],
+            ], 200);
         }
 
         // Eksekusi posting akuntansi (double-entry)
@@ -932,12 +1060,50 @@ class WebhookTransactionController extends Controller
     private function handleEmployeePayment(Employee $employee, string $action, ?float $customAmount)
     {
         if ($action === 'skip') {
+            if ($employee->isPaidThisMonth()) {
+                return response()->json([
+                    'status' => false,
+                    'already_paid' => true,
+                    'message' => "ℹ️ Penggajian karyawan '#{$employee->id} {$employee->name}' sudah berstatus dibayar untuk periode ini.",
+                ], 200);
+            }
+
             $employee->update(['last_paid_at' => now()]);
 
             return response()->json([
                 'status' => true,
                 'message' => "⏭️ Penggajian karyawan '#{$employee->id} {$employee->name}' telah dilewati untuk periode ini.",
             ]);
+        }
+
+        // Cek database sebelum eksekusi bayar apakah gaji bulan ini sudah dibayar
+        if ($employee->isPaidThisMonth()) {
+            $existingEntry = $employee->findExistingCurrentMonthPayrollJournal();
+            $paidAt = $employee->last_paid_at
+                ? $employee->last_paid_at->translatedFormat('d F Y, H:i').' WIB'
+                : ($existingEntry ? Carbon::parse($existingEntry->date)->translatedFormat('d F Y, H:i').' WIB' : 'Bulan ini');
+
+            $reference = $existingEntry?->reference ?? 'Sudah Dibukukan';
+            $formattedAmount = 'Rp '.number_format($employee->total_salary, 0, ',', '.');
+            $periodName = now()->translatedFormat('F Y');
+
+            return response()->json([
+                'status' => false,
+                'already_paid' => true,
+                'message' => "⚠️ *Gaji Karyawan Sudah Dibayar!*\n\n".
+                             "👤 *#{$employee->id} {$employee->name}* ({$employee->position})\n".
+                             "💰 *{$formattedAmount}*\n".
+                             "📅 Periode: {$periodName}\n".
+                             "⏰ Waktu Bayar: {$paidAt}\n".
+                             "🔖 Ref: `{$reference}`\n\n".
+                             "💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar database.",
+                'data' => [
+                    'already_paid' => true,
+                    'reference' => $reference,
+                    'name' => $employee->name,
+                    'amount' => (float) $employee->total_salary,
+                ],
+            ], 200);
         }
 
         $journalEntry = $employee->executePayrollPosting($customAmount, 'telegram');

@@ -264,4 +264,112 @@ class RecurringTransactionTest extends TestCase
         $recurring->refresh();
         $this->assertNotNull($recurring->last_posted_at);
     }
+
+    public function test_webhook_api_approve_recurring_returns_fallback_if_already_paid(): void
+    {
+        $recurring = RecurringTransaction::create([
+            'name' => 'Langganan Netflix Bisnis',
+            'amount' => 186000,
+            'frequency' => 'monthly',
+            'day_of_month' => now()->day,
+            'expense_account_id' => $this->expenseAccount->id,
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
+        ]);
+
+        // Pembayaran pertama berhasil
+        $firstResponse = $this->postJson("/api/webhook/recurring/{$recurring->id}/approve", [], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+        $firstResponse->assertStatus(201);
+        $firstReference = $firstResponse->json('data.reference');
+        $this->assertNotEmpty($firstReference);
+
+        $initialJournalCount = \App\Models\JournalEntry::count();
+
+        // Klik kedua kali pada tombol pesan sebelumnya di Telegram
+        $secondResponse = $this->postJson("/api/webhook/recurring/{$recurring->id}/approve", [], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $secondResponse->assertStatus(200);
+        $secondResponse->assertJson([
+            'status' => false,
+            'already_paid' => true,
+        ]);
+        $this->assertStringContainsString('Pengeluaran Bulanan Sudah Dibayar!', $secondResponse->json('message'));
+        $this->assertStringContainsString($firstReference, $secondResponse->json('message'));
+
+        // Pastikan tidak ada jurnal duplikat di database
+        $this->assertEquals($initialJournalCount, \App\Models\JournalEntry::count());
+    }
+
+    public function test_manual_action_returns_fallback_if_already_paid(): void
+    {
+        $recurring = RecurringTransaction::create([
+            'name' => 'Langganan Zoom Meeting',
+            'amount' => 250000,
+            'frequency' => 'monthly',
+            'day_of_month' => now()->day,
+            'expense_account_id' => $this->expenseAccount->id,
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
+        ]);
+
+        // Eksekusi pembayaran pertama
+        $this->postJson('/api/webhook/recurring/manual-action', [
+            'query' => 'Zoom Meeting',
+            'action' => 'approve',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ])->assertStatus(201);
+
+        $journalCount = \App\Models\JournalEntry::count();
+
+        // Eksekusi kedua kali (misal user mengetik /bayar lagi)
+        $secondResponse = $this->postJson('/api/webhook/recurring/manual-action', [
+            'query' => 'Zoom Meeting',
+            'action' => 'approve',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $secondResponse->assertStatus(200);
+        $secondResponse->assertJson([
+            'status' => false,
+            'already_paid' => true,
+        ]);
+        $this->assertStringContainsString('Pengeluaran Bulanan Sudah Dibayar!', $secondResponse->json('message'));
+
+        // Tidak ada jurnal ganda
+        $this->assertEquals($journalCount, \App\Models\JournalEntry::count());
+    }
+
+    public function test_web_dashboard_prevents_duplicate_approval_if_already_paid(): void
+    {
+        $user = User::factory()->create();
+
+        $recurring = RecurringTransaction::create([
+            'name' => 'Langganan Cloudflare',
+            'amount' => 300000,
+            'frequency' => 'monthly',
+            'day_of_month' => now()->day,
+            'expense_account_id' => $this->expenseAccount->id,
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
+        ]);
+
+        // Approve pertama via web
+        $this->actingAs($user)->post("/recurring-transactions/{$recurring->id}/approve")
+            ->assertSessionHas('success');
+
+        $journalCount = \App\Models\JournalEntry::count();
+
+        // Coba approve kedua kali via web
+        $response = $this->actingAs($user)->post("/recurring-transactions/{$recurring->id}/approve");
+        $response->assertSessionHas('warning');
+
+        // Tidak ada jurnal ganda
+        $this->assertEquals($journalCount, \App\Models\JournalEntry::count());
+    }
 }

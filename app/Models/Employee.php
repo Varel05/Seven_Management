@@ -70,6 +70,46 @@ class Employee extends Model
     }
 
     /**
+     * Memeriksa apakah gaji karyawan sudah dibayar pada bulan berjalan.
+     */
+    public function isPaidThisMonth(): bool
+    {
+        $today = now();
+        if ($this->last_paid_at && $this->last_paid_at->isCurrentMonth() && $this->last_paid_at->isCurrentYear()) {
+            return true;
+        }
+
+        return JournalEntry::where(function ($q) {
+            $q->where('description', 'LIKE', "Gaji Karyawan: {$this->name}%")
+              ->orWhere('description', 'LIKE', "Penggajian Karyawan: {$this->name}%")
+              ->orWhere('description', 'LIKE', "%{$this->name}%");
+        })
+        ->whereYear('date', $today->year)
+        ->whereMonth('date', $today->month)
+        ->where('status', '!=', 'rejected')
+        ->exists();
+    }
+
+    /**
+     * Mencari entri jurnal penggajian karyawan pada bulan berjalan.
+     */
+    public function findExistingCurrentMonthPayrollJournal(): ?JournalEntry
+    {
+        $today = now();
+
+        return JournalEntry::where(function ($q) {
+            $q->where('description', 'LIKE', "Gaji Karyawan: {$this->name}%")
+              ->orWhere('description', 'LIKE', "Penggajian Karyawan: {$this->name}%")
+              ->orWhere('description', 'LIKE', "%{$this->name}%");
+        })
+        ->whereYear('date', $today->year)
+        ->whereMonth('date', $today->month)
+        ->where('status', '!=', 'rejected')
+        ->latest('date')
+        ->first();
+    }
+
+    /**
      * Memeriksa apakah gaji karyawan jatuh tempo hari ini dan belum dibayar bulan ini.
      */
     public function isDueToday(): bool
@@ -81,9 +121,8 @@ class Employee extends Model
         $today = now();
         $targetDay = min((int) $this->pay_day, (int) $today->daysInMonth);
         $isMatchingDay = ((int) $today->day === $targetDay);
-        $alreadyPaidThisMonth = $this->last_paid_at && $this->last_paid_at->isCurrentMonth() && $this->last_paid_at->isCurrentYear();
 
-        return $isMatchingDay && ! $alreadyPaidThisMonth;
+        return $isMatchingDay && ! $this->isPaidThisMonth();
     }
 
     /**

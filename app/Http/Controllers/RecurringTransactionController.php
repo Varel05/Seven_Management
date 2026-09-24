@@ -75,6 +75,10 @@ class RecurringTransactionController extends Controller
      */
     public function approve(Request $request, RecurringTransaction $recurringTransaction)
     {
+        if ($recurringTransaction->isPaidForCurrentPeriod()) {
+            return back()->with('warning', "Tagihan '{$recurringTransaction->name}' sudah dibayar untuk periode ini.");
+        }
+
         $customAmount = $request->filled('amount') ? (float) $request->input('amount') : null;
         $entry = $recurringTransaction->executePosting($customAmount, 'website');
 

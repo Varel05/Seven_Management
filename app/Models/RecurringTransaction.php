@@ -33,6 +33,84 @@ class RecurringTransaction extends Model
     }
 
     /**
+     * Memeriksa apakah pengeluaran berulang ini sudah dibukukan/dibayar pada periode berjalan.
+     * Melakukan pengecekan ganda: kolom last_posted_at dan keberadaan data di tabel journal_entries.
+     */
+    public function isPaidForCurrentPeriod(): bool
+    {
+        $today = now();
+
+        if ($this->frequency === 'monthly') {
+            if ($this->last_posted_at && $this->last_posted_at->isCurrentMonth() && $this->last_posted_at->isCurrentYear()) {
+                return true;
+            }
+
+            return JournalEntry::where(function ($q) {
+                $q->where('description', 'LIKE', "Pengeluaran Rutin: {$this->name}%")
+                  ->orWhere('description', 'LIKE', "%{$this->name}%");
+            })
+            ->whereYear('date', $today->year)
+            ->whereMonth('date', $today->month)
+            ->where('status', '!=', 'rejected')
+            ->exists();
+        }
+
+        if ($this->frequency === 'yearly') {
+            if ($this->last_posted_at && $this->last_posted_at->isCurrentYear()) {
+                return true;
+            }
+
+            return JournalEntry::where(function ($q) {
+                $q->where('description', 'LIKE', "Pengeluaran Rutin: {$this->name}%")
+                  ->orWhere('description', 'LIKE', "%{$this->name}%");
+            })
+            ->whereYear('date', $today->year)
+            ->where('status', '!=', 'rejected')
+            ->exists();
+        }
+
+        if ($this->frequency === 'weekly') {
+            if ($this->last_posted_at && $this->last_posted_at->isCurrentWeek() && $this->last_posted_at->isCurrentYear()) {
+                return true;
+            }
+
+            return JournalEntry::where(function ($q) {
+                $q->where('description', 'LIKE', "Pengeluaran Rutin: {$this->name}%")
+                  ->orWhere('description', 'LIKE', "%{$this->name}%");
+            })
+            ->whereBetween('date', [$today->copy()->startOfWeek(), $today->copy()->endOfWeek()])
+            ->where('status', '!=', 'rejected')
+            ->exists();
+        }
+
+        return false;
+    }
+
+    /**
+     * Mencari entri jurnal buku besar yang sudah ada di database untuk periode berjalan.
+     */
+    public function findExistingCurrentPeriodJournal(): ?JournalEntry
+    {
+        $today = now();
+
+        $query = JournalEntry::where(function ($q) {
+            $q->where('description', 'LIKE', "Pengeluaran Rutin: {$this->name}%")
+              ->orWhere('description', 'LIKE', "%{$this->name}%");
+        })->where('status', '!=', 'rejected');
+
+        if ($this->frequency === 'monthly') {
+            $query->whereYear('date', $today->year)
+                  ->whereMonth('date', $today->month);
+        } elseif ($this->frequency === 'yearly') {
+            $query->whereYear('date', $today->year);
+        } elseif ($this->frequency === 'weekly') {
+            $query->whereBetween('date', [$today->copy()->startOfWeek(), $today->copy()->endOfWeek()]);
+        }
+
+        return $query->latest('date')->first();
+    }
+
+    /**
      * Memeriksa apakah transaksi berulang ini jatuh tempo hari ini dan belum dibukukan pada periode berjalan.
      */
     public function isDueToday(): bool
@@ -51,25 +129,19 @@ class RecurringTransaction extends Model
 
         if ($this->frequency === 'monthly') {
             $isMatchingDay = ($currentDay === $effectiveDay);
-            $alreadyPostedThisMonth = $this->last_posted_at && $this->last_posted_at->isCurrentMonth() && $this->last_posted_at->isCurrentYear();
-
-            return $isMatchingDay && ! $alreadyPostedThisMonth;
+            return $isMatchingDay && ! $this->isPaidForCurrentPeriod();
         }
 
         if ($this->frequency === 'yearly') {
             $targetMonth = (int) ($this->month_of_year ?? 1);
             $isMatchingDate = ($today->month === $targetMonth && $currentDay === $effectiveDay);
-            $alreadyPostedThisYear = $this->last_posted_at && $this->last_posted_at->isCurrentYear();
-
-            return $isMatchingDate && ! $alreadyPostedThisYear;
+            return $isMatchingDate && ! $this->isPaidForCurrentPeriod();
         }
 
         if ($this->frequency === 'weekly') {
             // day_of_month 1-7 merepresentasikan Monday-Sunday
             $isMatchingDayOfWeek = ((int) $today->dayOfWeekIso === ($targetDay % 7 ?: 7));
-            $alreadyPostedThisWeek = $this->last_posted_at && $this->last_posted_at->isCurrentWeek();
-
-            return $isMatchingDayOfWeek && ! $alreadyPostedThisWeek;
+            return $isMatchingDayOfWeek && ! $this->isPaidForCurrentPeriod();
         }
 
         return false;
