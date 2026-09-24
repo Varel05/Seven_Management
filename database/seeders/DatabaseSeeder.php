@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -33,10 +34,14 @@ class DatabaseSeeder extends Seeder
         $accounts = [
             ['code' => '1001', 'name' => 'Kas Operasional', 'type' => 'asset'],
             ['code' => '1002', 'name' => 'Bank BCA', 'type' => 'asset'],
+            ['code' => '1003', 'name' => 'Persediaan Barang Dagang (Retail)', 'type' => 'asset'],
             ['code' => '4001', 'name' => 'Pendapatan Usaha', 'type' => 'revenue'],
+            ['code' => '4002', 'name' => 'Pendapatan Penjualan Retail', 'type' => 'revenue'],
+            ['code' => '4003', 'name' => 'Pendapatan Jasa Pembuatan Jas Custom', 'type' => 'revenue'],
             ['code' => '5001', 'name' => 'Beban Operasional', 'type' => 'expense'],
             ['code' => '5002', 'name' => 'Beban Gaji', 'type' => 'expense'],
             ['code' => '5003', 'name' => 'Beban Perlengkapan Kantor', 'type' => 'expense'],
+            ['code' => '5004', 'name' => 'Beban Pokok Penjualan (HPP) Retail', 'type' => 'expense'],
         ];
 
         foreach ($accounts as $acc) {
@@ -105,6 +110,88 @@ class DatabaseSeeder extends Seeder
                         'credit' => $s['amount'],
                     ]
                 );
+            }
+        }
+
+        // Seed sample retail products if empty
+        if (Product::count() === 0) {
+            $sampleProducts = [
+                [
+                    'code' => 'JAS-001',
+                    'name' => 'Italian Slim Fit Navy Blazer',
+                    'category' => 'jas_blazer_pria',
+                    'size' => 'L',
+                    'color' => 'Navy Blue',
+                    'cost_price' => 750000,
+                    'selling_price' => 1450000,
+                    'stock' => 12,
+                    'min_stock' => 3,
+                    'description' => 'Jas pria semi-wool premium dengan cutting Italian modern slim fit.',
+                ],
+                [
+                    'code' => 'TXD-001',
+                    'name' => 'Black Tie Tuxedo Satin Lapel',
+                    'category' => 'tuksedo',
+                    'size' => 'XL',
+                    'color' => 'Midnight Black',
+                    'cost_price' => 1100000,
+                    'selling_price' => 2250000,
+                    'stock' => 5,
+                    'min_stock' => 2,
+                    'description' => 'Tuksedo formal mewah dengan kerah shawl lapel satin sutra.',
+                ],
+                [
+                    'code' => 'KMJ-001',
+                    'name' => 'Crisp White Poplin Formal Shirt',
+                    'category' => 'kemeja',
+                    'size' => 'M',
+                    'color' => 'Bright White',
+                    'cost_price' => 120000,
+                    'selling_price' => 285000,
+                    'stock' => 24,
+                    'min_stock' => 5,
+                    'description' => 'Kemeja kerja katun poplin premium, lembut dan tidak mudah kusut.',
+                ],
+                [
+                    'code' => 'DNM-001',
+                    'name' => 'Selvedge Raw Denim Slim Straight',
+                    'category' => 'celana_denim',
+                    'size' => '32',
+                    'color' => 'Deep Indigo',
+                    'cost_price' => 220000,
+                    'selling_price' => 450000,
+                    'stock' => 15,
+                    'min_stock' => 4,
+                    'description' => 'Celana denim 14oz red line selvedge dengan jahitan rantai kokoh.',
+                ],
+                [
+                    'code' => 'POL-001',
+                    'name' => 'Pique Classic Cotton Polo',
+                    'category' => 'polo',
+                    'size' => 'L',
+                    'color' => 'Charcoal Grey',
+                    'cost_price' => 70000,
+                    'selling_price' => 165000,
+                    'stock' => 30,
+                    'min_stock' => 5,
+                    'description' => 'Kaos polo katun pique bertekstur, nyaman dan adem untuk gaya semi-formal.',
+                ],
+                [
+                    'code' => 'STF-001',
+                    'name' => 'Charcoal 2-Piece Formal Suit Set',
+                    'category' => 'setelan_formal',
+                    'size' => 'L',
+                    'color' => 'Charcoal',
+                    'cost_price' => 950000,
+                    'selling_price' => 1890000,
+                    'stock' => 8,
+                    'min_stock' => 2,
+                    'description' => 'Setelan jas dan celana bahan lengkap untuk acara resmi & pesta.',
+                ],
+            ];
+
+            foreach ($sampleProducts as $p) {
+                Product::create($p);
             }
         }
     }

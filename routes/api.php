@@ -28,4 +28,12 @@ Route::middleware('webhook.secret')->group(function () {
     // Information & Monitoring Endpoints (Balance & Summary)
     Route::get('/webhook/balance', [WebhookTransactionController::class, 'balance']);
     Route::get('/webhook/summary', [WebhookTransactionController::class, 'summary']);
+
+    // Retail Clothing & Stock Endpoints for n8n / Telegram
+    Route::get('/webhook/retail/stock', [WebhookTransactionController::class, 'checkRetailStock']);
+    Route::post('/webhook/retail/sale', [WebhookTransactionController::class, 'recordRetailSale']);
+
+    // Custom Suit Tailoring & AI Estimation Endpoints for n8n / Telegram
+    Route::post('/webhook/custom-suit/estimate', [WebhookTransactionController::class, 'estimateSuit']);
+    Route::post('/webhook/custom-suit/order', [WebhookTransactionController::class, 'orderCustomSuit']);
 });

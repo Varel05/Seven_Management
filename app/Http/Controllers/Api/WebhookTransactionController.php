@@ -4,10 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
+use App\Models\CustomSuitOrder;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Product;
 use App\Models\RecurringTransaction;
+use App\Models\RetailSale;
+use App\Models\RetailSaleItem;
+use App\Services\SuitMaterialEstimatorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -1051,6 +1056,431 @@ class WebhookTransactionController extends Controller
             'pending_count' => $pendingCount,
             'verified_count' => $verifiedCount,
             'message' => implode("\n", $messageLines),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Estimasi kebutuhan bahan, HPP, dan rekomendasi harga jas via AI Agent / Telegram.
+     */
+    public function estimateSuit(Request $request, SuitMaterialEstimatorService $estimator)
+    {
+        $suitType = $request->input('suit_type', 'jas_blazer_pria');
+        $aiVision = $request->input('ai_vision') ?? $request->input('gemini_analysis') ?? [];
+        $parsedMeasurements = $aiVision['parsed_measurements'] ?? [];
+
+        $measurements = [
+            'height' => (float) ($request->input('height') ?? $parsedMeasurements['height'] ?? $request->input('tinggi_badan') ?? 170),
+            'chest' => (float) ($request->input('chest') ?? $parsedMeasurements['chest'] ?? $request->input('lingkar_dada') ?? 96),
+            'waist' => (float) ($request->input('waist') ?? $parsedMeasurements['waist'] ?? $request->input('lingkar_pinggang') ?? 82),
+            'jacket_length' => (float) ($request->input('jacket_length') ?? $parsedMeasurements['jacket_length'] ?? $request->input('panjang_jas') ?? 74),
+            'trouser_length' => (float) ($request->input('trouser_length') ?? $parsedMeasurements['trouser_length'] ?? $request->input('panjang_celana') ?? 98),
+        ];
+
+        $customOptions = [
+            'fabric_price_per_meter' => $request->input('fabric_price_per_meter'),
+            'labor_cost' => $request->input('labor_cost'),
+            'target_margin_percent' => $request->input('target_margin_percent', 45),
+        ];
+
+        $estimate = $estimator->estimate($suitType, $measurements, $customOptions, $aiVision);
+
+        $typeName = Product::CATEGORIES[$suitType] ?? ucfirst(str_replace('_', ' ', $suitType));
+        $m = $estimate['materials'];
+        $fin = $estimate['financial'];
+
+        $telegramMsg = [
+            '🧵 *Hasil Analisis Gambar & Estimasi Bahan Jas (AI Master Tailor)*',
+            "👔 *Kategori Model*: {$typeName}",
+        ];
+
+        if (! empty($aiVision['model_name'])) {
+            $telegramMsg[] = "🧥 *Desain Jas*: {$aiVision['model_name']}";
+        }
+        if (! empty($aiVision['lapel_style'])) {
+            $telegramMsg[] = "👔 *Gaya Kerah*: {$aiVision['lapel_style']}";
+        }
+        if (! empty($aiVision['button_layout'])) {
+            $telegramMsg[] = "🔘 *Kancing*: {$aiVision['button_layout']}";
+        }
+        if (! empty($aiVision['pocket_type'])) {
+            $telegramMsg[] = "👝 *Tipe Saku*: {$aiVision['pocket_type']}";
+        }
+        if (! empty($aiVision['color'])) {
+            $telegramMsg[] = "🎨 *Warna*: {$aiVision['color']}";
+        }
+        if (! empty($aiVision['recommended_cut'])) {
+            $telegramMsg[] = "✂️ *Potongan Rekomendasi*: {$aiVision['recommended_cut']}";
+        }
+
+        $telegramMsg[] = '───────────────────';
+        $telegramMsg[] = '📐 *Data Ukuran Kustom (Caption):*';
+        $telegramMsg[] = "• TB: {$measurements['height']} cm | LD: {$measurements['chest']} cm | LP: {$measurements['waist']} cm";
+        if (! empty($parsedMeasurements['shoulder']) || ! empty($parsedMeasurements['sleeve_length'])) {
+            $shoulder = $parsedMeasurements['shoulder'] ?? '-';
+            $sleeve = $parsedMeasurements['sleeve_length'] ?? '-';
+            $telegramMsg[] = "• Bahu: {$shoulder} cm | Panjang Lengan: {$sleeve} cm";
+        }
+
+        if (! empty($aiVision['ai_fit_advisory'])) {
+            $telegramMsg[] = '───────────────────';
+            $telegramMsg[] = '💡 *Analisis & Rekomendasi Fit AI:*';
+            $telegramMsg[] = "{$aiVision['ai_fit_advisory']}";
+        }
+
+        $telegramMsg[] = '───────────────────';
+        $telegramMsg[] = '🧵 *Kalkulasi Bahan Baku:*';
+        $telegramMsg[] = "📏 *Kain Utama*: {$m['main_fabric_meters']} meter ({$m['main_fabric_description']})";
+
+        if (($m['lining_meters'] ?? 0) > 0) {
+            $telegramMsg[] = "🧶 *Kain Furing / Lining*: {$m['lining_meters']} meter";
+        }
+        if (($m['interlining_kufner_meters'] ?? 0) > 0) {
+            $telegramMsg[] = "✂️ *Interlining / Kufner*: {$m['interlining_kufner_meters']} meter";
+        }
+
+        $telegramMsg[] = '───────────────────';
+        $telegramMsg[] = '💵 *Estimasi HPP (Modal)*: Rp '.number_format($fin['total_cost'], 0, ',', '.');
+        $telegramMsg[] = '   • Bahan Baku: Rp '.number_format($m['total_material_cost'], 0, ',', '.');
+        $telegramMsg[] = '   • Ongkos Jahit: Rp '.number_format($estimate['labor']['labor_cost'], 0, ',', '.');
+        $telegramMsg[] = '🏷️ *Rekomendasi Harga Jual*: Rp '.number_format($fin['suggested_price'], 0, ',', '.');
+        $telegramMsg[] = '📈 *Proyeksi Keuntungan*: Rp '.number_format($fin['projected_profit'], 0, ',', '.')." ({$fin['profit_margin_percent']}%)";
+
+        return response()->json([
+            'status' => true,
+            'data' => $estimate,
+            'message' => implode("\n", $telegramMsg),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Membuat pesanan jas custom langsung dari bot Telegram.
+     */
+    public function orderCustomSuit(Request $request, SuitMaterialEstimatorService $estimator)
+    {
+        $validated = $request->validate([
+            'customer_name' => 'required|string|max:255',
+            'customer_phone' => 'nullable|string|max:50',
+            'suit_type' => 'nullable|string',
+            'fabric_type' => 'nullable|string|max:150',
+            'color' => 'nullable|string|max:100',
+            'image_url' => 'nullable|string',
+            'total_price' => 'nullable|numeric|min:0',
+            'down_payment' => 'nullable|numeric|min:0',
+            'account_code' => 'nullable|string|max:20',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $suitType = $validated['suit_type'] ?? 'jas_blazer_pria';
+        if (! array_key_exists($suitType, Product::CATEGORIES)) {
+            $suitType = 'jas_blazer_pria';
+        }
+
+        $measurements = [
+            'height' => (float) ($request->input('height') ?? $request->input('tinggi_badan') ?? 170),
+            'chest' => (float) ($request->input('chest') ?? $request->input('lingkar_dada') ?? 96),
+            'waist' => (float) ($request->input('waist') ?? $request->input('lingkar_pinggang') ?? 82),
+            'jacket_length' => (float) ($request->input('jacket_length') ?? $request->input('panjang_jas') ?? 74),
+            'trouser_length' => (float) ($request->input('trouser_length') ?? $request->input('panjang_celana') ?? 98),
+        ];
+
+        $estimate = $estimator->estimate($suitType, $measurements, [], $request->input('gemini_analysis'));
+
+        $totalPrice = (float) ($validated['total_price'] ?? $estimate['financial']['suggested_price']);
+        $totalCost = (float) $estimate['financial']['total_cost'];
+        $materialCost = (float) $estimate['materials']['total_material_cost'];
+        $laborCost = (float) $estimate['labor']['labor_cost'];
+        $downPayment = (float) ($validated['down_payment'] ?? 0);
+
+        $orderNumber = 'CST-'.date('Ymd').'-'.strtoupper(Str::random(4));
+
+        $paymentStatus = 'unpaid';
+        if ($downPayment >= $totalPrice && $totalPrice > 0) {
+            $paymentStatus = 'paid';
+        } elseif ($downPayment > 0) {
+            $paymentStatus = 'partial_dp';
+        }
+
+        $order = DB::transaction(function () use (
+            $validated,
+            $orderNumber,
+            $suitType,
+            $measurements,
+            $estimate,
+            $materialCost,
+            $laborCost,
+            $totalCost,
+            $totalPrice,
+            $downPayment,
+            $paymentStatus
+
+        ) {
+            $accountCode = $validated['account_code'] ?? '1001';
+            $account = Account::where('code', $accountCode)->first()
+                ?? Account::where('type', 'asset')->first();
+
+            $customOrder = CustomSuitOrder::create([
+                'order_number' => $orderNumber,
+                'customer_name' => $validated['customer_name'],
+                'customer_phone' => $validated['customer_phone'] ?? null,
+                'order_date' => now()->toDateString(),
+                'due_date' => now()->addDays(14)->toDateString(),
+                'suit_type' => $suitType,
+                'fabric_type' => $validated['fabric_type'] ?? 'Wool Blend Standar',
+                'color' => $validated['color'] ?? 'Custom Color',
+                'body_measurements' => $measurements,
+                'reference_image' => $validated['image_url'] ?? null,
+                'ai_estimation' => $estimate,
+                'material_cost' => $materialCost,
+                'labor_cost' => $laborCost,
+                'total_cost' => $totalCost,
+                'total_price' => $totalPrice,
+                'down_payment' => $downPayment,
+                'payment_status' => $paymentStatus,
+                'production_status' => 'consultation',
+                'account_id' => $account?->id,
+                'source' => 'telegram',
+                'notes' => $validated['notes'] ?? 'Dibuat otomatis via Telegram n8n AI Agent',
+            ]);
+
+            // Jika ada DP, bukukan langsung ke kasir akuntansi
+            if ($downPayment > 0 && $account) {
+                $customRevenueAccount = Account::firstOrCreate(
+                    ['code' => '4003'],
+                    ['name' => 'Pendapatan Jasa Pembuatan Jas Custom', 'type' => 'revenue']
+                );
+
+                $journal = JournalEntry::create([
+                    'reference' => $orderNumber,
+                    'description' => "DP Pesanan Jas Telegram {$customOrder->customer_name} ({$orderNumber})",
+                    'date' => now(),
+                    'source' => 'custom_suit',
+                    'status' => 'verified',
+                ]);
+
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journal->id,
+                    'account_id' => $account->id,
+                    'description' => "Penerimaan DP pesanan jas {$orderNumber}",
+                    'debit' => $downPayment,
+                    'credit' => 0,
+                ]);
+
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journal->id,
+                    'account_id' => $customRevenueAccount->id,
+                    'description' => "Pendapatan jasa tailor {$orderNumber}",
+                    'debit' => 0,
+                    'credit' => $downPayment,
+                ]);
+
+                $customOrder->update(['journal_entry_id' => $journal->id]);
+            }
+
+            return $customOrder;
+        });
+
+        $msg = [
+            '✅ *Pesanan Pembuatan Jas Berhasil Dibuat!*',
+            "📋 *No. Pesanan*: `{$order->order_number}`",
+            "👤 *Pelanggan*: {$order->customer_name}",
+            "👔 *Jenis*: {$order->suit_type_label}",
+            '💰 *Total Biaya*: Rp '.number_format($order->total_price, 0, ',', '.'),
+            '💵 *Uang Muka (DP)*: Rp '.number_format($order->down_payment, 0, ',', '.'),
+            '💳 *Sisa Tagihan*: Rp '.number_format($order->remaining_payment, 0, ',', '.'),
+            '📍 *Status*: Konsultasi / Ukur',
+            '📅 *Target Jadi*: '.($order->due_date ? $order->due_date->format('d M Y') : '14 hari'),
+        ];
+
+        return response()->json([
+            'status' => true,
+            'order' => $order,
+            'message' => implode("\n", $msg),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Cek stok pakaian retail via Telegram / AI Agent.
+     */
+    public function checkRetailStock(Request $request)
+    {
+        $query = Product::query();
+
+        if ($request->boolean('low_stock')) {
+            $query->whereColumn('stock', '<=', 'min_stock');
+        } elseif ($search = $request->input('q')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('category', 'like', "%{$search}%");
+            });
+        } elseif ($cat = $request->input('category')) {
+            $query->where('category', $cat);
+        }
+
+        $products = $query->orderBy('stock', 'asc')->limit(15)->get();
+
+        if ($products->isEmpty()) {
+            return response()->json([
+                'status' => true,
+                'count' => 0,
+                'products' => [],
+                'message' => 'ℹ️ Tidak ditemukan produk pakaian yang sesuai kriteria pencarian.',
+            ]);
+        }
+
+        $lines = ["📦 *Informasi Stok Pakaian Retail Seven Management:*\n"];
+        foreach ($products as $p) {
+            $statusIcon = $p->stock <= 0 ? '❌' : ($p->stock <= $p->min_stock ? '⚠️' : '✅');
+            $lines[] = "{$statusIcon} *{$p->name}* ({$p->code})";
+            $lines[] = "   Stok: {$p->stock} pcs | Harga: Rp ".number_format($p->selling_price, 0, ',', '.');
+        }
+
+        return response()->json([
+            'status' => true,
+            'count' => $products->count(),
+            'products' => $products,
+            'message' => implode("\n", $lines),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Catat transaksi penjualan retail dari Telegram.
+     */
+    public function recordRetailSale(Request $request)
+    {
+        $validated = $request->validate([
+            'product_code' => 'required_without:product_id|string',
+            'product_id' => 'nullable|exists:products,id',
+            'quantity' => 'nullable|integer|min:1',
+            'customer_name' => 'nullable|string|max:255',
+            'account_code' => 'nullable|string',
+        ]);
+
+        $qty = (int) ($validated['quantity'] ?? 1);
+        $product = ! empty($validated['product_id'])
+            ? Product::find($validated['product_id'])
+            : Product::where('code', $validated['product_code'])->first();
+
+        if (! $product) {
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Produk dengan kode '{$validated['product_code']}' tidak ditemukan.",
+            ], 404);
+        }
+
+        if ($product->stock < $qty) {
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Stok produk '{$product->name}' tidak mencukupi (sisa: {$product->stock}, diminta: {$qty}).",
+            ], 422);
+        }
+
+        $account = Account::where('code', $validated['account_code'] ?? '1001')->first()
+            ?? Account::where('type', 'asset')->first();
+
+        $sale = DB::transaction(function () use ($product, $qty, $validated, $account) {
+            $product->decrement('stock', $qty);
+
+            $unitCost = (float) $product->cost_price;
+            $unitPrice = (float) $product->selling_price;
+            $subtotal = $unitPrice * $qty;
+            $totalCost = $unitCost * $qty;
+            $invoiceNumber = 'RTL-'.date('Ymd').'-'.strtoupper(Str::random(4));
+
+            $retailSale = RetailSale::create([
+                'invoice_number' => $invoiceNumber,
+                'sale_date' => now(),
+                'customer_name' => $validated['customer_name'] ?? 'Pelanggan Telegram',
+                'payment_method' => 'cash',
+                'account_id' => $account?->id,
+                'total_amount' => $subtotal,
+                'total_cost' => $totalCost,
+                'notes' => 'Transaksi penjualan via Bot Telegram n8n',
+            ]);
+
+            RetailSaleItem::create([
+                'retail_sale_id' => $retailSale->id,
+                'product_id' => $product->id,
+                'quantity' => $qty,
+                'unit_cost_price' => $unitCost,
+                'unit_selling_price' => $unitPrice,
+                'subtotal' => $subtotal,
+            ]);
+
+            // Posting otomatis ke Akuntansi
+            $pendapatanRetailAccount = Account::firstOrCreate(
+                ['code' => '4002'],
+                ['name' => 'Pendapatan Penjualan Retail', 'type' => 'revenue']
+            );
+            $persediaanAccount = Account::firstOrCreate(
+                ['code' => '1003'],
+                ['name' => 'Persediaan Barang Dagang (Retail)', 'type' => 'asset']
+            );
+            $hppAccount = Account::firstOrCreate(
+                ['code' => '5004'],
+                ['name' => 'Beban Pokok Penjualan (HPP) Retail', 'type' => 'expense']
+            );
+
+            $journal = JournalEntry::create([
+                'reference' => $invoiceNumber,
+                'description' => "Penjualan Retail {$product->name} x{$qty} ({$invoiceNumber})",
+                'date' => now(),
+                'source' => 'retail',
+                'status' => 'verified',
+            ]);
+
+            if ($account) {
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journal->id,
+                    'account_id' => $account->id,
+                    'description' => "Penerimaan penjualan {$invoiceNumber}",
+                    'debit' => $subtotal,
+                    'credit' => 0,
+                ]);
+            }
+
+            JournalEntryLine::create([
+                'journal_entry_id' => $journal->id,
+                'account_id' => $pendapatanRetailAccount->id,
+                'description' => "Pendapatan retail {$invoiceNumber}",
+                'debit' => 0,
+                'credit' => $subtotal,
+            ]);
+
+            if ($totalCost > 0) {
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journal->id,
+                    'account_id' => $hppAccount->id,
+                    'description' => "HPP penjualan {$invoiceNumber}",
+                    'debit' => $totalCost,
+                    'credit' => 0,
+                ]);
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journal->id,
+                    'account_id' => $persediaanAccount->id,
+                    'description' => "Pengurangan stok {$invoiceNumber}",
+                    'debit' => 0,
+                    'credit' => $totalCost,
+                ]);
+            }
+
+            $retailSale->update(['journal_entry_id' => $journal->id]);
+
+            return $retailSale;
+        });
+
+        $msg = [
+            '🛍️ *Penjualan Retail Berhasil Dicatat!*',
+            "🧾 *Invoice*: `{$sale->invoice_number}`",
+            "📦 *Item*: {$product->name} (x{$qty})",
+            '💰 *Total Bayar*: Rp '.number_format($sale->total_amount, 0, ',', '.'),
+            '📉 *Sisa Stok*: '.($product->fresh()->stock).' pcs',
+        ];
+
+        return response()->json([
+            'status' => true,
+            'sale' => $sale,
+            'message' => implode("\n", $msg),
         ]);
     }
 }

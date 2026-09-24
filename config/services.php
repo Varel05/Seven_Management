@@ -39,4 +39,8 @@ return [
         'secret' => env('WEBHOOK_SECRET'),
     ],
 
+    'n8n' => [
+        'custom_suit_webhook_url' => env('N8N_CUSTOM_SUIT_WEBHOOK_URL', 'http://localhost:5678/webhook/custom-suit-ai'),
+    ],
+
 ];

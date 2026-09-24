@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\CustomSuitOrderController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\JournalExportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
+use App\Http\Controllers\RetailController;
 use App\Models\JournalEntry;
 use Illuminate\Support\Facades\Route;
 
@@ -56,6 +58,22 @@ Route::middleware('auth')->group(function () {
     Route::patch('/employees/{employee}/points', [EmployeeController::class, 'updatePoints'])->name('employees.points');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
     Route::post('/employees/{employee}/pay', [EmployeeController::class, 'pay'])->name('employees.pay');
+
+    // Manajemen Retail Pakaian & Kasir
+    Route::get('/retail', [RetailController::class, 'index'])->name('retail.index');
+    Route::post('/retail/products', [RetailController::class, 'storeProduct'])->name('retail.products.store');
+    Route::put('/retail/products/{product}', [RetailController::class, 'updateProduct'])->name('retail.products.update');
+    Route::delete('/retail/products/{product}', [RetailController::class, 'destroyProduct'])->name('retail.products.destroy');
+    Route::post('/retail/sales', [RetailController::class, 'storeSale'])->name('retail.sales.store');
+
+    // Manajemen Jasa Pembuatan Jas Custom & AI Material Estimator
+    Route::get('/custom-orders', [CustomSuitOrderController::class, 'index'])->name('custom-orders.index');
+    Route::get('/custom-orders/create', [CustomSuitOrderController::class, 'create'])->name('custom-orders.create');
+    Route::post('/custom-orders', [CustomSuitOrderController::class, 'store'])->name('custom-orders.store');
+    Route::get('/custom-orders/{order}', [CustomSuitOrderController::class, 'show'])->name('custom-orders.show');
+    Route::post('/custom-orders/estimate', [CustomSuitOrderController::class, 'calculateEstimate'])->name('custom-orders.estimate');
+    Route::patch('/custom-orders/{order}/status', [CustomSuitOrderController::class, 'updateStatus'])->name('custom-orders.status');
+    Route::post('/custom-orders/{order}/payment', [CustomSuitOrderController::class, 'recordPayment'])->name('custom-orders.payment');
 });
 
 require __DIR__.'/auth.php';
