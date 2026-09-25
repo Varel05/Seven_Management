@@ -113,6 +113,7 @@ class DashboardController extends Controller
                 'labaBersihBulanIni' => $metrics['labaBersihBulanIni'],
                 'labaBersihBulanIni_formatted' => ($metrics['labaBersihBulanIni'] >= 0 ? '+' : '-').' Rp '.number_format(abs($metrics['labaBersihBulanIni']), 0, ',', '.'),
                 'is_profit' => $metrics['labaBersihBulanIni'] >= 0,
+                'isProfit' => $metrics['labaBersihBulanIni'] >= 0,
                 'pendingCount' => $metrics['pendingCount'],
                 'verifiedCount' => $metrics['verifiedCount'],
             ],

@@ -112,15 +112,31 @@
             },
             kpi: {
                 totalKasDanBank: 'Rp {{ number_format($totalKasDanBank ?? $totalKas ?? 0, 0, ',', '.') }}',
+                totalKasDanBank_formatted: 'Rp {{ number_format($totalKasDanBank ?? $totalKas ?? 0, 0, ',', '.') }}',
                 totalKas: 'Rp {{ number_format($totalKas ?? 0, 0, ',', '.') }}',
+                totalKas_formatted: 'Rp {{ number_format($totalKas ?? 0, 0, ',', '.') }}',
                 pemasukanBulanIni: 'Rp {{ number_format($pemasukanBulanIni ?? 0, 0, ',', '.') }}',
+                pemasukanBulanIni_formatted: 'Rp {{ number_format($pemasukanBulanIni ?? 0, 0, ',', '.') }}',
                 pengeluaranBulanIni: 'Rp {{ number_format($pengeluaranBulanIni ?? 0, 0, ',', '.') }}',
+                pengeluaranBulanIni_formatted: 'Rp {{ number_format($pengeluaranBulanIni ?? 0, 0, ',', '.') }}',
                 labaBersihBulanIni: '{{ ($labaBersihBulanIni ?? 0) >= 0 ? '+' : '-' }} Rp {{ number_format(abs($labaBersihBulanIni ?? 0), 0, ',', '.') }}',
+                labaBersihBulanIni_formatted: '{{ ($labaBersihBulanIni ?? 0) >= 0 ? '+' : '-' }} Rp {{ number_format(abs($labaBersihBulanIni ?? 0), 0, ',', '.') }}',
                 isProfit: {{ ($labaBersihBulanIni ?? 0) >= 0 ? 'true' : 'false' }},
                 pendingCount: {{ $pendingCount ?? 0 }},
                 verifiedCount: {{ $verifiedCount ?? 0 }}
             },
             accountsData: {{ Js::from($accounts) }},
+            formatRupiah(val) {
+                if (typeof val === 'string' && val.trim().startsWith('Rp')) return val;
+                const num = Number(val) || 0;
+                return 'Rp ' + new Intl.NumberFormat('id-ID').format(num);
+            },
+            formatLabaRugi(val) {
+                if (typeof val === 'string' && (val.includes('Rp') || val.startsWith('+') || val.startsWith('-'))) return val;
+                const num = Number(val) || 0;
+                const sign = num >= 0 ? '+ ' : '- ';
+                return sign + 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.abs(num));
+            },
             getAccountBalance(code) {
                 const acc = this.accountsData.find(a => a.code === code);
                 return acc ? 'Rp ' + new Intl.NumberFormat('id-ID').format(acc.balance) : 'Rp 0';
@@ -158,7 +174,21 @@
                         this.dataHash = data.hash;
 
                         if (data.kpi) {
-                            this.kpi = data.kpi;
+                            this.kpi = {
+                                totalKasDanBank: data.kpi.totalKasDanBank_formatted || this.formatRupiah(data.kpi.totalKasDanBank),
+                                totalKasDanBank_formatted: data.kpi.totalKasDanBank_formatted || this.formatRupiah(data.kpi.totalKasDanBank),
+                                totalKas: data.kpi.totalKas_formatted || this.formatRupiah(data.kpi.totalKas),
+                                totalKas_formatted: data.kpi.totalKas_formatted || this.formatRupiah(data.kpi.totalKas),
+                                pemasukanBulanIni: data.kpi.pemasukanBulanIni_formatted || this.formatRupiah(data.kpi.pemasukanBulanIni),
+                                pemasukanBulanIni_formatted: data.kpi.pemasukanBulanIni_formatted || this.formatRupiah(data.kpi.pemasukanBulanIni),
+                                pengeluaranBulanIni: data.kpi.pengeluaranBulanIni_formatted || this.formatRupiah(data.kpi.pengeluaranBulanIni),
+                                pengeluaranBulanIni_formatted: data.kpi.pengeluaranBulanIni_formatted || this.formatRupiah(data.kpi.pengeluaranBulanIni),
+                                labaBersihBulanIni: data.kpi.labaBersihBulanIni_formatted || this.formatLabaRugi(data.kpi.labaBersihBulanIni),
+                                labaBersihBulanIni_formatted: data.kpi.labaBersihBulanIni_formatted || this.formatLabaRugi(data.kpi.labaBersihBulanIni),
+                                isProfit: data.kpi.isProfit !== undefined ? data.kpi.isProfit : (data.kpi.is_profit !== undefined ? data.kpi.is_profit : true),
+                                pendingCount: data.kpi.pendingCount ?? 0,
+                                verifiedCount: data.kpi.verifiedCount ?? 0
+                            };
                         }
 
                         if (data.accounts) {
