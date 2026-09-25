@@ -19,6 +19,12 @@ class Employee extends Model
         'last_paid_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'bonus_salary',
+        'total_salary',
+        'tier_label',
+    ];
+
     public function assetAccount(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'asset_account_id');
@@ -30,7 +36,68 @@ class Employee extends Model
     }
 
     /**
-     * Hitung bonus gaji dari total poin kinerja dikalikan tarif per poin.
+     * Dapatkan tarif nominal uang per poin berdasarkan tingkatan (tier) poin kinerja:
+     * - 200 poin  => Rp 1.000 / poin
+     * - 295 poin  => Rp 1.400 / poin
+     * - 370 poin  => Rp 1.800 / poin
+     * - 445 poin  => Rp 2.200 / poin
+     * - ≥ 500 poin => Rp 2.600 / poin
+     * - < 200 poin => Rp 0 / poin (belum memenuhi batas minimum bonus)
+     */
+    public static function getRateForPoints(int $points): float
+    {
+        return match (true) {
+            $points >= 500 => 2600.0,
+            $points >= 445 => 2200.0,
+            $points >= 370 => 1800.0,
+            $points >= 295 => 1400.0,
+            $points >= 200 => 1000.0,
+            default => 0.0,
+        };
+    }
+
+    /**
+     * Dapatkan informasi detail tingkatan (tier) untuk jumlah poin tertentu.
+     */
+    public static function getTierInfoForPoints(int $points): array
+    {
+        return match (true) {
+            $points >= 500 => ['tier' => 5, 'rate' => 2600.0, 'min_points' => 500, 'label' => 'Tier 5 (≥ 500 Poin)'],
+            $points >= 445 => ['tier' => 4, 'rate' => 2200.0, 'min_points' => 445, 'label' => 'Tier 4 (445 - 499 Poin)'],
+            $points >= 370 => ['tier' => 3, 'rate' => 1800.0, 'min_points' => 370, 'label' => 'Tier 3 (370 - 444 Poin)'],
+            $points >= 295 => ['tier' => 2, 'rate' => 1400.0, 'min_points' => 295, 'label' => 'Tier 2 (295 - 369 Poin)'],
+            $points >= 200 => ['tier' => 1, 'rate' => 1000.0, 'min_points' => 200, 'label' => 'Tier 1 (200 - 294 Poin)'],
+            default => ['tier' => 0, 'rate' => 0.0, 'min_points' => 0, 'label' => '< 200 Poin (Belum Capai Tier)'],
+        };
+    }
+
+    /**
+     * Dapatkan label tingkatan (tier) untuk karyawan saat ini.
+     */
+    public function getTierLabelAttribute(): string
+    {
+        return self::getTierInfoForPoints((int) $this->current_points)['label'];
+    }
+
+    /**
+     * Dapatkan tarif per poin.
+     * Mengutamakan tarif skema bertingkat jika poin >= 200.
+     * Jika poin < 200, mengembalikan tarif khusus manual jika ada, atau 0.
+     */
+    public function getRatePerPointAttribute($value): float
+    {
+        $points = (int) ($this->attributes['current_points'] ?? 0);
+        $tierRate = self::getRateForPoints($points);
+
+        if ($tierRate > 0) {
+            return $tierRate;
+        }
+
+        return (float) ($value ?? 0);
+    }
+
+    /**
+     * Hitung bonus gaji dari total poin kinerja dikalikan tarif per poin bertingkat.
      */
     public function getBonusSalaryAttribute(): float
     {
@@ -81,13 +148,13 @@ class Employee extends Model
 
         return JournalEntry::where(function ($q) {
             $q->where('description', 'LIKE', "Gaji Karyawan: {$this->name}%")
-              ->orWhere('description', 'LIKE', "Penggajian Karyawan: {$this->name}%")
-              ->orWhere('description', 'LIKE', "%{$this->name}%");
+                ->orWhere('description', 'LIKE', "Penggajian Karyawan: {$this->name}%")
+                ->orWhere('description', 'LIKE', "%{$this->name}%");
         })
-        ->whereYear('date', $today->year)
-        ->whereMonth('date', $today->month)
-        ->where('status', '!=', 'rejected')
-        ->exists();
+            ->whereYear('date', $today->year)
+            ->whereMonth('date', $today->month)
+            ->where('status', '!=', 'rejected')
+            ->exists();
     }
 
     /**
@@ -99,14 +166,14 @@ class Employee extends Model
 
         return JournalEntry::where(function ($q) {
             $q->where('description', 'LIKE', "Gaji Karyawan: {$this->name}%")
-              ->orWhere('description', 'LIKE', "Penggajian Karyawan: {$this->name}%")
-              ->orWhere('description', 'LIKE', "%{$this->name}%");
+                ->orWhere('description', 'LIKE', "Penggajian Karyawan: {$this->name}%")
+                ->orWhere('description', 'LIKE', "%{$this->name}%");
         })
-        ->whereYear('date', $today->year)
-        ->whereMonth('date', $today->month)
-        ->where('status', '!=', 'rejected')
-        ->latest('date')
-        ->first();
+            ->whereYear('date', $today->year)
+            ->whereMonth('date', $today->month)
+            ->where('status', '!=', 'rejected')
+            ->latest('date')
+            ->first();
     }
 
     /**

@@ -63,7 +63,10 @@ class EmployeeController extends Controller
         ]);
 
         $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
-        $validated['rate_per_point'] = (float) ($validated['rate_per_point'] ?? 0);
+        $tierRate = Employee::getRateForPoints($validated['current_points']);
+        $validated['rate_per_point'] = $tierRate > 0
+            ? $tierRate
+            : (float) ($validated['rate_per_point'] ?? 0);
 
         Employee::create($validated);
 
@@ -88,7 +91,10 @@ class EmployeeController extends Controller
         ]);
 
         $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
-        $validated['rate_per_point'] = (float) ($validated['rate_per_point'] ?? 0);
+        $tierRate = Employee::getRateForPoints($validated['current_points']);
+        $validated['rate_per_point'] = $tierRate > 0
+            ? $tierRate
+            : (float) ($validated['rate_per_point'] ?? 0);
 
         $employee->update($validated);
 
@@ -116,7 +122,16 @@ class EmployeeController extends Controller
             $newPoints = max(0, $employee->current_points - $points);
         }
 
-        $employee->update(['current_points' => $newPoints]);
+        $tierRate = Employee::getRateForPoints($newPoints);
+        $updateData = ['current_points' => $newPoints];
+
+        if ($tierRate > 0) {
+            $updateData['rate_per_point'] = $tierRate;
+        } elseif ($employee->rate_per_point <= 2600) {
+            $updateData['rate_per_point'] = 0;
+        }
+
+        $employee->update($updateData);
 
         return back()->with('success', "Poin karyawan '{$employee->name}' berhasil diperbarui menjadi {$newPoints} poin.");
     }

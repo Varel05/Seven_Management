@@ -407,4 +407,107 @@ class EmployeePayrollTest extends TestCase
                 'count' => 1,
             ]);
     }
+
+    public function test_tiered_employee_bonus_calculation(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Tier 1: 200 poin * Rp 1.000 = Rp 200.000
+        $emp200 = Employee::create([
+            'name' => 'Karyawan 200 Poin',
+            'position' => 'Penjahit',
+            'base_salary' => 3000000,
+            'current_points' => 200,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+        $this->assertEquals(1000, $emp200->rate_per_point);
+        $this->assertEquals(200000, $emp200->bonus_salary);
+        $this->assertEquals(3200000, $emp200->total_salary);
+
+        // 2. Tier 2: 295 poin * Rp 1.400 = Rp 413.000
+        $emp295 = Employee::create([
+            'name' => 'Karyawan 295 Poin',
+            'position' => 'Penjahit',
+            'base_salary' => 3000000,
+            'current_points' => 295,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+        $this->assertEquals(1400, $emp295->rate_per_point);
+        $this->assertEquals(413000, $emp295->bonus_salary);
+        $this->assertEquals(3413000, $emp295->total_salary);
+
+        // 3. Tier 3: 370 poin * Rp 1.800 = Rp 666.000
+        $emp370 = Employee::create([
+            'name' => 'Karyawan 370 Poin',
+            'position' => 'Tukang Pola',
+            'base_salary' => 3500000,
+            'current_points' => 370,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+        $this->assertEquals(1800, $emp370->rate_per_point);
+        $this->assertEquals(666000, $emp370->bonus_salary);
+        $this->assertEquals(4166000, $emp370->total_salary);
+
+        // 4. Tier 4: 445 poin * Rp 2.200 = Rp 979.000
+        $emp445 = Employee::create([
+            'name' => 'Karyawan 445 Poin',
+            'position' => 'Finishing',
+            'base_salary' => 3000000,
+            'current_points' => 445,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+        $this->assertEquals(2200, $emp445->rate_per_point);
+        $this->assertEquals(979000, $emp445->bonus_salary);
+        $this->assertEquals(3979000, $emp445->total_salary);
+
+        // 5. Tier 5: 500 poin * Rp 2.600 = Rp 1.300.000
+        $emp500 = Employee::create([
+            'name' => 'Karyawan 500 Poin',
+            'position' => 'Master Tailor',
+            'base_salary' => 4000000,
+            'current_points' => 500,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+        $this->assertEquals(2600, $emp500->rate_per_point);
+        $this->assertEquals(1300000, $emp500->bonus_salary);
+        $this->assertEquals(5300000, $emp500->total_salary);
+
+        // 6. Di atas 500 poin (misal 550 poin): 550 * 2.600 = Rp 1.430.000
+        $emp550 = Employee::create([
+            'name' => 'Karyawan 550 Poin',
+            'position' => 'Master Tailor',
+            'base_salary' => 4000000,
+            'current_points' => 550,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+        $this->assertEquals(2600, $emp550->rate_per_point);
+        $this->assertEquals(1430000, $emp550->bonus_salary);
+
+        // 7. Di bawah 200 poin (belum capai tier): bonus = 0
+        $emp150 = Employee::create([
+            'name' => 'Karyawan 150 Poin',
+            'position' => 'Junior Tailor',
+            'base_salary' => 2500000,
+            'current_points' => 150,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+        $this->assertEquals(0, $emp150->bonus_salary);
+
+        // 8. Test transisi update points lewat endpoint patch
+        $this->actingAs($user)->patch("/employees/{$emp150->id}/points", [
+            'points' => 295,
+            'mode' => 'set',
+        ]);
+        $freshEmp150 = $emp150->fresh();
+        $this->assertEquals(295, $freshEmp150->current_points);
+        $this->assertEquals(1400, $freshEmp150->rate_per_point);
+        $this->assertEquals(413000, $freshEmp150->bonus_salary);
+    }
 }

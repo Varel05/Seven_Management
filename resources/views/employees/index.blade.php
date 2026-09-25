@@ -28,7 +28,8 @@
                 </div>
                 <button 
                     type="button" 
-                    @click="openAddModal()" 
+                    @click="$dispatch('open-add-employee')"
+                    onclick="window.dispatchEvent(new CustomEvent('open-add-employee'))"
                     class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
@@ -130,6 +131,7 @@
             return range;
         },
         init() {
+            window.addEventListener('open-add-employee', () => { this.openAddModal(); });
             this.$watch('filterStatus', () => { this.currentPage = 1; });
             this.$watch('searchQuery', () => { this.currentPage = 1; });
             this.$watch('perPage', () => { this.currentPage = 1; });
@@ -160,6 +162,40 @@
         showDeleteModal: false,
         employeeToDelete: null,
 
+        getTierRate(points) {
+            points = Number(points) || 0;
+            if (points >= 500) return 2600;
+            if (points >= 445) return 2200;
+            if (points >= 370) return 1800;
+            if (points >= 295) return 1400;
+            if (points >= 200) return 1000;
+            return 0;
+        },
+        getTierLabel(points) {
+            points = Number(points) || 0;
+            if (points >= 500) return 'Tier 5 (≥ 500 Poin @ Rp 2.600)';
+            if (points >= 445) return 'Tier 4 (445-499 Poin @ Rp 2.200)';
+            if (points >= 370) return 'Tier 3 (370-444 Poin @ Rp 1.800)';
+            if (points >= 295) return 'Tier 2 (295-369 Poin @ Rp 1.400)';
+            if (points >= 200) return 'Tier 1 (200-294 Poin @ Rp 1.000)';
+            return '< 200 Poin (Belum Capai Tier Minimum)';
+        },
+        calculatePointsPreview() {
+            if (!this.selectedEmployeeForPoints) return 0;
+            let current = Number(this.selectedEmployeeForPoints.current_points) || 0;
+            let pts = Number(this.pointsForm.points) || 0;
+            if (this.pointsForm.mode === 'set') return Math.max(0, pts);
+            if (this.pointsForm.mode === 'add') return current + pts;
+            if (this.pointsForm.mode === 'subtract') return Math.max(0, current - pts);
+            return current;
+        },
+        onFormPointsInput() {
+            let pts = Number(this.form.current_points) || 0;
+            let tr = this.getTierRate(pts);
+            if (tr > 0) {
+                this.form.rate_per_point = tr;
+            }
+        },
         openAddModal() {
             this.isEdit = false;
             this.form = {
@@ -169,7 +205,7 @@
                 phone: '',
                 base_salary: 3000000,
                 current_points: 0,
-                rate_per_point: 50000,
+                rate_per_point: 0,
                 pay_day: 25,
                 asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
                 status: 'active'
@@ -205,7 +241,7 @@
             this.employeeToDelete = emp;
             this.showDeleteModal = true;
         }
-    }" class="py-8">
+    }" @open-add-employee.window="openAddModal()" class="py-8">
         <div class="max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 space-y-8">
 
             <!-- Flash Notifications -->
@@ -470,7 +506,12 @@
                                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
                                             </button>
                                         </div>
-                                        <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">@ Rp {{ number_format($emp->rate_per_point, 0, ',', '.') }}/poin</div>
+                                        <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono flex items-center gap-1.5 flex-wrap">
+                                            <span>@ Rp {{ number_format($emp->rate_per_point, 0, ',', '.') }}/poin</span>
+                                            @if($emp->current_points >= 200)
+                                                <span class="inline-block px-1.5 py-0.2 rounded-md bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-bold text-[9px]">{{ $emp->tier_label }}</span>
+                                            @endif
+                                        </div>
                                     </td>
 
                                     <!-- Bonus Poin -->
@@ -729,14 +770,12 @@
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Tarif Bonus per Poin (Rp)</label>
-                                    <input type="number" step="any" name="rate_per_point" x-model="form.rate_per_point" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono">
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Poin Saat Ini</label>
+                                    <input type="number" min="0" name="current_points" x-model="form.current_points" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="0">
                                 </div>
 
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Poin Saat Ini</label>
-                                    <input type="number" name="current_points" x-model="form.current_points" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono">
-                                </div>
+                                <!-- Hidden rate_per_point (otomatis diatur oleh backend) -->
+                                <input type="hidden" name="rate_per_point" :value="form.rate_per_point">
 
                                 <div>
                                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Tgl Gajian (Jatuh Tempo)</label>
@@ -812,6 +851,22 @@
                                     <input type="number" min="0" name="points" x-model="pointsForm.points" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono">
                                 </div>
 
+                                <!-- Live Tier & Bonus Preview -->
+                                <div class="p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/40 text-xs space-y-1.5 font-mono">
+                                    <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                        <span>Estimasi Poin Akhir:</span>
+                                        <span class="font-bold text-amber-600 dark:text-amber-400" x-text="calculatePointsPreview() + ' poin'"></span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                        <span>Tarif Tier:</span>
+                                        <span class="font-bold text-slate-800 dark:text-slate-200" x-text="'Rp ' + (getTierRate(calculatePointsPreview()) || (selectedEmployeeForPoints ? selectedEmployeeForPoints.rate_per_point : 0)).toLocaleString('id-ID') + '/poin'"></span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-slate-800 dark:text-slate-200 pt-1.5 border-t border-amber-200/50 dark:border-amber-800/40 font-bold">
+                                        <span>Total Bonus Poin:</span>
+                                        <span class="text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + (calculatePointsPreview() * (getTierRate(calculatePointsPreview()) || (selectedEmployeeForPoints ? selectedEmployeeForPoints.rate_per_point : 0))).toLocaleString('id-ID')"></span>
+                                    </div>
+                                </div>
+
                                 <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
                                     <button type="button" @click="showPointsModal = false" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Batal</button>
                                     <button type="submit" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-sm">Simpan Poin</button>
@@ -848,11 +903,11 @@
                                     </div>
                                     <div class="flex items-center justify-between">
                                         <span class="text-slate-500">Bonus Poin:</span>
-                                        <span class="font-mono text-amber-600 dark:text-amber-400" x-text="'Rp ' + (employeeToPay.current_points * employeeToPay.rate_per_point).toLocaleString('id-ID') + ' (' + employeeToPay.current_points + ' poin)'"></span>
+                                        <span class="font-mono text-amber-600 dark:text-amber-400" x-text="'Rp ' + (employeeToPay.current_points * (getTierRate(employeeToPay.current_points) || employeeToPay.rate_per_point)).toLocaleString('id-ID') + ' (' + employeeToPay.current_points + ' poin)'"></span>
                                     </div>
                                     <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-sm font-extrabold">
                                         <span class="text-slate-800 dark:text-slate-200">Total Dibukukan:</span>
-                                        <span class="font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + (Number(employeeToPay.base_salary) + (employeeToPay.current_points * employeeToPay.rate_per_point)).toLocaleString('id-ID')"></span>
+                                        <span class="font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + (Number(employeeToPay.base_salary) + (employeeToPay.current_points * (getTierRate(employeeToPay.current_points) || employeeToPay.rate_per_point))).toLocaleString('id-ID')"></span>
                                     </div>
                                 </div>
 
