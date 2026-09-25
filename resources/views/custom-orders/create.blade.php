@@ -19,7 +19,9 @@
 
     <div class="py-8" x-data="{
         suitType: 'jas_blazer_pria',
+        qualityTier: 'reguler',
         materials: {{ json_encode($materials) }},
+        supportingMaterials: {{ json_encode($supportingMaterials) }},
         materialId: '',
         selectedMaterialObj: null,
         materialMeters: 0,
@@ -33,7 +35,8 @@
         trouserLength: 100,
         notes: '',
         fabricPrice: 220000,
-        laborCost: 600000,
+        laborCost: '',
+        overheadCost: 0,
         targetMargin: 45,
         totalPrice: '',
         downPayment: '',
@@ -41,6 +44,27 @@
         estimateResult: null,
         hasAnalyzed: false,
         imagePreview: null,
+        onSuitTypeChange() {
+            if (this.suitType === 'tuksedo') {
+                this.qualityTier = 'exclusive';
+                this.fabricPrice = 320000;
+            } else if (['setelan_formal', 'custom_made_jas'].includes(this.suitType)) {
+                this.qualityTier = 'premium';
+                this.fabricPrice = 250000;
+            } else if (this.suitType === 'jas_blazer_pria') {
+                this.qualityTier = 'reguler';
+                this.fabricPrice = 220000;
+            } else if (['jaket', 'outwear'].includes(this.suitType)) {
+                this.qualityTier = 'reguler';
+                this.fabricPrice = 140000;
+            } else if (this.suitType === 'celana_denim') {
+                this.qualityTier = 'reguler';
+                this.fabricPrice = 95000;
+            } else if (this.suitType === 'kemeja') {
+                this.qualityTier = 'reguler';
+                this.fabricPrice = 85000;
+            }
+        },
         onMaterialSelected() {
             const found = this.materials.find(m => m.id == this.materialId);
             if (found) {
@@ -64,6 +88,7 @@
             try {
                 let formData = new FormData();
                 formData.append('suit_type', this.suitType);
+                formData.append('quality_tier', this.qualityTier);
                 formData.append('material_id', this.materialId || '');
                 formData.append('fabric_type', this.fabricType || '');
                 formData.append('color', this.color || '');
@@ -97,6 +122,12 @@
                     if (json.data?.materials?.main_fabric_meters) {
                         this.materialMeters = json.data.materials.main_fabric_meters;
                     }
+                    if (json.data?.labor?.labor_cost && !this.laborCost) {
+                        this.laborCost = json.data.labor.labor_cost;
+                    }
+                    if (json.data?.overhead?.total_overhead_cost) {
+                        this.overheadCost = json.data.overhead.total_overhead_cost;
+                    }
 
                     // Jika user belum mengisi harga kesepakatan, beri saran awal dari kalkulasi AI
                     if ((!this.totalPrice || this.totalPrice == 0) && json.data.financial?.suggested_price) {
@@ -117,6 +148,12 @@
             if (this.estimateResult && this.estimateResult.financial) {
                 this.totalPrice = this.estimateResult.financial.suggested_price;
                 this.downPayment = Math.round(this.totalPrice * 0.5);
+                if (this.estimateResult.labor?.labor_cost) {
+                    this.laborCost = this.estimateResult.labor.labor_cost;
+                }
+                if (this.estimateResult.overhead?.total_overhead_cost) {
+                    this.overheadCost = this.estimateResult.overhead.total_overhead_cost;
+                }
             }
         },
         formatRupiah(num) {
@@ -129,6 +166,8 @@
                 @csrf
                 <input type="hidden" name="material_id" :value="materialId">
                 <input type="hidden" name="material_meters" :value="materialMeters">
+                <input type="hidden" name="quality_tier" :value="qualityTier">
+                <input type="hidden" name="overhead_cost" :value="overheadCost">
 
                 <!-- Left Column: Form Inputs (7 cols) -->
                 <div class="lg:col-span-7 space-y-6">
@@ -202,14 +241,22 @@
                             </template>
                         </div>
 
-                        <!-- Kategori, Tipe Kain, Warna -->
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <!-- Kategori, Grade HPP, Tipe Kain, Warna -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                                 <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Kategori Pakaian *</label>
-                                <select name="suit_type" x-model="suitType" required class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold focus:ring-2 focus:ring-emerald-500">
+                                <select name="suit_type" x-model="suitType" @change="onSuitTypeChange()" required class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold focus:ring-2 focus:ring-emerald-500">
                                     @foreach ($categories as $catKey => $catLabel)
                                         <option value="{{ $catKey }}">{{ $catLabel }}</option>
                                     @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Grade / Acuan HPP *</label>
+                                <select name="quality_tier" x-model="qualityTier" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold focus:ring-2 focus:ring-emerald-500">
+                                    <option value="reguler">Standar / Reguler</option>
+                                    <option value="premium">Premium Tailor</option>
+                                    <option value="exclusive">Master Bespoke</option>
                                 </select>
                             </div>
                             <div>
@@ -220,6 +267,20 @@
                                 <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Warna Bahan</label>
                                 <input type="text" name="color" x-model="color" placeholder="Midnight Blue / Hitam / Charcoal" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500">
                             </div>
+                        </div>
+
+                        <!-- Integrasi Otomatis Bahan Tambahan & Kost HPP Card -->
+                        <div class="p-3.5 rounded-xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+                                    <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                                    <span>Integrasi Otomatis Bahan Tambahan, Jasa Jahit & Listrik HPP</span>
+                                </span>
+                                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md">Acuan Kartu HPP</span>
+                            </div>
+                            <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                                Sistem otomatis mengalokasikan <strong>Bahan Tambahan</strong> (Furing Durmil, Interlining, Busa Bahu, Kain Keras, Kancing, dll) serta menghitung <strong>Jasa Jahit & Finishing</strong> dan <strong>Kost Listrik Operasional</strong> secara presisi mengacu pada standar Kartu HPP.
+                            </p>
                         </div>
 
                         <!-- Ukuran Tubuh Custom Grid -->
@@ -418,50 +479,122 @@
                                 <div class="p-3.5 rounded-2xl bg-emerald-900/40 border border-emerald-700/50 text-xs text-emerald-200 leading-relaxed" x-text="estimateResult?.summary">
                                 </div>
 
-                                <!-- Rincian Kebutuhan Bahan -->
-                                <div class="space-y-2.5">
-                                    <div class="text-xs font-bold uppercase tracking-wider text-emerald-300">Estimasi Kebutuhan Kain:</div>
-                                    
-                                    <div class="p-3 rounded-xl bg-slate-900/60 border border-emerald-900/50 space-y-2 text-xs">
+                                <!-- 1. Rincian Kain Utama -->
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-300">1. Bahan Utama (Kain):</span>
+                                        <span class="text-[10px] text-slate-400 font-mono" x-text="formatRupiah(estimateResult?.materials?.main_fabric_total_cost)"></span>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-900/60 border border-emerald-900/50 space-y-1.5 text-xs">
                                         <div class="flex items-center justify-between">
-                                            <span class="text-slate-300 font-medium">Kain Utama (Jas/Baju):</span>
-                                            <span class="font-mono font-bold text-white text-sm" x-text="(estimateResult?.materials?.main_fabric_meters || 0) + ' meter'"></span>
+                                            <span class="text-slate-300 font-medium">Meteran Kain:</span>
+                                            <span class="font-mono font-bold text-white" x-text="(estimateResult?.materials?.main_fabric_meters || 0) + ' meter'"></span>
                                         </div>
-                                        <div class="text-[11px] text-emerald-400/80 italic" x-text="estimateResult?.materials?.main_fabric_description"></div>
-
-                                        <template x-if="estimateResult?.materials?.lining_meters > 0">
-                                            <div class="flex items-center justify-between pt-1 border-t border-slate-800 text-slate-300">
-                                                <span>Kain Furing / Lining:</span>
-                                                <span class="font-mono font-bold text-white" x-text="estimateResult.materials.lining_meters + ' meter'"></span>
-                                            </div>
-                                        </template>
-
-                                        <template x-if="estimateResult?.materials?.interlining_kufner_meters > 0">
-                                            <div class="flex items-center justify-between pt-1 border-t border-slate-800 text-slate-300">
-                                                <span>Kain Keras / Kufner:</span>
-                                                <span class="font-mono font-bold text-white" x-text="estimateResult.materials.interlining_kufner_meters + ' meter'"></span>
-                                            </div>
-                                        </template>
+                                        <div class="text-[11px] text-emerald-400/90 italic" x-text="estimateResult?.materials?.main_fabric_description"></div>
+                                        <div class="flex items-center justify-between pt-1 border-t border-slate-800 text-[11px] text-slate-400">
+                                            <span>Tarif per meter: <strong class="text-slate-200" x-text="formatRupiah(estimateResult?.materials?.main_fabric_unit_price)"></strong></span>
+                                            <span class="font-mono text-emerald-400 font-bold" x-text="formatRupiah(estimateResult?.materials?.main_fabric_total_cost)"></span>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <!-- Rincian Biaya Produksi (HPP) -->
-                                <div class="space-y-2.5">
-                                    <div class="text-xs font-bold uppercase tracking-wider text-emerald-300">Struktur Pengeluaran (HPP):</div>
-                                    
-                                    <div class="p-3 rounded-xl bg-slate-900/60 border border-emerald-900/50 space-y-2 text-xs">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Total Biaya Bahan Baku:</span>
-                                            <span class="font-mono font-semibold" x-text="formatRupiah(estimateResult?.materials?.total_material_cost)"></span>
+                                <!-- 2. Bahan Tambahan & Aksesoris (Otomatis Terintegrasi dari HPP) -->
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-xs font-bold uppercase tracking-wider text-emerald-300">2. Bahan Tambahan & Aksesoris:</span>
+                                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">Otomatis HPP</span>
                                         </div>
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Ongkos Pengerjaan Penjahit:</span>
-                                            <span class="font-mono font-semibold" x-text="formatRupiah(estimateResult?.labor?.labor_cost)"></span>
+                                        <span class="text-[10px] text-emerald-400 font-mono font-bold" x-text="formatRupiah(estimateResult?.materials?.total_supporting_cost)"></span>
+                                    </div>
+
+                                    <div class="p-3 rounded-xl bg-slate-900/60 border border-emerald-900/50 space-y-2 text-xs max-h-56 overflow-y-auto custom-scrollbar">
+                                        <template x-for="item in (estimateResult?.materials?.supporting_materials || [])" :key="item.code">
+                                            <div class="p-2 rounded-lg bg-slate-800/70 border border-slate-700/60 flex items-center justify-between gap-2">
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="flex items-center gap-1.5">
+                                                        <span class="font-mono text-[10px] px-1 py-0.2 rounded bg-slate-700 text-emerald-300" x-text="item.code"></span>
+                                                        <span class="font-semibold text-white text-[11px] truncate" x-text="item.name"></span>
+                                                    </div>
+                                                    <div class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
+                                                        <span x-text="item.quantity + ' ' + item.unit + ' @ ' + formatRupiah(item.unit_price)"></span>
+                                                        <template x-if="item.stock > 0">
+                                                            <span class="px-1.5 py-0.2 rounded text-[9px] font-bold"
+                                                                  :class="item.is_sufficient ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'"
+                                                                  x-text="'Stok: ' + item.stock + ' ' + item.unit"></span>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                                <div class="text-right shrink-0">
+                                                    <span class="font-mono font-bold text-slate-200 text-[11px]" x-text="formatRupiah(item.subtotal)"></span>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        <div class="flex justify-between items-center pt-2 border-t border-slate-800 text-[11px] font-bold text-slate-300">
+                                            <span>Subtotal Bahan Tambahan:</span>
+                                            <span class="font-mono text-emerald-400" x-text="formatRupiah(estimateResult?.materials?.total_supporting_cost)"></span>
                                         </div>
-                                        <div class="flex justify-between font-bold pt-2 border-t border-slate-800 text-white">
-                                            <span>TOTAL HPP (MODAL):</span>
-                                            <span class="font-mono text-emerald-400 text-sm" x-text="formatRupiah(estimateResult?.financial?.total_cost)"></span>
+                                    </div>
+                                </div>
+
+                                <!-- 3. Jasa Jahit & Finishing (Acuan HPP) -->
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-300">3. Jasa Jahit & Finishing:</span>
+                                        <span class="text-[10px] text-emerald-400 font-mono font-bold" x-text="formatRupiah(estimateResult?.labor?.labor_cost)"></span>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-900/60 border border-emerald-900/50 space-y-1.5 text-xs">
+                                        <template x-for="lab in (estimateResult?.labor?.items || [])" :key="lab.code">
+                                            <div class="flex items-center justify-between text-[11px] text-slate-300">
+                                                <span x-text="lab.name"></span>
+                                                <span class="font-mono font-bold text-white" x-text="formatRupiah(lab.subtotal)"></span>
+                                            </div>
+                                        </template>
+                                        <div class="flex justify-between items-center pt-1.5 border-t border-slate-800 text-[11px] font-bold text-slate-300">
+                                            <span>Subtotal Ongkos Jahit:</span>
+                                            <span class="font-mono text-emerald-400" x-text="formatRupiah(estimateResult?.labor?.labor_cost)"></span>
                                         </div>
+                                    </div>
+                                </div>
+
+                                <!-- 4. Kost Tambahan / Overhead (Acuan HPP) -->
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-300">4. Kost Listrik & Overhead (BOP):</span>
+                                        <span class="text-[10px] text-emerald-400 font-mono font-bold" x-text="formatRupiah(estimateResult?.overhead?.total_overhead_cost)"></span>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-900/60 border border-emerald-900/50 space-y-1.5 text-xs">
+                                        <template x-for="ovh in (estimateResult?.overhead?.items || [])" :key="ovh.code">
+                                            <div class="flex items-center justify-between text-[11px] text-slate-300">
+                                                <span x-text="ovh.name"></span>
+                                                <span class="font-mono font-bold text-white" x-text="formatRupiah(ovh.subtotal)"></span>
+                                            </div>
+                                        </template>
+                                        <div class="flex justify-between items-center pt-1.5 border-t border-slate-800 text-[11px] font-bold text-slate-300">
+                                            <span>Subtotal Kost Listrik & Overhead:</span>
+                                            <span class="font-mono text-emerald-400" x-text="formatRupiah(estimateResult?.overhead?.total_overhead_cost)"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Ringkasan Total HPP Modal -->
+                                <div class="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-600/50 space-y-2 text-xs">
+                                    <div class="flex justify-between text-slate-300">
+                                        <span>Total Bahan Baku (Kain + Tambahan):</span>
+                                        <span class="font-mono font-semibold" x-text="formatRupiah(estimateResult?.materials?.total_material_cost)"></span>
+                                    </div>
+                                    <div class="flex justify-between text-slate-300">
+                                        <span>Jasa Jahit & Finishing:</span>
+                                        <span class="font-mono font-semibold" x-text="formatRupiah(estimateResult?.labor?.labor_cost)"></span>
+                                    </div>
+                                    <div class="flex justify-between text-slate-300">
+                                        <span>Kost Listrik & Overhead Pabrik:</span>
+                                        <span class="font-mono font-semibold" x-text="formatRupiah(estimateResult?.overhead?.total_overhead_cost)"></span>
+                                    </div>
+                                    <div class="flex justify-between font-bold pt-2 border-t border-slate-800 text-white text-sm">
+                                        <span>TOTAL HPP (MODAL PRODUKSI):</span>
+                                        <span class="font-mono text-emerald-400" x-text="formatRupiah(estimateResult?.financial?.total_cost)"></span>
                                     </div>
                                 </div>
 

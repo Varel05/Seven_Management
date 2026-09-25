@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\CustomSuitOrder;
+use App\Models\Material;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -155,5 +156,136 @@ class CustomSuitOrderTest extends TestCase
             'suit_type' => 'setelan_formal',
             'source' => 'telegram',
         ]);
+    }
+
+    public function test_estimate_integrates_supporting_materials_labor_and_overhead_from_hpp(): void
+    {
+        // Buat master material HPP di database
+        $furing = Material::create([
+            'code' => 'MAT-DRM',
+            'name' => 'Furing Durmil',
+            'category' => 'supporting_material',
+            'unit' => 'meter',
+            'standard_cost' => 13000,
+            'stock' => 50,
+            'min_stock' => 5,
+        ]);
+
+        $listrik = Material::create([
+            'code' => 'BOP-ELC-7',
+            'name' => 'Beban Listrik Operasional (Standar)',
+            'category' => 'overhead',
+            'unit' => 'pcs',
+            'standard_cost' => 7000,
+            'stock' => 0,
+            'min_stock' => 0,
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson(route('custom-orders.estimate'), [
+            'suit_type' => 'jas_blazer_pria',
+            'quality_tier' => 'reguler',
+            'height' => 170,
+            'chest' => 96,
+            'waist' => 82,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+
+        // Pastikan bahan pendukung otomatis terisi
+        $supporting = $response->json('data.materials.supporting_materials');
+        $this->assertIsArray($supporting);
+        $this->assertNotEmpty($supporting);
+
+        // Furing Durmil harus ada dengan harga dan material_id dari database
+        $furingItem = collect($supporting)->firstWhere('code', 'MAT-DRM');
+        $this->assertNotNull($furingItem);
+        $this->assertEquals($furing->id, $furingItem['material_id']);
+        $this->assertEquals(13000, $furingItem['unit_price']);
+
+        // Jasa jahit & finishing harus terstruktur
+        $laborItems = $response->json('data.labor.items');
+        $this->assertNotEmpty($laborItems);
+        $this->assertGreaterThan(0, $response->json('data.labor.labor_cost'));
+
+        // Kost tambahan / overhead listrik harus terintegrasi
+        $overheadItems = $response->json('data.overhead.items');
+        $this->assertNotEmpty($overheadItems);
+        $this->assertGreaterThan(0, $response->json('data.overhead.total_overhead_cost'));
+        $elcItem = collect($overheadItems)->firstWhere('code', 'BOP-ELC-7');
+        $this->assertNotNull($elcItem);
+        $this->assertEquals(7000, $elcItem['unit_price']);
+
+        // Total HPP harus mencakup bahan utama + bahan tambahan + jasa jahit + overhead
+        $financial = $response->json('data.financial');
+        $this->assertEquals(
+            $financial['material_cost'] + $financial['labor_cost'] + $financial['overhead_cost'],
+            $financial['total_cost']
+        );
+    }
+
+    public function test_cutting_material_deducts_both_main_fabric_and_supporting_materials(): void
+    {
+        $kain = Material::create([
+            'code' => 'MAT-JTB',
+            'name' => 'Kain Jetblack',
+            'category' => 'raw_material',
+            'unit' => 'meter',
+            'standard_cost' => 60000,
+            'stock' => 10.0,
+            'min_stock' => 2.0,
+        ]);
+
+        $furing = Material::create([
+            'code' => 'MAT-DRM',
+            'name' => 'Furing Durmil',
+            'category' => 'supporting_material',
+            'unit' => 'meter',
+            'standard_cost' => 13000,
+            'stock' => 20.0,
+            'min_stock' => 2.0,
+        ]);
+
+        $kancing = Material::create([
+            'code' => 'ACC-KCB',
+            'name' => 'Kancing Besar Niko',
+            'category' => 'accessory',
+            'unit' => 'pcs',
+            'standard_cost' => 700,
+            'stock' => 100.0,
+            'min_stock' => 10.0,
+        ]);
+
+        // Buat pesanan jas custom baru
+        $createResponse = $this->actingAs($this->user)->post(route('custom-orders.store'), [
+            'customer_name' => 'Bpk. Ridwan',
+            'order_date' => now()->toDateString(),
+            'suit_type' => 'jas_blazer_pria',
+            'material_id' => $kain->id,
+            'material_meters' => 2.5,
+            'total_price' => 1500000,
+            'down_payment' => 500000,
+            'account_id' => $this->cashAccount->id,
+        ]);
+
+        $createResponse->assertRedirect();
+        $order = CustomSuitOrder::where('customer_name', 'Bpk. Ridwan')->first();
+        $this->assertNotNull($order);
+        $this->assertFalse($order->is_material_cut);
+        $this->assertGreaterThan(0, $order->overhead_cost);
+
+        // Eksekusi potong bahan
+        $cutResponse = $this->actingAs($this->user)->post(route('custom-orders.cut-material', $order));
+        $cutResponse->assertRedirect();
+        $this->assertTrue($order->fresh()->is_material_cut);
+
+        // Stok kain utama berkurang dari 10.0 - 2.5 = 7.5
+        $this->assertEquals(7.5, $kain->fresh()->stock);
+
+        // Stok furing durmil berkurang dari stok awal
+        $this->assertLessThan(20.0, $furing->fresh()->stock);
+
+        // Stok kancing berkurang dari 100
+        $this->assertLessThan(100.0, $kancing->fresh()->stock);
     }
 }

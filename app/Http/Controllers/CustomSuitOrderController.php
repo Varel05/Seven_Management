@@ -101,11 +101,13 @@ class CustomSuitOrderController extends Controller
         }
 
         $materials = Material::where('category', 'raw_material')->orderBy('name')->get();
+        $supportingMaterials = Material::whereIn('category', ['supporting_material', 'accessory'])->orderBy('name')->get();
 
         return view('custom-orders.create', [
             'categories' => Product::CATEGORIES,
             'paymentAccounts' => $paymentAccounts,
             'materials' => $materials,
+            'supportingMaterials' => $supportingMaterials,
         ]);
     }
 
@@ -130,6 +132,7 @@ class CustomSuitOrderController extends Controller
             'fabric_price' => ['nullable', 'numeric'],
             'labor_cost' => ['nullable', 'numeric'],
             'target_margin' => ['nullable', 'numeric'],
+            'quality_tier' => ['nullable', 'string', 'in:reguler,premium,exclusive'],
         ]);
 
         $measurements = [
@@ -146,6 +149,7 @@ class CustomSuitOrderController extends Controller
             'fabric_type' => $validated['fabric_type'] ?? null,
             'color' => $validated['color'] ?? null,
             'notes' => $validated['notes'] ?? null,
+            'quality_tier' => $validated['quality_tier'] ?? null,
         ];
 
         if (! empty($validated['fabric_price'])) {
@@ -244,9 +248,11 @@ class CustomSuitOrderController extends Controller
             'jacket_length' => ['nullable', 'numeric'],
             'sleeve_length' => ['nullable', 'numeric'],
             'trouser_length' => ['nullable', 'numeric'],
+            'quality_tier' => ['nullable', 'string', 'in:reguler,premium,exclusive'],
             // Keuangan & Biaya
             'material_cost' => ['nullable', 'numeric', 'min:0'],
             'labor_cost' => ['nullable', 'numeric', 'min:0'],
+            'overhead_cost' => ['nullable', 'numeric', 'min:0'],
             'total_price' => ['required', 'numeric', 'min:0'],
             'down_payment' => ['nullable', 'numeric', 'min:0'],
             'account_id' => ['nullable', 'exists:accounts,id'],
@@ -279,6 +285,7 @@ class CustomSuitOrderController extends Controller
                 'material_id' => $validated['material_id'] ?? null,
                 'fabric_price_per_meter' => $request->input('fabric_price_per_meter'),
                 'labor_cost' => $validated['labor_cost'] ?? null,
+                'quality_tier' => $validated['quality_tier'] ?? null,
             ],
             $aiVisionData
         );
@@ -289,7 +296,8 @@ class CustomSuitOrderController extends Controller
             : (float) ($estimatorResult['materials']['main_fabric_meters'] ?? 0);
 
         $laborCost = $validated['labor_cost'] ?? $estimatorResult['labor']['labor_cost'];
-        $totalCost = $materialCost + $laborCost;
+        $overheadCost = $validated['overhead_cost'] ?? ($estimatorResult['overhead']['total_overhead_cost'] ?? 0);
+        $totalCost = $materialCost + $laborCost + $overheadCost;
         $totalPrice = (float) $validated['total_price'];
         $downPayment = (float) ($validated['down_payment'] ?? 0);
 
@@ -311,6 +319,7 @@ class CustomSuitOrderController extends Controller
             $materialCost,
             $materialMeters,
             $laborCost,
+            $overheadCost,
             $totalCost,
             $totalPrice,
             $downPayment,
@@ -333,6 +342,7 @@ class CustomSuitOrderController extends Controller
                 'material_meters' => $materialMeters,
                 'is_material_cut' => false,
                 'labor_cost' => $laborCost,
+                'overhead_cost' => $overheadCost,
                 'total_cost' => $totalCost,
                 'total_price' => $totalPrice,
                 'down_payment' => $downPayment,
@@ -419,10 +429,52 @@ class CustomSuitOrderController extends Controller
 
         // Jika status berpindah ke proses potong/jahit dan bahan belum pernah dipotong
         if (in_array($validated['production_status'], ['cutting_sewing', 'fitting', 'finishing', 'ready', 'completed'], true)
-            && ! $order->is_material_cut
-            && $order->material_id
-            && $order->material_meters > 0) {
+            && ! $order->is_material_cut) {
+            $this->performMaterialStockDeduction($order);
+        }
 
+        $statusLabel = CustomSuitOrder::PRODUCTION_STATUSES[$validated['production_status']] ?? $validated['production_status'];
+
+        return back()->with('success', "Status produksi pesanan #{$order->order_number} berhasil diperbarui menjadi '{$statusLabel}'.");
+    }
+
+    /**
+     * Aksi manual pemotongan bahan kain dan bahan pendukung dari stok gudang untuk pesanan jas custom.
+     */
+    public function cutMaterial(CustomSuitOrder $order): RedirectResponse
+    {
+        if ($order->is_material_cut) {
+            return back()->with('warning', 'Bahan untuk pesanan ini sudah pernah dipotong sebelumnya.');
+        }
+
+        $hasMain = (bool) ($order->material_id && $order->material_meters > 0);
+        $hasSupporting = ! empty($order->ai_estimation['materials']['supporting_materials']);
+
+        if (! $hasMain && ! $hasSupporting) {
+            return back()->with('error', 'Pesanan ini tidak memiliki alokasi bahan kain maupun bahan pendukung dari gudang.');
+        }
+
+        $deducted = $this->performMaterialStockDeduction($order);
+        if ($deducted) {
+            return back()->with('success', "Bahan kain utama dan bahan pendukung berhasil dipotong dari stok gudang untuk pesanan #{$order->order_number}.");
+        }
+
+        return back()->with('error', 'Gagal memproses pemotongan bahan.');
+    }
+
+    /**
+     * Memotong stok bahan baku utama (kain) dan seluruh bahan pendukung (furing, interlining, kancing, dll) dari gudang.
+     */
+    protected function performMaterialStockDeduction(CustomSuitOrder $order): bool
+    {
+        if ($order->is_material_cut) {
+            return false;
+        }
+
+        $deductedAny = false;
+
+        // 1. Potong kain utama jika dipilih dari stok gudang
+        if ($order->material_id && $order->material_meters > 0) {
             $material = Material::find($order->material_id);
             if ($material && $material->isPhysical()) {
                 $material->decrement('stock', $order->material_meters);
@@ -437,50 +489,39 @@ class CustomSuitOrderController extends Controller
                     'reference_number' => $order->order_number,
                     'notes' => "Pemotongan bahan kain {$order->material_meters}m untuk pesanan custom {$order->customer_name} (#{$order->order_number})",
                 ]);
-
-                $order->update(['is_material_cut' => true]);
+                $deductedAny = true;
             }
         }
 
-        $statusLabel = CustomSuitOrder::PRODUCTION_STATUSES[$validated['production_status']] ?? $validated['production_status'];
+        // 2. Potong bahan pendukung & aksesoris otomatis berdasarkan estimasi HPP
+        $supportingMaterials = $order->ai_estimation['materials']['supporting_materials'] ?? [];
+        foreach ($supportingMaterials as $item) {
+            $matId = $item['material_id'] ?? null;
+            $qty = (float) ($item['quantity'] ?? 0);
 
-        return back()->with('success', "Status produksi pesanan #{$order->order_number} berhasil diperbarui menjadi '{$statusLabel}'.");
-    }
+            if ($matId && $qty > 0) {
+                $supMaterial = Material::find($matId);
+                if ($supMaterial && $supMaterial->isPhysical()) {
+                    $supMaterial->decrement('stock', $qty);
 
-    /**
-     * Aksi manual pemotongan bahan kain dari stok gudang untuk pesanan jas custom.
-     */
-    public function cutMaterial(CustomSuitOrder $order): RedirectResponse
-    {
-        if ($order->is_material_cut) {
-            return back()->with('warning', 'Bahan untuk pesanan ini sudah pernah dipotong sebelumnya.');
+                    MaterialStockMovement::create([
+                        'material_id' => $supMaterial->id,
+                        'type' => 'out',
+                        'quantity' => $qty,
+                        'unit_cost' => $supMaterial->standard_cost,
+                        'reference_type' => 'custom_order',
+                        'reference_id' => $order->id,
+                        'reference_number' => $order->order_number,
+                        'notes' => "Pemotongan bahan pendukung {$supMaterial->name} ({$qty} {$supMaterial->unit}) untuk pesanan custom {$order->customer_name} (#{$order->order_number})",
+                    ]);
+                    $deductedAny = true;
+                }
+            }
         }
 
-        if (! $order->material_id || $order->material_meters <= 0) {
-            return back()->with('error', 'Pesanan ini belum memiliki tautan master bahan kain atau kuantitas meteran.');
-        }
+        $order->update(['is_material_cut' => true]);
 
-        $material = Material::findOrFail($order->material_id);
-        if ($material->isPhysical()) {
-            $material->decrement('stock', $order->material_meters);
-
-            MaterialStockMovement::create([
-                'material_id' => $material->id,
-                'type' => 'out',
-                'quantity' => $order->material_meters,
-                'unit_cost' => $material->standard_cost,
-                'reference_type' => 'custom_order',
-                'reference_id' => $order->id,
-                'reference_number' => $order->order_number,
-                'notes' => "Pemotongan bahan kain {$order->material_meters}m untuk pesanan custom {$order->customer_name} (#{$order->order_number})",
-            ]);
-
-            $order->update(['is_material_cut' => true]);
-
-            return back()->with('success', "Stok bahan '{$material->name}' berhasil dipotong sebanyak {$order->material_meters} {$material->unit}.");
-        }
-
-        return back()->with('error', 'Bahan yang dipilih bukan merupakan bahan fisik yang memiliki stok.');
+        return true;
     }
 
     /**

@@ -43,6 +43,7 @@ class CustomSuitOrder extends Model
         'material_meters',
         'is_material_cut',
         'labor_cost',
+        'overhead_cost',
         'total_cost',
         'total_price',
         'down_payment',
@@ -63,6 +64,7 @@ class CustomSuitOrder extends Model
         'material_meters' => 'float',
         'is_material_cut' => 'boolean',
         'labor_cost' => 'float',
+        'overhead_cost' => 'float',
         'total_cost' => 'float',
         'total_price' => 'float',
         'down_payment' => 'float',
@@ -142,6 +144,30 @@ class CustomSuitOrder extends Model
     public function getFormattedTotalCostAttribute(): string
     {
         return 'Rp '.number_format($this->total_cost, 0, ',', '.');
+    }
+
+    /**
+     * Format rupiah biaya bahan baku.
+     */
+    public function getFormattedMaterialCostAttribute(): string
+    {
+        return 'Rp '.number_format($this->material_cost, 0, ',', '.');
+    }
+
+    /**
+     * Format rupiah ongkos pengerjaan penjahit.
+     */
+    public function getFormattedLaborCostAttribute(): string
+    {
+        return 'Rp '.number_format($this->labor_cost, 0, ',', '.');
+    }
+
+    /**
+     * Format rupiah kost tambahan / overhead (listrik, benang, packing).
+     */
+    public function getFormattedOverheadCostAttribute(): string
+    {
+        return 'Rp '.number_format($this->overhead_cost, 0, ',', '.');
     }
 
     /**

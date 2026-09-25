@@ -113,36 +113,68 @@
                             </div>
                         </div>
 
-                        <!-- Integrasi Master Bahan Gudang & Status Pemotongan Kain -->
-                        @if ($order->material_id && $order->material)
-                            <div class="p-3.5 rounded-xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                                <div>
-                                    <div class="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
-                                        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                                        <span>Bahan Gudang: {{ $order->material->name }} ({{ $order->material_meters }} {{ $order->material->unit }})</span>
+                        <!-- Integrasi Master Bahan Gudang & Status Pemotongan Kain & Bahan Pendukung -->
+                        <div class="space-y-3">
+                            @if ($order->material_id && $order->material)
+                                <div class="p-3.5 rounded-xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                    <div>
+                                        <div class="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                                            <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                                            <span>Kain Utama Gudang: {{ $order->material->name }} ({{ $order->material_meters }} {{ $order->material->unit }})</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-500 mt-0.5">
+                                            Sisa stok saat ini di gudang: <strong class="text-slate-700 dark:text-slate-300">{{ $order->material->formatted_stock }}</strong>
+                                        </div>
                                     </div>
-                                    <div class="text-[11px] text-slate-500 mt-0.5">
-                                        Sisa stok saat ini di gudang: <strong class="text-slate-700 dark:text-slate-300">{{ $order->material->formatted_stock }}</strong>
+                                    <div>
+                                        @if ($order->is_material_cut)
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                <span>Bahan Sudah Dipotong</span>
+                                            </span>
+                                        @else
+                                            <form method="POST" action="{{ route('custom-orders.cut-material', $order) }}" onsubmit="return confirm('Potong stok kain utama dan seluruh bahan pendukung dari gudang untuk pesanan ini?')">
+                                                @csrf
+                                                <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-xs cursor-pointer">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z"/></svg>
+                                                    <span>Potong Bahan dari Stok</span>
+                                                </button>
+                                            </form>
+                                        @endif
                                     </div>
                                 </div>
-                                <div>
-                                    @if ($order->is_material_cut)
-                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                            <span>Bahan Sudah Dipotong</span>
+                            @endif
+
+                            @if (!empty($order->ai_estimation['materials']['supporting_materials']))
+                                <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 space-y-2 text-xs">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                            <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                                            <span>Bahan Tambahan & Aksesoris (Otomatis dari Kartu HPP)</span>
                                         </span>
-                                    @else
-                                        <form method="POST" action="{{ route('custom-orders.cut-material', $order) }}" onsubmit="return confirm('Potong {{ $order->material_meters }} {{ $order->material->unit }} bahan {{ $order->material->name }} dari stok gudang?')">
-                                            @csrf
-                                            <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-xs">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z"/></svg>
-                                                <span>Potong Bahan dari Stok</span>
-                                            </button>
-                                        </form>
-                                    @endif
+                                        <span class="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                            Rp {{ number_format($order->ai_estimation['materials']['total_supporting_cost'] ?? 0, 0, ',', '.') }}
+                                        </span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                        @foreach ($order->ai_estimation['materials']['supporting_materials'] as $item)
+                                            <div class="p-2 rounded-lg bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px]">
+                                                <div class="min-w-0 pr-2">
+                                                    <span class="font-mono text-[9px] px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">{{ $item['code'] }}</span>
+                                                    <span class="font-medium text-slate-800 dark:text-slate-200 ml-1">{{ $item['name'] }}</span>
+                                                    <div class="text-[10px] text-slate-400 mt-0.5">
+                                                        {{ $item['quantity'] }} {{ $item['unit'] }} @ Rp {{ number_format($item['unit_price'], 0, ',', '.') }}
+                                                    </div>
+                                                </div>
+                                                <span class="font-mono font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                                                    Rp {{ number_format($item['subtotal'], 0, ',', '.') }}
+                                                </span>
+                                            </div>
+                                        @endforeach
+                                    </div>
                                 </div>
-                            </div>
-                        @endif
+                            @endif
+                        </div>
 
                         <!-- Ukuran Tubuh Pelanggan -->
                         <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
@@ -210,12 +242,22 @@
 
                         <div class="space-y-2.5 text-xs">
                             <div class="flex justify-between text-slate-600 dark:text-slate-400">
-                                <span>Biaya Bahan Baku Kain:</span>
-                                <span class="font-mono">Rp {{ number_format($order->material_cost, 0, ',', '.') }}</span>
+                                <span>Biaya Kain Utama:</span>
+                                <span class="font-mono">Rp {{ number_format($order->ai_estimation['financial']['raw_material_cost'] ?? $order->material_cost, 0, ',', '.') }}</span>
                             </div>
+                            @if (!empty($order->ai_estimation['financial']['supporting_material_cost']) || !empty($order->ai_estimation['materials']['total_supporting_cost']))
+                                <div class="flex justify-between text-slate-600 dark:text-slate-400">
+                                    <span>Bahan Tambahan & Aksesoris (HPP):</span>
+                                    <span class="font-mono">Rp {{ number_format($order->ai_estimation['financial']['supporting_material_cost'] ?? $order->ai_estimation['materials']['total_supporting_cost'] ?? 0, 0, ',', '.') }}</span>
+                                </div>
+                            @endif
                             <div class="flex justify-between text-slate-600 dark:text-slate-400">
                                 <span>Ongkos Pengerjaan Penjahit:</span>
                                 <span class="font-mono">Rp {{ number_format($order->labor_cost, 0, ',', '.') }}</span>
+                            </div>
+                            <div class="flex justify-between text-slate-600 dark:text-slate-400">
+                                <span>Kost Tambahan (Listrik & Overhead):</span>
+                                <span class="font-mono">Rp {{ number_format($order->overhead_cost, 0, ',', '.') }}</span>
                             </div>
                             <div class="flex justify-between font-bold pt-2 border-t border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white">
                                 <span>TOTAL HPP (MODAL):</span>
