@@ -3,8 +3,13 @@
 namespace Database\Seeders;
 
 use App\Models\Account;
+use App\Models\CostSheet;
+use App\Models\CostSheetItem;
+use App\Models\CostSheetVariant;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Material;
+use App\Models\MaterialStockMovement;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -35,6 +40,7 @@ class DatabaseSeeder extends Seeder
             ['code' => '1001', 'name' => 'Kas Operasional', 'type' => 'asset'],
             ['code' => '1002', 'name' => 'Bank BCA', 'type' => 'asset'],
             ['code' => '1003', 'name' => 'Persediaan Barang Dagang (Retail)', 'type' => 'asset'],
+            ['code' => '1004', 'name' => 'Persediaan Bahan Baku & Pembantu', 'type' => 'asset'],
             ['code' => '4001', 'name' => 'Pendapatan Usaha', 'type' => 'revenue'],
             ['code' => '4002', 'name' => 'Pendapatan Penjualan Retail', 'type' => 'revenue'],
             ['code' => '4003', 'name' => 'Pendapatan Jasa Pembuatan Jas Custom', 'type' => 'revenue'],
@@ -192,6 +198,144 @@ class DatabaseSeeder extends Seeder
 
             foreach ($sampleProducts as $p) {
                 Product::create($p);
+            }
+        }
+
+        // Seed Master Bahan & Komponen Biaya (Materials) jika masih kosong
+        if (Material::count() === 0) {
+            $accBahan = Account::where('code', '1004')->first() ?? Account::where('code', '1003')->first();
+            $accBOP = Account::where('code', '5001')->first();
+            $accGaji = Account::where('code', '5002')->first();
+
+            $materials = [
+                ['id' => 1, 'code' => 'MAT-JTB', 'name' => 'Kain Jetblack', 'category' => 'raw_material', 'unit' => 'meter', 'standard_cost' => 60000.00, 'stock' => 50.0, 'min_stock' => 10.0, 'account_id' => $accBahan?->id],
+                ['id' => 2, 'code' => 'MAT-DRM', 'name' => 'Furing Durmil', 'category' => 'supporting_material', 'unit' => 'meter', 'standard_cost' => 13000.00, 'stock' => 50.0, 'min_stock' => 10.0, 'account_id' => $accBahan?->id],
+                ['id' => 3, 'code' => 'MAT-VSL', 'name' => 'Vislin', 'category' => 'supporting_material', 'unit' => 'meter', 'standard_cost' => 7000.00, 'stock' => 40.0, 'min_stock' => 10.0, 'account_id' => $accBahan?->id],
+                ['id' => 4, 'code' => 'MAT-BSB', 'name' => 'Busa Biasa', 'category' => 'supporting_material', 'unit' => 'pcs', 'standard_cost' => 910.00, 'stock' => 100.0, 'min_stock' => 20.0, 'account_id' => $accBahan?->id],
+                ['id' => 5, 'code' => 'MAT-KCB', 'name' => 'Kancing Besar Niko', 'category' => 'accessory', 'unit' => 'pcs', 'standard_cost' => 700.00, 'stock' => 200.0, 'min_stock' => 50.0, 'account_id' => $accBahan?->id],
+                ['id' => 6, 'code' => 'MAT-RNG', 'name' => 'Ring Lengan', 'category' => 'accessory', 'unit' => 'pasang', 'standard_cost' => 3500.00, 'stock' => 50.0, 'min_stock' => 10.0, 'account_id' => $accBahan?->id],
+                ['id' => 7, 'code' => 'MAT-KCK', 'name' => 'Kancing Kecil Niko', 'category' => 'accessory', 'unit' => 'pcs', 'standard_cost' => 350.00, 'stock' => 300.0, 'min_stock' => 50.0, 'account_id' => $accBahan?->id],
+                ['id' => 8, 'code' => 'MAT-KKJ', 'name' => 'Kain Keras Jas', 'category' => 'supporting_material', 'unit' => 'cm', 'standard_cost' => 300.00, 'stock' => 500.0, 'min_stock' => 100.0, 'account_id' => $accBahan?->id],
+                ['id' => 9, 'code' => 'BOP-ELC', 'name' => 'Biaya Listrik Pabrik', 'category' => 'overhead', 'unit' => 'pcs', 'standard_cost' => 7000.00, 'stock' => 0, 'min_stock' => 0, 'account_id' => $accBOP?->id],
+                ['id' => 10, 'code' => 'LAB-JHT', 'name' => 'Upah Penjahit Jas Reguler', 'category' => 'direct_labor', 'unit' => 'pcs', 'standard_cost' => 50000.00, 'stock' => 0, 'min_stock' => 0, 'account_id' => $accGaji?->id],
+                ['id' => 11, 'code' => 'LAB-STR', 'name' => 'Biaya Setrika Uap & Finishing', 'category' => 'direct_labor', 'unit' => 'pcs', 'standard_cost' => 4800.00, 'stock' => 0, 'min_stock' => 0, 'account_id' => $accGaji?->id],
+                ['id' => 12, 'code' => 'BOP-ETC', 'name' => 'Biaya Operasional Lain-Lain', 'category' => 'overhead', 'unit' => 'pcs', 'standard_cost' => 2000.00, 'stock' => 0, 'min_stock' => 0, 'account_id' => $accBOP?->id],
+            ];
+
+            foreach ($materials as $mat) {
+                $createdMat = Material::create($mat);
+
+                // Buat mutasi saldo awal untuk bahan fisik
+                if ($createdMat->isPhysical() && $createdMat->stock > 0) {
+                    MaterialStockMovement::create([
+                        'material_id' => $createdMat->id,
+                        'type' => 'in',
+                        'quantity' => $createdMat->stock,
+                        'unit_cost' => $createdMat->standard_cost,
+                        'reference_type' => 'purchase',
+                        'reference_number' => 'INIT-STOCK',
+                        'notes' => 'Saldo awal persediaan bahan baku gudang.',
+                    ]);
+                }
+            }
+
+            // Hubungkan dengan produk pertama jika ada
+            $productJas = Product::first();
+
+            // Seed Header Kartu HPP
+            $costSheet = CostSheet::create([
+                'id' => 1,
+                'code' => 'HPP-JAS-REG-JTB',
+                'name' => 'Jas Reguler Jetblack',
+                'category' => 'jas_reguler',
+                'fabric_type' => 'Jetblack',
+                'product_id' => $productJas?->id,
+                'description' => 'Standar kartu HPP pembuatan jas reguler bahan jetblack furing durmil.',
+            ]);
+
+            // Seed Varian Ukuran S dan M
+            $variantS = CostSheetVariant::create([
+                'id' => 1,
+                'cost_sheet_id' => $costSheet->id,
+                'size' => 'S',
+                'total_material_cost' => 143520.00,
+                'total_labor_cost' => 54800.00,
+                'total_overhead_cost' => 9000.00,
+                'total_cost_price' => 207320.00,
+                'suggested_selling_price' => 450000.00,
+                'notes' => 'Varian ukuran S standar slim fit',
+            ]);
+
+            $variantM = CostSheetVariant::create([
+                'id' => 2,
+                'cost_sheet_id' => $costSheet->id,
+                'size' => 'M',
+                'total_material_cost' => 151520.00,
+                'total_labor_cost' => 54800.00,
+                'total_overhead_cost' => 9000.00,
+                'total_cost_price' => 215320.00,
+                'suggested_selling_price' => 450000.00,
+                'notes' => 'Varian ukuran M standar',
+            ]);
+
+            // Resep Komponen Size S
+            $itemsS = [
+                ['material_id' => 1, 'quantity' => 1.600, 'unit_price' => 60000.00, 'subtotal' => 96000.00],
+                ['material_id' => 2, 'quantity' => 1.600, 'unit_price' => 13000.00, 'subtotal' => 20800.00],
+                ['material_id' => 3, 'quantity' => 1.300, 'unit_price' => 7000.00,  'subtotal' => 9100.00],
+                ['material_id' => 4, 'quantity' => 2.000, 'unit_price' => 910.00,   'subtotal' => 1820.00],
+                ['material_id' => 5, 'quantity' => 1.000, 'unit_price' => 700.00,   'subtotal' => 700.00],
+                ['material_id' => 6, 'quantity' => 2.000, 'unit_price' => 3500.00,  'subtotal' => 7000.00],
+                ['material_id' => 7, 'quantity' => 6.000, 'unit_price' => 350.00,   'subtotal' => 2100.00],
+                ['material_id' => 8, 'quantity' => 20.000, 'unit_price' => 300.00,  'subtotal' => 6000.00],
+                ['material_id' => 9, 'quantity' => 1.000, 'unit_price' => 7000.00,  'subtotal' => 7000.00],
+                ['material_id' => 10, 'quantity' => 1.000, 'unit_price' => 50000.00, 'subtotal' => 50000.00],
+                ['material_id' => 11, 'quantity' => 1.000, 'unit_price' => 4800.00,  'subtotal' => 4800.00],
+                ['material_id' => 12, 'quantity' => 1.000, 'unit_price' => 2000.00,  'subtotal' => 2000.00],
+            ];
+
+            foreach ($itemsS as $it) {
+                CostSheetItem::create([
+                    'cost_sheet_variant_id' => $variantS->id,
+                    'material_id' => $it['material_id'],
+                    'quantity' => $it['quantity'],
+                    'unit_price' => $it['unit_price'],
+                    'subtotal' => $it['subtotal'],
+                ]);
+            }
+
+            // Resep Komponen Size M
+            $itemsM = [
+                ['material_id' => 1, 'quantity' => 1.700, 'unit_price' => 60000.00, 'subtotal' => 102000.00],
+                ['material_id' => 2, 'quantity' => 1.700, 'unit_price' => 13000.00, 'subtotal' => 22100.00],
+                ['material_id' => 3, 'quantity' => 1.400, 'unit_price' => 7000.00,  'subtotal' => 9800.00],
+                ['material_id' => 4, 'quantity' => 2.000, 'unit_price' => 910.00,   'subtotal' => 1820.00],
+                ['material_id' => 5, 'quantity' => 1.000, 'unit_price' => 700.00,   'subtotal' => 700.00],
+                ['material_id' => 6, 'quantity' => 2.000, 'unit_price' => 3500.00,  'subtotal' => 7000.00],
+                ['material_id' => 7, 'quantity' => 6.000, 'unit_price' => 350.00,   'subtotal' => 2100.00],
+                ['material_id' => 8, 'quantity' => 20.000, 'unit_price' => 300.00,  'subtotal' => 6000.00],
+                ['material_id' => 9, 'quantity' => 1.000, 'unit_price' => 7000.00,  'subtotal' => 7000.00],
+                ['material_id' => 10, 'quantity' => 1.000, 'unit_price' => 50000.00, 'subtotal' => 50000.00],
+                ['material_id' => 11, 'quantity' => 1.000, 'unit_price' => 4800.00,  'subtotal' => 4800.00],
+                ['material_id' => 12, 'quantity' => 1.000, 'unit_price' => 2000.00,  'subtotal' => 2000.00],
+            ];
+
+            foreach ($itemsM as $it) {
+                CostSheetItem::create([
+                    'cost_sheet_variant_id' => $variantM->id,
+                    'material_id' => $it['material_id'],
+                    'quantity' => $it['quantity'],
+                    'unit_price' => $it['unit_price'],
+                    'subtotal' => $it['subtotal'],
+                ]);
+            }
+
+            // Sync cost price to product if exists
+            if ($productJas) {
+                $productJas->update([
+                    'cost_sheet_variant_id' => $variantS->id,
+                    'cost_price' => $variantS->total_cost_price,
+                ]);
             }
         }
     }

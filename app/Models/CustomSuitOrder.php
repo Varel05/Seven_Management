@@ -34,11 +34,14 @@ class CustomSuitOrder extends Model
         'due_date',
         'suit_type',
         'fabric_type',
+        'material_id',
         'color',
         'body_measurements',
         'reference_image',
         'ai_estimation',
         'material_cost',
+        'material_meters',
+        'is_material_cut',
         'labor_cost',
         'total_cost',
         'total_price',
@@ -57,11 +60,21 @@ class CustomSuitOrder extends Model
         'body_measurements' => 'array',
         'ai_estimation' => 'array',
         'material_cost' => 'float',
+        'material_meters' => 'float',
+        'is_material_cut' => 'boolean',
         'labor_cost' => 'float',
         'total_cost' => 'float',
         'total_price' => 'float',
         'down_payment' => 'float',
     ];
+
+    /**
+     * Master bahan kain fisik yang digunakan dari stok gudang.
+     */
+    public function material(): BelongsTo
+    {
+        return $this->belongsTo(Material::class);
+    }
 
     /**
      * Akun kas/bank penerima transaksi pesanan.

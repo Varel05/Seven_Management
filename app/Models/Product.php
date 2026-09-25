@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
@@ -33,6 +34,7 @@ class Product extends Model
         'size',
         'color',
         'cost_price',
+        'cost_sheet_variant_id',
         'selling_price',
         'rental_price',
         'is_for_rent',
@@ -77,6 +79,28 @@ class Product extends Model
     public function saleItems(): HasMany
     {
         return $this->hasMany(RetailSaleItem::class);
+    }
+
+    /**
+     * Relasi ke varian kartu HPP (BOM).
+     */
+    public function costSheetVariant(): BelongsTo
+    {
+        return $this->belongsTo(CostSheetVariant::class, 'cost_sheet_variant_id');
+    }
+
+    /**
+     * Sinkronisasi nilai HPP (cost_price) dari varian kartu HPP.
+     */
+    public function syncCostPriceFromVariant(): bool
+    {
+        if ($this->costSheetVariant) {
+            $this->update(['cost_price' => $this->costSheetVariant->total_cost_price]);
+
+            return true;
+        }
+
+        return false;
     }
 
     /**

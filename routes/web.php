@@ -1,10 +1,13 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\CostSheetController;
 use App\Http\Controllers\CustomSuitOrderController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\JournalExportController;
+use App\Http\Controllers\MaterialController;
+use App\Http\Controllers\ProductionOrderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
 use App\Http\Controllers\RetailController;
@@ -75,6 +78,27 @@ Route::middleware('auth')->group(function () {
     Route::post('/custom-orders/estimate', [CustomSuitOrderController::class, 'calculateEstimate'])->name('custom-orders.estimate');
     Route::patch('/custom-orders/{order}/status', [CustomSuitOrderController::class, 'updateStatus'])->name('custom-orders.status');
     Route::post('/custom-orders/{order}/payment', [CustomSuitOrderController::class, 'recordPayment'])->name('custom-orders.payment');
+    Route::post('/custom-orders/{order}/cut-material', [CustomSuitOrderController::class, 'cutMaterial'])->name('custom-orders.cut-material');
+
+    // Manajemen Stok Bahan Baku & Komponen Biaya
+    Route::get('/materials', MaterialController::class.'@index')->name('materials.index');
+    Route::post('/materials', MaterialController::class.'@store')->name('materials.store');
+    Route::put('/materials/{material}', MaterialController::class.'@update')->name('materials.update');
+    Route::post('/materials/{material}/restock', MaterialController::class.'@restock')->name('materials.restock');
+    Route::delete('/materials/{material}', MaterialController::class.'@destroy')->name('materials.destroy');
+
+    // Kartu HPP & Bill of Materials (BOM)
+    Route::get('/cost-sheets', CostSheetController::class.'@index')->name('cost-sheets.index');
+    Route::post('/cost-sheets', CostSheetController::class.'@store')->name('cost-sheets.store');
+    Route::get('/cost-sheets/{costSheet}', CostSheetController::class.'@show')->name('cost-sheets.show');
+    Route::post('/cost-sheets/{costSheet}/variants', CostSheetController::class.'@storeVariant')->name('cost-sheets.variants.store');
+    Route::post('/cost-sheet-variants/{variant}/items', CostSheetController::class.'@storeItem')->name('cost-sheets.items.store');
+    Route::delete('/cost-sheet-items/{item}', CostSheetController::class.'@destroyItem')->name('cost-sheets.items.destroy');
+    Route::post('/cost-sheet-variants/{variant}/sync-product', CostSheetController::class.'@syncProduct')->name('cost-sheets.sync-product');
+
+    // Form Manual Produksi Baju (Work Order & Eksekusi Potong Bahan)
+    Route::get('/production/create', ProductionOrderController::class.'@create')->name('production.create');
+    Route::post('/production', ProductionOrderController::class.'@store')->name('production.store');
 });
 
 require __DIR__.'/auth.php';

@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Material;
+
 class SuitMaterialEstimatorService
 {
     /**
@@ -44,8 +46,20 @@ class SuitMaterialEstimatorService
         // 1. Hitung kebutuhan bahan baku utama & pelengkap
         $materialRequirements = $this->calculateMaterials($suitType, $bodyMultiplier, $aiVisionData, $customOptions);
 
+        // Cek apakah bahan kain dipilih dari master materials gudang
+        $selectedMaterial = null;
+        if (! empty($customOptions['material_id'])) {
+            $selectedMaterial = Material::find($customOptions['material_id']);
+            if ($selectedMaterial) {
+                $materialRequirements['main_fabric_desc'] = $selectedMaterial->name;
+            }
+        }
+
         // 2. Tentukan tarif harga kain & aksesoris
-        $mainFabricPricePerMeter = (float) ($customOptions['fabric_price_per_meter'] ?? $this->getDefaultFabricPrice($suitType));
+        $mainFabricPricePerMeter = $selectedMaterial
+            ? (float) $selectedMaterial->standard_cost
+            : (float) ($customOptions['fabric_price_per_meter'] ?? $this->getDefaultFabricPrice($suitType));
+
         $liningPricePerMeter = 45000;  // Kain furing Dormeuil / satin
         $kufnerPricePerMeter = 55000;  // Interlining / kain keras kufner jas
 
@@ -84,6 +98,13 @@ class SuitMaterialEstimatorService
                 'accessories_cost' => $accessoriesCost,
                 'accessories_notes' => $materialRequirements['accessories_notes'],
                 'total_material_cost' => $totalMaterialCost,
+                'inventory' => $selectedMaterial ? [
+                    'material_id' => $selectedMaterial->id,
+                    'material_name' => $selectedMaterial->name,
+                    'available_stock' => (float) $selectedMaterial->stock,
+                    'unit' => $selectedMaterial->unit,
+                    'is_sufficient' => $selectedMaterial->stock >= $materialRequirements['main_fabric_meters'],
+                ] : null,
             ],
             'labor' => [
                 'labor_cost' => $laborCost,

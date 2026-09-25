@@ -113,6 +113,37 @@
                             </div>
                         </div>
 
+                        <!-- Integrasi Master Bahan Gudang & Status Pemotongan Kain -->
+                        @if ($order->material_id && $order->material)
+                            <div class="p-3.5 rounded-xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                <div>
+                                    <div class="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                                        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                                        <span>Bahan Gudang: {{ $order->material->name }} ({{ $order->material_meters }} {{ $order->material->unit }})</span>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500 mt-0.5">
+                                        Sisa stok saat ini di gudang: <strong class="text-slate-700 dark:text-slate-300">{{ $order->material->formatted_stock }}</strong>
+                                    </div>
+                                </div>
+                                <div>
+                                    @if ($order->is_material_cut)
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                            <span>Bahan Sudah Dipotong</span>
+                                        </span>
+                                    @else
+                                        <form method="POST" action="{{ route('custom-orders.cut-material', $order) }}" onsubmit="return confirm('Potong {{ $order->material_meters }} {{ $order->material->unit }} bahan {{ $order->material->name }} dari stok gudang?')">
+                                            @csrf
+                                            <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-xs">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z"/></svg>
+                                                <span>Potong Bahan dari Stok</span>
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
+
                         <!-- Ukuran Tubuh Pelanggan -->
                         <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
                             <span class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Ukuran Tubuh Klien (cm)</span>

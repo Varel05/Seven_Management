@@ -19,6 +19,10 @@
 
     <div class="py-8" x-data="{
         suitType: 'jas_blazer_pria',
+        materials: {{ json_encode($materials) }},
+        materialId: '',
+        selectedMaterialObj: null,
+        materialMeters: 0,
         fabricType: '',
         color: '',
         height: 172,
@@ -37,6 +41,16 @@
         estimateResult: null,
         hasAnalyzed: false,
         imagePreview: null,
+        onMaterialSelected() {
+            const found = this.materials.find(m => m.id == this.materialId);
+            if (found) {
+                this.selectedMaterialObj = found;
+                this.fabricType = found.name;
+                this.fabricPrice = found.standard_cost;
+            } else {
+                this.selectedMaterialObj = null;
+            }
+        },
         onImageSelected(event) {
             const file = event.target.files[0];
             if (file) {
@@ -50,6 +64,7 @@
             try {
                 let formData = new FormData();
                 formData.append('suit_type', this.suitType);
+                formData.append('material_id', this.materialId || '');
                 formData.append('fabric_type', this.fabricType || '');
                 formData.append('color', this.color || '');
                 formData.append('height', this.height || '');
@@ -79,6 +94,9 @@
                 if (json.success) {
                     this.estimateResult = json.data;
                     this.hasAnalyzed = true;
+                    if (json.data?.materials?.main_fabric_meters) {
+                        this.materialMeters = json.data.materials.main_fabric_meters;
+                    }
 
                     // Jika user belum mengisi harga kesepakatan, beri saran awal dari kalkulasi AI
                     if ((!this.totalPrice || this.totalPrice == 0) && json.data.financial?.suggested_price) {
@@ -109,6 +127,8 @@
             
             <form method="POST" action="{{ route('custom-orders.store') }}" enctype="multipart/form-data" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 @csrf
+                <input type="hidden" name="material_id" :value="materialId">
+                <input type="hidden" name="material_meters" :value="materialMeters">
 
                 <!-- Left Column: Form Inputs (7 cols) -->
                 <div class="lg:col-span-7 space-y-6">
@@ -153,6 +173,33 @@
                             <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/20">
                                 Input Analisis AI
                             </span>
+                        </div>
+
+                        <!-- Pilih Bahan dari Stok Gudang (Integrasi Master Materials) -->
+                        <div class="p-3.5 rounded-xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-bold text-emerald-900 dark:text-emerald-300">
+                                    Pilih Kain dari Stok Gudang (Terintegrasi)
+                                </label>
+                                <span class="text-[10px] text-emerald-600 dark:text-emerald-400">Master Bahan Baku</span>
+                            </div>
+                            <select x-model="materialId" @change="onMaterialSelected()" class="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border-emerald-300 dark:border-emerald-700 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 font-medium">
+                                <option value="">-- Kain Kustom / Tidak dari Stok Gudang --</option>
+                                <template x-for="mat in materials" :key="mat.id">
+                                    <option :value="mat.id" x-text="mat.name + ' (Sisa Stok: ' + mat.stock + ' ' + mat.unit + ') - Rp ' + Number(mat.standard_cost).toLocaleString('id-ID') + '/' + mat.unit"></option>
+                                </template>
+                            </select>
+
+                            <template x-if="selectedMaterialObj">
+                                <div class="flex items-center gap-2 pt-1">
+                                    <span class="px-2 py-0.5 rounded text-[11px] font-bold"
+                                          :class="selectedMaterialObj.stock >= 2.5 ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'">
+                                        <span x-text="'Stok Gudang: ' + selectedMaterialObj.stock + ' ' + selectedMaterialObj.unit"></span>
+                                        <span x-show="selectedMaterialObj.stock < 2.5"> (Menipis!)</span>
+                                    </span>
+                                    <span class="text-[11px] text-slate-500">Harga Standar: <strong class="text-slate-700 dark:text-slate-300" x-text="'Rp ' + Number(selectedMaterialObj.standard_cost).toLocaleString('id-ID') + '/m'"></strong></span>
+                                </div>
+                            </template>
                         </div>
 
                         <!-- Kategori, Tipe Kain, Warna -->
