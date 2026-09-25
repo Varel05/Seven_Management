@@ -133,10 +133,14 @@
             </div>
 
             <!-- Filter & Status Pipeline Bar -->
-            <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-                <form method="GET" action="{{ route('custom-orders.index') }}" class="flex flex-col md:flex-row gap-3 items-center justify-between">
-                    <div class="relative w-full md:w-80">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                <!-- Baris 1: Pencarian Cepat -->
+                <form method="GET" action="{{ route('custom-orders.index') }}" class="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+                    @if ($selectedStatus)
+                        <input type="hidden" name="status" value="{{ $selectedStatus }}">
+                    @endif
+                    <div class="relative w-full sm:max-w-md">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                         </div>
                         <input 
@@ -144,28 +148,50 @@
                             name="q" 
                             value="{{ $search }}" 
                             placeholder="Cari nama klien, no. pesanan, telepon..." 
-                            class="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:ring-emerald-500 focus:border-emerald-500"
+                            class="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
                         >
                     </div>
 
-                    <!-- Pipeline Stage Badges -->
-                    <div class="flex items-center gap-1.5 overflow-x-auto w-full pb-1 scrollbar-thin">
-                        <a 
-                            href="{{ route('custom-orders.index', array_filter(['q' => $search])) }}" 
-                            class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all {{ empty($selectedStatus) ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700' }}"
-                        >
-                            Semua Pesanan
-                        </a>
-                        @foreach ($statuses as $stKey => $stLabel)
-                            <a 
-                                href="{{ route('custom-orders.index', array_filter(['status' => $stKey, 'q' => $search])) }}" 
-                                class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all {{ $selectedStatus === $stKey ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700' }}"
-                            >
-                                {{ $stLabel }}
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button type="submit" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            <span>Cari Pesanan</span>
+                        </button>
+
+                        @if ($search || $selectedStatus)
+                            <a href="{{ route('custom-orders.index') }}" class="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer" title="Hapus semua filter pencarian & status">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                <span>Reset</span>
                             </a>
-                        @endforeach
+                        @endif
                     </div>
                 </form>
+
+                <!-- Baris 2: Filter Status / Kategori Tahap Pengerjaan (Auto-Wrap jika Melebihi Lebar Layar) -->
+                <div class="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mr-1 shrink-0">
+                        <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                        </svg>
+                        <span>Filter Status:</span>
+                    </span>
+
+                    <a 
+                        href="{{ route('custom-orders.index', array_filter(['q' => $search])) }}" 
+                        class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer {{ empty($selectedStatus) ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700' }}"
+                    >
+                        Semua Pesanan
+                    </a>
+
+                    @foreach ($statuses as $stKey => $stLabel)
+                        <a 
+                            href="{{ route('custom-orders.index', array_filter(['status' => $stKey, 'q' => $search])) }}" 
+                            class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer {{ $selectedStatus === $stKey ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700' }}"
+                        >
+                            {{ $stLabel }}
+                        </a>
+                    @endforeach
+                </div>
             </div>
 
             <!-- Orders Table -->

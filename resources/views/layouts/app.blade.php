@@ -28,7 +28,28 @@
         <!-- Chart.js for Financial Charts -->
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
-    <body class="font-sans antialiased bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 relative selection:bg-emerald-500 selection:text-white">
+    <body 
+        x-data="{ 
+            sidebarOpen: localStorage.getItem('sidebar_open') !== 'false',
+            mobileSidebarOpen: false, 
+            darkMode: localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches),
+            toggleSidebar() {
+                this.sidebarOpen = !this.sidebarOpen;
+                localStorage.setItem('sidebar_open', this.sidebarOpen);
+            },
+            toggleDarkMode() {
+                this.darkMode = !this.darkMode;
+                if (this.darkMode) {
+                    document.documentElement.classList.add('dark');
+                    localStorage.theme = 'dark';
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.theme = 'light';
+                }
+            }
+        }"
+        class="font-sans antialiased bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 relative selection:bg-emerald-500 selection:text-white"
+    >
         <!-- Ambient Color Lighting for Light & Dark Mode -->
         <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
             <div class="absolute -top-40 left-1/4 w-[600px] h-[350px] bg-gradient-to-br from-emerald-300/20 via-teal-200/15 to-transparent dark:from-emerald-500/10 dark:via-transparent blur-3xl rounded-full"></div>
@@ -39,23 +60,25 @@
         <div class="min-h-screen bg-transparent">
             @include('layouts.navigation')
 
-            <!-- Page Heading (Deep Emerald Banner) -->
-            @isset($header)
-                <header class="relative bg-emerald-950 dark:bg-slate-900 border-b border-emerald-900/80 dark:border-slate-800 shadow-md text-white overflow-hidden transition-colors">
-                    <!-- Ambient subtle glowing accents -->
-                    <div class="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/15 dark:bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                    <div class="absolute -bottom-24 -left-24 w-80 h-80 bg-teal-400/10 dark:bg-teal-500/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div :class="sidebarOpen ? 'md:pl-64' : 'md:pl-16'" class="flex flex-col min-h-screen pt-16 transition-all duration-300">
+                <!-- Page Heading (Deep Emerald Banner) -->
+                @isset($header)
+                    <header class="relative bg-emerald-950 dark:bg-slate-900 border-b border-emerald-900/80 dark:border-slate-800 shadow-md text-white overflow-hidden transition-colors">
+                        <!-- Ambient subtle glowing accents -->
+                        <div class="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/15 dark:bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                        <div class="absolute -bottom-24 -left-24 w-80 h-80 bg-teal-400/10 dark:bg-teal-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                    <div class="max-w-[1800px] w-full mx-auto py-5 px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
-                        {{ $header }}
-                    </div>
-                </header>
-            @endisset
+                        <div class="max-w-[1800px] w-full mx-auto py-5 px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
+                            {{ $header }}
+                        </div>
+                    </header>
+                @endisset
 
-            <!-- Page Content -->
-            <main>
-                {{ $slot }}
-            </main>
+                <!-- Page Content -->
+                <main class="flex-1">
+                    {{ $slot }}
+                </main>
+            </div>
         </div>
     </body>
 </html>

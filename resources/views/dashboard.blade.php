@@ -453,64 +453,64 @@
             @endif
 
             <!-- 1. VIBRANT FINANCIAL KPI CARDS GRID -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 xl:gap-5">
                 
                 <!-- Card 1: Saldo Kas & Bank (Liquid Assets) -->
-                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-blue-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-blue-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-slate-700 dark:text-blue-300 uppercase tracking-wider">Kas & Bank</span>
-                        <div class="p-2.5 rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                        <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-blue-300 uppercase tracking-wider">Kas & Bank</span>
+                        <div class="p-2 xl:p-2.5 rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
+                            <svg class="w-4 h-4 xl:w-5 xl:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                         </div>
                     </div>
-                    <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white" x-text="kpi.totalKasDanBank">
+                    <div class="mt-3">
+                        <div class="text-base sm:text-lg xl:text-xl 2xl:text-2xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white whitespace-nowrap truncate" x-text="kpi.totalKasDanBank">
                             Rp {{ number_format($totalKasDanBank ?? $totalKas ?? 0, 0, ',', '.') }}
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                            <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                            <span>Kas Ops: <span x-text="kpi.totalKas">Rp {{ number_format($totalKas ?? 0, 0, ',', '.') }}</span></span>
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400 truncate">
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                            <span class="truncate">Kas Ops: <span x-text="kpi.totalKas">Rp {{ number_format($totalKas ?? 0, 0, ',', '.') }}</span></span>
                         </div>
                     </div>
                 </div>
 
                 <!-- Card 2: Pemasukan Bulan Ini (Revenue) -->
-                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-slate-700 dark:text-emerald-300 uppercase tracking-wider">Pendapatan</span>
-                        <div class="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                        <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-emerald-300 uppercase tracking-wider">Pendapatan</span>
+                        <div class="p-2 xl:p-2.5 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
+                            <svg class="w-4 h-4 xl:w-5 xl:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                         </div>
                     </div>
-                    <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight text-emerald-700 dark:text-emerald-400" x-text="kpi.pemasukanBulanIni">
+                    <div class="mt-3">
+                        <div class="text-base sm:text-lg xl:text-xl 2xl:text-2xl font-extrabold font-mono tracking-tight text-emerald-700 dark:text-emerald-400 whitespace-nowrap truncate" x-text="kpi.pemasukanBulanIni">
                             Rp {{ number_format($pemasukanBulanIni ?? 0, 0, ',', '.') }}
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            <span>Total Akun Revenue</span>
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400 truncate">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                            <span class="truncate">Total Akun Revenue</span>
                         </div>
                     </div>
                 </div>
 
                 <!-- Card 3: Pengeluaran Bulan Ini (Expenses) -->
-                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-rose-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-rose-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-500 to-pink-500"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-slate-700 dark:text-rose-300 uppercase tracking-wider">Beban Usaha</span>
-                        <div class="p-2.5 rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>
+                        <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-rose-300 uppercase tracking-wider">Beban Usaha</span>
+                        <div class="p-2 xl:p-2.5 rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
+                            <svg class="w-4 h-4 xl:w-5 xl:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>
                         </div>
                     </div>
-                    <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight text-rose-700 dark:text-rose-400" x-text="kpi.pengeluaranBulanIni">
+                    <div class="mt-3">
+                        <div class="text-base sm:text-lg xl:text-xl 2xl:text-2xl font-extrabold font-mono tracking-tight text-rose-700 dark:text-rose-400 whitespace-nowrap truncate" x-text="kpi.pengeluaranBulanIni">
                             Rp {{ number_format($pengeluaranBulanIni ?? 0, 0, ',', '.') }}
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                            <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                            <span>Total Akun Beban</span>
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400 truncate">
+                            <span class="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                            <span class="truncate">Total Akun Beban</span>
                         </div>
                     </div>
                 </div>
@@ -519,43 +519,43 @@
                 @php
                     $isProfit = ($labaBersihBulanIni ?? 0) >= 0;
                 @endphp
-                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-teal-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-teal-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-teal-500 to-cyan-500"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-slate-700 dark:text-teal-300 uppercase tracking-wider">Laba / Rugi Bersih</span>
-                        <div class="p-2.5 rounded-xl {{ $isProfit ? 'bg-teal-50 text-teal-600 dark:bg-teal-600 dark:text-white' : 'bg-rose-50 text-rose-600 dark:bg-rose-600 dark:text-white' }} shadow-xs group-hover:scale-105 transition-transform">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-teal-300 uppercase tracking-wider">Laba / Rugi Bersih</span>
+                        <div class="p-2 xl:p-2.5 rounded-xl {{ $isProfit ? 'bg-teal-50 text-teal-600 dark:bg-teal-600 dark:text-white' : 'bg-rose-50 text-rose-600 dark:bg-rose-600 dark:text-white' }} shadow-xs group-hover:scale-105 transition-transform">
+                            <svg class="w-4 h-4 xl:w-5 xl:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                             </svg>
                         </div>
                     </div>
-                    <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight" :class="kpi.isProfit ? 'text-teal-700 dark:text-teal-400' : 'text-rose-700 dark:text-rose-400'" x-text="kpi.labaBersihBulanIni">
+                    <div class="mt-3">
+                        <div class="text-base sm:text-lg xl:text-xl 2xl:text-2xl font-extrabold font-mono tracking-tight whitespace-nowrap truncate" :class="kpi.isProfit ? 'text-teal-700 dark:text-teal-400' : 'text-rose-700 dark:text-rose-400'" x-text="kpi.labaBersihBulanIni">
                             {{ $isProfit ? '+' : '-' }} Rp {{ number_format(abs($labaBersihBulanIni ?? 0), 0, ',', '.') }}
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs font-medium" :class="kpi.isProfit ? 'text-teal-700/80 dark:text-teal-400' : 'text-rose-700/80 dark:text-rose-400'">
-                            <span class="w-1.5 h-1.5 rounded-full" :class="kpi.isProfit ? 'bg-teal-500' : 'bg-rose-500'"></span>
-                            <span x-text="kpi.isProfit ? 'Surplus (Untung)' : 'Defisit (Rugi)'">{{ $isProfit ? 'Surplus (Untung)' : 'Defisit (Rugi)' }}</span>
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs font-medium truncate" :class="kpi.isProfit ? 'text-teal-700/80 dark:text-teal-400' : 'text-rose-700/80 dark:text-rose-400'">
+                            <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="kpi.isProfit ? 'bg-teal-500' : 'bg-rose-500'"></span>
+                            <span class="truncate" x-text="kpi.isProfit ? 'Surplus (Untung)' : 'Defisit (Rugi)'">{{ $isProfit ? 'Surplus (Untung)' : 'Defisit (Rugi)' }}</span>
                         </div>
                     </div>
                 </div>
 
                 <!-- Card 5: Perlu Audit / Verifikasi Telegram -->
-                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-slate-700 transition-all group">
+                <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-slate-700 transition-all group">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 to-orange-500"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-slate-700 dark:text-amber-300 uppercase tracking-wider">Perlu Audit AI</span>
-                        <div class="p-2.5 rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-amber-300 uppercase tracking-wider">Perlu Audit AI</span>
+                        <div class="p-2 xl:p-2.5 rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
+                            <svg class="w-4 h-4 xl:w-5 xl:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
                     </div>
-                    <div class="mt-3.5">
-                        <div class="text-2xl font-extrabold font-mono tracking-tight text-amber-700 dark:text-amber-400">
-                            <span x-text="kpi.pendingCount">{{ $pendingCount ?? 0 }}</span> <span class="text-sm font-sans font-normal text-slate-500 dark:text-slate-400">Trx</span>
+                    <div class="mt-3">
+                        <div class="text-base sm:text-lg xl:text-xl 2xl:text-2xl font-extrabold font-mono tracking-tight text-amber-700 dark:text-amber-400 whitespace-nowrap truncate">
+                            <span x-text="kpi.pendingCount">{{ $pendingCount ?? 0 }}</span> <span class="text-xs sm:text-sm font-sans font-normal text-slate-500 dark:text-slate-400">Trx</span>
                         </div>
-                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                            <span>Menunggu Review</span>
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400 truncate">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                            <span class="truncate">Menunggu Review</span>
                         </div>
                     </div>
                 </div>
@@ -770,7 +770,7 @@
                         </div>
                     </div>
 
-                    <!-- Trigger Switch: Harian (Bulan Ini) vs Bulanan (Tahun Ini) -->
+                    <!-- Trigger Switch: Harian vs Bulanan -->
                     <div class="flex items-center gap-2">
                         <span class="text-xs text-slate-500 dark:text-slate-400 hidden md:inline font-medium">Rentang Waktu:</span>
                         <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold">
@@ -778,19 +778,19 @@
                                 type="button"
                                 @click="switchMode('daily')" 
                                 :class="chartMode === 'daily' ? 'bg-emerald-600 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
-                                class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+                                class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
                             >
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                <span>Harian (Bulan Ini)</span>
+                                <span>Harian</span>
                             </button>
                             <button 
                                 type="button"
                                 @click="switchMode('monthly')" 
                                 :class="chartMode === 'monthly' ? 'bg-emerald-600 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
-                                class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+                                class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
                             >
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                                <span>Bulanan (Tahun Ini)</span>
+                                <span>Bulanan</span>
                             </button>
                         </div>
                     </div>

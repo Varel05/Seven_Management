@@ -116,37 +116,74 @@
             </div>
 
             <!-- Filter & Search Bar -->
-            <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-                <!-- Category Tabs -->
-                <div class="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+            <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                <!-- Baris 1: Pencarian & Dropdown Status Stok -->
+                <form method="GET" action="{{ route('materials.index') }}" class="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+                    @if ($selectedCategory)
+                        <input type="hidden" name="category" value="{{ $selectedCategory }}">
+                    @endif
+
+                    <div class="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center flex-1">
+                        <!-- Input Pencarian -->
+                        <div class="relative w-full sm:max-w-md">
+                            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            </div>
+                            <input 
+                                type="text" 
+                                name="q" 
+                                value="{{ $search }}" 
+                                placeholder="Cari kode atau nama bahan baku/komponen..." 
+                                class="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                            >
+                        </div>
+
+                        <!-- Filter Status Stok Gudang -->
+                        <div class="w-full sm:w-auto">
+                            <select name="stock_status" onchange="this.form.submit()" class="w-full sm:w-auto text-xs rounded-xl bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-emerald-500 py-2.5 px-3 cursor-pointer">
+                                <option value="">Semua Kondisi Stok</option>
+                                <option value="low" {{ $selectedStock === 'low' ? 'selected' : '' }}>⚠️ Stok Menipis (<= Min)</option>
+                                <option value="out" {{ $selectedStock === 'out' ? 'selected' : '' }}>⛔ Stok Habis (0)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button type="submit" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            <span>Cari Bahan</span>
+                        </button>
+
+                        @if ($search || $selectedCategory || $selectedStock)
+                            <a href="{{ route('materials.index') }}" class="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer" title="Hapus semua filter">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                <span>Reset</span>
+                            </a>
+                        @endif
+                    </div>
+                </form>
+
+                <!-- Baris 2: Filter Kategori Bahan (Auto-Wrap jika Melebihi Lebar Layar) -->
+                <div class="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mr-1 shrink-0">
+                        <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                        </svg>
+                        <span>Filter Kategori:</span>
+                    </span>
+
                     <a href="{{ route('materials.index', array_filter(['q' => $search, 'stock_status' => $selectedStock])) }}" 
-                       class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all {{ empty($selectedCategory) ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' }}">
+                       class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer {{ empty($selectedCategory) ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700' }}">
                         Semua Kategori
                     </a>
+
                     @foreach ($categories as $catKey => $catLabel)
                         <a href="{{ route('materials.index', array_filter(['category' => $catKey, 'q' => $search, 'stock_status' => $selectedStock])) }}" 
-                           class="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all {{ $selectedCategory === $catKey ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' }}">
+                           class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer {{ $selectedCategory === $catKey ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700' }}">
                             {{ $catLabel }}
                         </a>
                     @endforeach
                 </div>
-
-                <!-- Search & Stock Status Form -->
-                <form method="GET" action="{{ route('materials.index') }}" class="flex items-center gap-2 w-full md:w-auto">
-                    @if ($selectedCategory)
-                        <input type="hidden" name="category" value="{{ $selectedCategory }}">
-                    @endif
-                    <select name="stock_status" onchange="this.form.submit()" class="text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-emerald-500">
-                        <option value="">Semua Status Stok</option>
-                        <option value="low" {{ $selectedStock === 'low' ? 'selected' : '' }}>Stok Menipis</option>
-                        <option value="out" {{ $selectedStock === 'out' ? 'selected' : '' }}>Stok Habis</option>
-                    </select>
-                    <div class="relative w-full sm:w-64">
-                        <input type="text" name="q" value="{{ $search }}" placeholder="Cari kode / nama bahan..." 
-                               class="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-emerald-500">
-                        <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                    </div>
-                </form>
             </div>
 
             <!-- Tabel Master Bahan Baku -->
