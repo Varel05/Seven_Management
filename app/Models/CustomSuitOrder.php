@@ -131,6 +131,22 @@ class CustomSuitOrder extends Model
     }
 
     /**
+     * Label status produksi pengerjaan jas.
+     */
+    public function getProductionStatusLabelAttribute(): string
+    {
+        return self::PRODUCTION_STATUSES[$this->production_status] ?? ucfirst(str_replace('_', ' ', (string) $this->production_status));
+    }
+
+    /**
+     * Label status pembayaran (unpaid, partial_dp, paid).
+     */
+    public function getPaymentStatusLabelAttribute(): string
+    {
+        return self::PAYMENT_STATUSES[$this->payment_status] ?? ucfirst(str_replace('_', ' ', (string) $this->payment_status));
+    }
+
+    /**
      * Format rupiah harga pesanan.
      */
     public function getFormattedTotalPriceAttribute(): string

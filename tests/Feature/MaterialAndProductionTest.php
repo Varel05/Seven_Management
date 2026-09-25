@@ -255,4 +255,111 @@ class MaterialAndProductionTest extends TestCase
         // Stok kain berkurang dari 15.0 - 2.8 = 12.2 meter
         $this->assertEquals(12.2, $kain->stock);
     }
+
+    public function test_webhook_can_check_material_stock_and_low_stock_alerts(): void
+    {
+        $secret = 'test-secret';
+        config(['services.webhook.secret' => $secret]);
+
+        Material::create([
+            'code' => 'MAT-SAFE',
+            'name' => 'Kain Wool Premium',
+            'category' => 'raw_material',
+            'unit' => 'meter',
+            'standard_cost' => 120000,
+            'stock' => 50,
+            'min_stock' => 10,
+        ]);
+
+        Material::create([
+            'code' => 'MAT-LOW',
+            'name' => 'Furing Silk Dormeuil',
+            'category' => 'supporting_material',
+            'unit' => 'meter',
+            'standard_cost' => 45000,
+            'stock' => 3,
+            'min_stock' => 10,
+        ]);
+
+        // 1. Cek semua stok via webhook
+        $response = $this->withHeader('X-Webhook-Secret', $secret)
+            ->getJson('/api/webhook/materials/stock');
+
+        $response->assertOk();
+        $response->assertJsonFragment(['status' => true]);
+        $this->assertEquals(2, $response->json('count'));
+        $this->assertEquals(1, $response->json('low_stock_count'));
+        $this->assertStringContainsString('Kain Wool Premium', $response->json('message'));
+        $this->assertStringContainsString('Furing Silk Dormeuil', $response->json('message'));
+
+        // 2. Filter low_stock saja
+        $lowStockResponse = $this->withHeader('X-Webhook-Secret', $secret)
+            ->getJson('/api/webhook/materials/stock?low_stock=true');
+
+        $lowStockResponse->assertOk();
+        $this->assertEquals(1, $lowStockResponse->json('count'));
+        $this->assertStringContainsString('Furing Silk Dormeuil', $lowStockResponse->json('message'));
+        $this->assertStringNotContainsString('Kain Wool Premium', $lowStockResponse->json('message'));
+
+        // 3. Search query
+        $searchResponse = $this->withHeader('X-Webhook-Secret', $secret)
+            ->getJson('/api/webhook/materials/stock?q=Wool');
+
+        $searchResponse->assertOk();
+        $this->assertEquals(1, $searchResponse->json('count'));
+        $this->assertStringContainsString('Kain Wool Premium', $searchResponse->json('message'));
+    }
+
+    public function test_webhook_can_restock_material_and_post_journal_entry(): void
+    {
+        $secret = 'test-secret';
+        config(['services.webhook.secret' => $secret]);
+
+        Account::firstOrCreate(
+            ['code' => '1001'],
+            ['name' => 'Kas Tunai Toko', 'type' => 'asset']
+        );
+
+        $material = Material::create([
+            'code' => 'KNC-01',
+            'name' => 'Kancing Jas Tanduk Kerbau',
+            'category' => 'accessory',
+            'unit' => 'pcs',
+            'standard_cost' => 5000,
+            'stock' => 20,
+            'min_stock' => 50,
+            'account_id' => $this->account1004->id,
+        ]);
+
+        $response = $this->withHeader('X-Webhook-Secret', $secret)
+            ->postJson('/api/webhook/materials/restock', [
+                'material_code' => 'KNC-01',
+                'quantity' => 100,
+                'total_cost' => 500000,
+                'account_code' => '1001',
+                'notes' => 'Restock kancing dari supplier Bandung',
+            ]);
+
+        $response->assertOk();
+        $response->assertJsonFragment(['status' => true]);
+        $this->assertStringContainsString('Restock Bahan Baku Berhasil', $response->json('message'));
+
+        // Pastikan stok bertambah: 20 + 100 = 120
+        $this->assertEquals(120, $material->fresh()->stock);
+
+        // Pastikan riwayat mutasi stok tercatat
+        $this->assertDatabaseHas('material_stock_movements', [
+            'material_id' => $material->id,
+            'type' => 'in',
+            'quantity' => 100,
+            'unit_cost' => 5000,
+            'reference_type' => 'purchase',
+        ]);
+
+        // Pastikan double-entry journal entry tercatat
+        $this->assertDatabaseHas('journal_entries', [
+            'source' => 'material',
+            'status' => 'verified',
+        ]);
+    }
 }

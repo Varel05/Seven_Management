@@ -510,4 +510,56 @@ class EmployeePayrollTest extends TestCase
         $this->assertEquals(1400, $freshEmp150->rate_per_point);
         $this->assertEquals(413000, $freshEmp150->bonus_salary);
     }
+
+    public function test_webhook_can_list_and_update_employee_points(): void
+    {
+        $secret = 'test_secret_key';
+
+        $budi = Employee::create([
+            'name' => 'Budi Penjahit',
+            'position' => 'Penjahit Jas',
+            'base_salary' => 2500000,
+            'current_points' => 190,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+
+        $andi = Employee::create([
+            'name' => 'Andi Pemotong',
+            'position' => 'Pemotong Pola',
+            'base_salary' => 2400000,
+            'current_points' => 300,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+
+        // 1. GET list poin klasemen
+        $listResponse = $this->withHeader('X-Webhook-Secret', $secret)
+            ->getJson('/api/webhook/payroll/points');
+
+        $listResponse->assertOk();
+        $listResponse->assertJsonFragment(['status' => true]);
+        $this->assertEquals(2, $listResponse->json('count'));
+        $this->assertEquals(490, $listResponse->json('total_points'));
+        $this->assertStringContainsString('Budi Penjahit', $listResponse->json('message'));
+        $this->assertStringContainsString('Andi Pemotong', $listResponse->json('message'));
+
+        // 2. POST update/tambah poin Budi (+20 pt) -> dari 190 ke 210 (Naik ke Tier 1)
+        $updateResponse = $this->withHeader('X-Webhook-Secret', $secret)
+            ->postJson('/api/webhook/payroll/points', [
+                'employee_query' => 'Budi',
+                'points' => 20,
+                'mode' => 'add',
+                'notes' => 'Selesai jahit jas custom Bpk. Handoko',
+            ]);
+
+        $updateResponse->assertOk();
+        $updateResponse->assertJsonFragment(['status' => true]);
+        $this->assertEquals(210, $budi->fresh()->current_points);
+        $this->assertEquals(1000, $budi->fresh()->rate_per_point);
+        $this->assertEquals(210000, $budi->fresh()->bonus_salary);
+        $this->assertStringContainsString('Poin Insentif Karyawan Berhasil Dicatat', $updateResponse->json('message'));
+        $this->assertStringContainsString('Tier 1', $updateResponse->json('message'));
+        $this->assertStringContainsString('Selesai jahit jas custom Bpk. Handoko', $updateResponse->json('message'));
+    }
 }

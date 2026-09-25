@@ -24,6 +24,8 @@ Route::middleware('webhook.secret')->group(function () {
     Route::get('/webhook/payroll/list', [WebhookTransactionController::class, 'duePayroll']);
     Route::post('/webhook/payroll/{employee}/approve', [WebhookTransactionController::class, 'approvePayroll']);
     Route::post('/webhook/payroll/{employee}/skip', [WebhookTransactionController::class, 'skipPayroll']);
+    Route::get('/webhook/payroll/points', [WebhookTransactionController::class, 'listEmployeePoints']);
+    Route::post('/webhook/payroll/points', [WebhookTransactionController::class, 'updateEmployeePoints']);
 
     // Information & Monitoring Endpoints (Balance & Summary)
     Route::get('/webhook/balance', [WebhookTransactionController::class, 'balance']);
@@ -36,4 +38,10 @@ Route::middleware('webhook.secret')->group(function () {
     // Custom Suit Tailoring & AI Estimation Endpoints for n8n / Telegram
     Route::post('/webhook/custom-suit/estimate', [WebhookTransactionController::class, 'estimateSuit']);
     Route::post('/webhook/custom-suit/order', [WebhookTransactionController::class, 'orderCustomSuit']);
+    Route::get('/webhook/custom-suit/status', [WebhookTransactionController::class, 'trackCustomSuit']);
+    Route::post('/webhook/custom-suit/update-status', [WebhookTransactionController::class, 'updateCustomSuitStatus']);
+
+    // Raw Materials & Warehouse Monitoring Endpoints for n8n / Telegram
+    Route::get('/webhook/materials/stock', [WebhookTransactionController::class, 'checkMaterialStock']);
+    Route::post('/webhook/materials/restock', [WebhookTransactionController::class, 'recordMaterialRestock']);
 });

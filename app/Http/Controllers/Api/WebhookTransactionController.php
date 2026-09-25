@@ -8,6 +8,8 @@ use App\Models\CustomSuitOrder;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Material;
+use App\Models\MaterialStockMovement;
 use App\Models\Product;
 use App\Models\RecurringTransaction;
 use App\Models\RetailSale;
@@ -759,7 +761,7 @@ class WebhookTransactionController extends Controller
                              "📅 Periode: {$periodName}\n".
                              "⏰ Waktu Bayar: {$paidAt}\n".
                              "🔖 Ref: `{$reference}`\n\n".
-                             "💡 *Info:* Pengeluaran ini sudah tercatat sebelumnya di buku besar database. Pembayaran tidak diproses ulang untuk mencegah duplikasi transaksi.",
+                             '💡 *Info:* Pengeluaran ini sudah tercatat sebelumnya di buku besar database. Pembayaran tidak diproses ulang untuk mencegah duplikasi transaksi.',
                 'data' => [
                     'already_paid' => true,
                     'reference' => $reference,
@@ -786,8 +788,8 @@ class WebhookTransactionController extends Controller
                          "🏢 *{$recurringTransaction->name}*\n".
                          "💰 *{$formattedAmount}*\n".
                          "📅 Periode: {$periodName}\n".
-                         "📂 Beban: ".($recurringTransaction->expenseAccount->name ?? 'Beban Operasional')."\n".
-                         "💳 Bayar dari: ".($recurringTransaction->assetAccount->name ?? 'Kas Operasional')."\n".
+                         '📂 Beban: '.($recurringTransaction->expenseAccount->name ?? 'Beban Operasional')."\n".
+                         '💳 Bayar dari: '.($recurringTransaction->assetAccount->name ?? 'Kas Operasional')."\n".
                          "🔖 Ref: `{$journalEntry->reference}`",
             'data' => [
                 'reference' => $journalEntry->reference,
@@ -825,7 +827,7 @@ class WebhookTransactionController extends Controller
                              "📅 Periode: {$periodName}\n".
                              "⏰ Waktu Bayar: {$paidAt}\n".
                              "🔖 Ref: `{$reference}`\n\n".
-                             "💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar. Pembayaran tidak diproses ulang untuk mencegah duplikasi.",
+                             '💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar. Pembayaran tidak diproses ulang untuk mencegah duplikasi.',
                 'data' => [
                     'already_paid' => true,
                     'reference' => $reference,
@@ -845,7 +847,7 @@ class WebhookTransactionController extends Controller
             'status' => true,
             'message' => "✅ *Penggajian Karyawan Berhasil Dibukukan!*\n\n".
                          "👤 *{$employee->name}*\n".
-                         "💰 *Rp ".number_format($customAmount ?: (float) $employee->total_salary, 0, ',', '.')."*\n".
+                         '💰 *Rp '.number_format($customAmount ?: (float) $employee->total_salary, 0, ',', '.')."*\n".
                          "🔖 Ref: `{$journalEntry->reference}`",
             'data' => [
                 'reference' => $journalEntry->reference,
@@ -1020,7 +1022,7 @@ class WebhookTransactionController extends Controller
                              "📅 Periode: {$periodName}\n".
                              "⏰ Waktu Bayar: {$paidAt}\n".
                              "🔖 Ref: `{$reference}`\n\n".
-                             "💡 *Info:* Pengeluaran ini sudah tercatat sebelumnya di buku besar database. Pembayaran tidak diproses ulang untuk mencegah duplikasi.",
+                             '💡 *Info:* Pengeluaran ini sudah tercatat sebelumnya di buku besar database. Pembayaran tidak diproses ulang untuk mencegah duplikasi.',
                 'data' => [
                     'already_paid' => true,
                     'reference' => $reference,
@@ -1096,7 +1098,7 @@ class WebhookTransactionController extends Controller
                              "📅 Periode: {$periodName}\n".
                              "⏰ Waktu Bayar: {$paidAt}\n".
                              "🔖 Ref: `{$reference}`\n\n".
-                             "💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar database.",
+                             '💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar database.',
                 'data' => [
                     'already_paid' => true,
                     'reference' => $reference,
@@ -1465,6 +1467,154 @@ class WebhookTransactionController extends Controller
     }
 
     /**
+     * Webhook n8n: Tracking status pengerjaan pesanan jas custom via Telegram.
+     */
+    public function trackCustomSuit(Request $request)
+    {
+        $query = CustomSuitOrder::query();
+
+        if ($search = $request->input('q')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('order_number', 'like', "%{$search}%")
+                    ->orWhere('customer_name', 'like', "%{$search}%")
+                    ->orWhere('customer_phone', 'like', "%{$search}%");
+            });
+        }
+
+        if ($status = $request->input('status')) {
+            $query->where('production_status', $status);
+        } else {
+            // Default: tampilkan yang masih aktif jika tidak mencari spesifik
+            if (! $search) {
+                $query->whereNotIn('production_status', ['completed', 'cancelled']);
+            }
+        }
+
+        $orders = $query->latest('id')->limit(8)->get();
+
+        if ($orders->isEmpty()) {
+            return response()->json([
+                'status' => true,
+                'count' => 0,
+                'orders' => [],
+                'message' => 'ℹ️ Tidak ditemukan data pesanan jas custom yang cocok.'.($search ? " Pencarian: '{$search}'" : ''),
+            ]);
+        }
+
+        $statusIcons = [
+            'consultation' => '📐',
+            'cutting_sewing' => '✂️',
+            'fitting' => '👔',
+            'finishing' => '✨',
+            'ready' => '📦',
+            'completed' => '✅',
+            'cancelled' => '❌',
+        ];
+
+        $lines = ["🧵 *Tracking Pesanan Jas Custom Seven Management:*\n"];
+        foreach ($orders as $o) {
+            $icon = $statusIcons[$o->production_status] ?? '📍';
+            $lines[] = "{$icon} *#{$o->order_number}* — {$o->customer_name}";
+            $lines[] = "   • Model: {$o->suit_type_label} | {$o->color}";
+            $lines[] = "   • Tahap: *{$o->production_status_label}*";
+            $lines[] = "   • Bayar: {$o->payment_status_label} (Sisa: Rp ".number_format($o->remaining_payment, 0, ',', '.').')';
+            if ($o->due_date) {
+                $lines[] = '   • Target: '.$o->due_date->format('d M Y');
+            }
+            $lines[] = '';
+        }
+
+        return response()->json([
+            'status' => true,
+            'count' => $orders->count(),
+            'orders' => $orders,
+            'message' => trim(implode("\n", $lines)),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Update status produksi pesanan jas custom dari Telegram.
+     */
+    public function updateCustomSuitStatus(Request $request)
+    {
+        $validated = $request->validate([
+            'order_query' => 'required|string',
+            'status' => 'required|string',
+        ]);
+
+        $search = trim($validated['order_query']);
+        $order = CustomSuitOrder::where('order_number', $search)
+            ->orWhere('order_number', 'like', "%{$search}%")
+            ->orWhere('customer_name', 'like', "%{$search}%")
+            ->latest('id')
+            ->first();
+
+        if (! $order) {
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Pesanan jas dengan kata kunci '{$search}' tidak ditemukan.",
+            ], 404);
+        }
+
+        $aliasMap = [
+            'konsultasi' => 'consultation',
+            'ukur' => 'consultation',
+            'potong' => 'cutting_sewing',
+            'jahit' => 'cutting_sewing',
+            'potong_jahit' => 'cutting_sewing',
+            'fitting' => 'fitting',
+            'finishing' => 'finishing',
+            'press' => 'finishing',
+            'siap' => 'ready',
+            'ready' => 'ready',
+            'ambil' => 'ready',
+            'selesai' => 'completed',
+            'batal' => 'cancelled',
+        ];
+
+        $targetStatus = strtolower(trim($validated['status']));
+        $finalStatus = $aliasMap[$targetStatus] ?? $targetStatus;
+
+        if (! array_key_exists($finalStatus, CustomSuitOrder::PRODUCTION_STATUSES)) {
+            $validList = implode(', ', array_keys($aliasMap));
+
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Status '{$validated['status']}' tidak valid. Pilihan status: {$validList}.",
+            ], 422);
+        }
+
+        $oldStatusLabel = $order->production_status_label;
+        $order->update(['production_status' => $finalStatus]);
+        $newStatusLabel = $order->fresh()->production_status_label;
+
+        $statusIcons = [
+            'consultation' => '📐',
+            'cutting_sewing' => '✂️',
+            'fitting' => '👔',
+            'finishing' => '✨',
+            'ready' => '📦',
+            'completed' => '✅',
+            'cancelled' => '❌',
+        ];
+        $icon = $statusIcons[$finalStatus] ?? '📍';
+
+        $msg = [
+            "{$icon} *Status Produksi Jas Berhasil Diperbarui!*",
+            "📋 *No. Pesanan*: `{$order->order_number}`",
+            "👤 *Pelanggan*: {$order->customer_name}",
+            "👔 *Model*: {$order->suit_type_label}",
+            "🔄 *Perubahan*: {$oldStatusLabel} ➔ *{$newStatusLabel}*",
+        ];
+
+        return response()->json([
+            'status' => true,
+            'order' => $order,
+            'message' => implode("\n", $msg),
+        ]);
+    }
+
+    /**
      * Webhook n8n: Cek stok pakaian retail via Telegram / AI Agent.
      */
     public function checkRetailStock(Request $request)
@@ -1646,6 +1796,384 @@ class WebhookTransactionController extends Controller
         return response()->json([
             'status' => true,
             'sale' => $sale,
+            'message' => implode("\n", $msg),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Cek stok gudang bahan baku & peringatan stok menipis (Low Stock Alert).
+     */
+    public function checkMaterialStock(Request $request)
+    {
+        $query = Material::physical();
+
+        $isLowStockOnly = $request->boolean('low_stock');
+        if ($isLowStockOnly) {
+            $query->whereColumn('stock', '<=', 'min_stock');
+        } elseif ($search = $request->input('q')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('category', 'like', "%{$search}%");
+            });
+        } elseif ($cat = $request->input('category')) {
+            $query->where('category', $cat);
+        }
+
+        $totalLowStock = Material::physical()->whereColumn('stock', '<=', 'min_stock')->count();
+        $materials = $query->orderBy('stock', 'asc')->limit(20)->get();
+
+        if ($materials->isEmpty()) {
+            return response()->json([
+                'status' => true,
+                'count' => 0,
+                'low_stock_count' => $totalLowStock,
+                'materials' => [],
+                'message' => $isLowStockOnly
+                    ? '✅ *Semua Stok Bahan Baku Aman!*\nTidak ada bahan baku atau aksesoris yang berada di bawah batas minimum.'
+                    : 'ℹ️ Tidak ditemukan bahan baku yang sesuai kriteria pencarian.',
+            ]);
+        }
+
+        $lines = [];
+        if ($isLowStockOnly) {
+            $lines[] = '⚠️ *Peringatan Stok Bahan Baku Menipis / Habis!*';
+            $lines[] = "Ditemukan *{$materials->count()}* bahan yang memerlukan pengadaan ulang:\n";
+        } else {
+            $lines[] = "🧶 *Gudang Bahan Baku & Aksesoris Seven Management:*\n";
+        }
+
+        foreach ($materials as $m) {
+            $statusIcon = $m->stock <= 0 ? '🔴' : ($m->stock <= $m->min_stock ? '⚠️' : '✅');
+            $stockText = $m->formatted_stock;
+            $minText = number_format($m->min_stock, 0, ',', '.').' '.$m->unit;
+
+            $lines[] = "{$statusIcon} *{$m->name}* (`{$m->code}`)";
+            $lines[] = "   • Stok: *{$stockText}* (Min: {$minText})";
+            $lines[] = "   • Kategori: {$m->category_label}";
+            $lines[] = "   • Biaya Std: {$m->formatted_standard_cost}/{$m->unit}";
+            $lines[] = '';
+        }
+
+        if ($totalLowStock > 0 && ! $isLowStockOnly) {
+            $lines[] = "⚠️ *Perhatian*: Ada *{$totalLowStock}* bahan di bawah batas minimum stok!";
+        }
+
+        $lines[] = '💡 *Restock Cepat via Bot*:';
+        $lines[] = '`/restock <kode/nama> <qty> [total_biaya] [kas/bank]`';
+        $lines[] = 'Contoh: `/restock KAIN-WOL 10 1500000 bank`';
+
+        return response()->json([
+            'status' => true,
+            'count' => $materials->count(),
+            'low_stock_count' => $totalLowStock,
+            'materials' => $materials,
+            'message' => trim(implode("\n", $lines)),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Catat pembelian / restock bahan baku langsung dari Telegram.
+     */
+    public function recordMaterialRestock(Request $request)
+    {
+        $validated = $request->validate([
+            'material_code' => 'required_without:material_id|string',
+            'material_id' => 'nullable|exists:materials,id',
+            'quantity' => 'required|numeric|min:0.001',
+            'unit_cost' => 'nullable|numeric|min:0',
+            'total_cost' => 'nullable|numeric|min:0',
+            'account_code' => 'nullable|string',
+            'reference_number' => 'nullable|string|max:100',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        $search = trim($validated['material_code'] ?? '');
+        $material = ! empty($validated['material_id'])
+            ? Material::find($validated['material_id'])
+            : Material::where('code', $search)
+                ->orWhere('code', 'like', "%{$search}%")
+                ->orWhere('name', 'like', "%{$search}%")
+                ->first();
+
+        if (! $material) {
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Bahan baku dengan kata kunci '{$search}' tidak ditemukan.",
+            ], 404);
+        }
+
+        if (! $material->isPhysical()) {
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Komponen '{$material->name}' merupakan biaya jasa/overhead, bukan material fisik gudang.",
+            ], 422);
+        }
+
+        $qty = (float) $validated['quantity'];
+
+        // Tentukan unit cost dan total cost
+        if (! empty($validated['total_cost']) && (float) $validated['total_cost'] > 0) {
+            $totalCost = (float) $validated['total_cost'];
+            $unitCost = $totalCost / $qty;
+        } elseif (! empty($validated['unit_cost']) && (float) $validated['unit_cost'] > 0) {
+            $unitCost = (float) $validated['unit_cost'];
+            $totalCost = $unitCost * $qty;
+        } else {
+            $unitCost = (float) $material->standard_cost;
+            $totalCost = $unitCost * $qty;
+        }
+
+        // Akun Kas / Bank pembayaran
+        $accountSearch = strtolower(trim($validated['account_code'] ?? '1001'));
+        if (str_contains($accountSearch, 'bank') || $accountSearch === '1002') {
+            $targetCode = '1002';
+        } else {
+            $targetCode = '1001';
+        }
+
+        $fundAccount = Account::where('code', $targetCode)->first()
+            ?? Account::where('code', '1001')->first()
+            ?? Account::where('type', 'asset')->first();
+
+        // Akun Persediaan Bahan Baku (1004)
+        $inventoryAccount = ($material->account_id ? Account::find($material->account_id) : null)
+            ?? Account::where('code', '1004')->first()
+            ?? Account::firstOrCreate(
+                ['code' => '1004'],
+                ['name' => 'Persediaan Bahan Baku & Pembantu', 'type' => 'asset']
+            );
+
+        $refNumber = ! empty($validated['reference_number']) ? $validated['reference_number'] : ('RST-'.date('Ymd').'-'.strtoupper(Str::random(4)));
+        $notes = ! empty($validated['notes']) ? $validated['notes'] : "Restock {$material->name} x{$qty} {$material->unit} via Telegram";
+
+        $movement = DB::transaction(function () use (
+            $material,
+            $qty,
+            $unitCost,
+            $totalCost,
+            $refNumber,
+            $notes,
+            $fundAccount,
+            $inventoryAccount
+        ) {
+            // 1. Tambah stok bahan
+            $material->increment('stock', $qty);
+
+            // 2. Update harga standar jika harga beli baru diisi spesifik
+            if ($unitCost > 0) {
+                $material->update(['standard_cost' => $unitCost]);
+            }
+
+            // 3. Catat kartu mutasi stok
+            $stockMovement = MaterialStockMovement::create([
+                'material_id' => $material->id,
+                'type' => 'in',
+                'quantity' => $qty,
+                'unit_cost' => $unitCost,
+                'reference_type' => 'purchase',
+                'reference_number' => $refNumber,
+                'notes' => $notes,
+            ]);
+
+            // 4. Catat Jurnal Pembukuan Otomatis (Double Entry)
+            if ($totalCost > 0 && $fundAccount && $inventoryAccount) {
+                $journal = JournalEntry::create([
+                    'reference' => $refNumber,
+                    'description' => "Pembelian/Restock {$material->name} ({$refNumber})",
+                    'date' => now(),
+                    'source' => 'material',
+                    'status' => 'verified',
+                ]);
+
+                // Debit Persediaan Bahan Baku
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journal->id,
+                    'account_id' => $inventoryAccount->id,
+                    'description' => "Persediaan masuk {$material->name} x{$qty} {$material->unit}",
+                    'debit' => $totalCost,
+                    'credit' => 0,
+                ]);
+
+                // Credit Kas/Bank
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journal->id,
+                    'account_id' => $fundAccount->id,
+                    'description' => "Pengeluaran pembelian bahan baku ({$refNumber})",
+                    'debit' => 0,
+                    'credit' => $totalCost,
+                ]);
+            }
+
+            return $stockMovement;
+        });
+
+        $updatedMaterial = $material->fresh();
+        $msg = [
+            '🧶 *Restock Bahan Baku Berhasil!*',
+            "📦 *Bahan*: {$updatedMaterial->name} (`{$updatedMaterial->code}`)",
+            "➕ *Jumlah Masuk*: +{$qty} {$updatedMaterial->unit}",
+            "📊 *Total Stok Sekarang*: *{$updatedMaterial->formatted_stock}*",
+            '💰 *Total Pembelian*: Rp '.number_format($totalCost, 0, ',', '.').($fundAccount ? " (via {$fundAccount->name})" : ''),
+            "🧾 *No. Referensi*: `{$refNumber}`",
+        ];
+
+        return response()->json([
+            'status' => true,
+            'material' => $updatedMaterial,
+            'movement' => $movement,
+            'message' => implode("\n", $msg),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Rekap klasemen poin insentif seluruh karyawan & penjahit.
+     */
+    public function listEmployeePoints(Request $request)
+    {
+        $employees = Employee::active()
+            ->orderBy('current_points', 'desc')
+            ->orderBy('name', 'asc')
+            ->get();
+
+        if ($employees->isEmpty()) {
+            return response()->json([
+                'status' => true,
+                'count' => 0,
+                'total_points' => 0,
+                'employees' => [],
+                'message' => 'ℹ️ Belum ada karyawan aktif yang terdaftar di sistem.',
+            ]);
+        }
+
+        $totalPoints = $employees->sum('current_points');
+        $lines = ['🏆 *Klasemen Poin Insentif Karyawan & Penjahit:*', "Total Terkumpul: *{$totalPoints} Poin*\n"];
+
+        $medals = ['🥇', '🥈', '🥉'];
+        foreach ($employees as $index => $emp) {
+            $rankIcon = $medals[$index] ?? '🎖️';
+            $points = (int) $emp->current_points;
+            $tier = $emp->tier_label;
+            $bonus = $emp->formatted_bonus_salary;
+
+            $lines[] = "{$rankIcon} *#".($index + 1).". {$emp->name}* ({$emp->position})";
+            $lines[] = "   • ⭐ Poin: *{$points} pt* | {$tier}";
+            if ($points > 0) {
+                $lines[] = "   • 💰 Bonus: {$bonus} (Total Gaji: {$emp->formatted_total_salary})";
+            }
+            $lines[] = '';
+        }
+
+        $lines[] = '💡 *Format Cepat Tambah Poin*:';
+        $lines[] = '`/poin <nama/id> <+poin> [keterangan]`';
+        $lines[] = 'Contoh: `/poin Budi 25 Selesai jas Pak Joko`';
+
+        return response()->json([
+            'status' => true,
+            'count' => $employees->count(),
+            'total_points' => $totalPoints,
+            'employees' => $employees,
+            'message' => trim(implode("\n", $lines)),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Input penambahan / penyesuaian poin insentif karyawan via Telegram.
+     */
+    public function updateEmployeePoints(Request $request)
+    {
+        $validated = $request->validate([
+            'employee_query' => 'required',
+            'points' => 'required|integer',
+            'mode' => 'nullable|in:add,set,subtract',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        $search = trim((string) $validated['employee_query']);
+        $mode = $validated['mode'] ?? 'add';
+        $points = (int) $validated['points'];
+
+        $employee = null;
+        if (is_numeric($search)) {
+            $employee = Employee::find((int) $search);
+        }
+
+        if (! $employee) {
+            $employee = Employee::where('name', $search)
+                ->orWhere('name', 'like', "%{$search}%")
+                ->first();
+        }
+
+        if (! $employee) {
+            $activeNames = Employee::active()->pluck('name')->implode(', ');
+
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Karyawan dengan kata kunci '{$search}' tidak ditemukan.\n\n💡 Karyawan aktif terdaftar: {$activeNames}",
+            ], 404);
+        }
+
+        $oldPoints = (int) $employee->current_points;
+        $oldTier = $employee->tier_label;
+
+        if ($mode === 'set') {
+            $newPoints = max(0, $points);
+            $sign = '=';
+            $diff = $newPoints - $oldPoints;
+        } elseif ($mode === 'subtract') {
+            $newPoints = max(0, $oldPoints - abs($points));
+            $sign = '-';
+            $diff = -abs($points);
+        } else {
+            // mode add
+            $newPoints = $oldPoints + $points;
+            $sign = $points >= 0 ? '+' : '';
+            $diff = $points;
+        }
+
+        $tierRate = Employee::getRateForPoints($newPoints);
+        $updateData = ['current_points' => $newPoints];
+
+        if ($tierRate > 0) {
+            $updateData['rate_per_point'] = $tierRate;
+        } elseif ($employee->rate_per_point <= 2600) {
+            $updateData['rate_per_point'] = 0;
+        }
+
+        $employee->update($updateData);
+        $updated = $employee->fresh();
+
+        $tierChanged = ($oldTier !== $updated->tier_label);
+        $isTierUp = $tierChanged && ($newPoints > $oldPoints);
+
+        $msg = [
+            '⭐ *Poin Insentif Karyawan Berhasil Dicatat!*',
+            "👤 *Karyawan*: *{$updated->name}* ({$updated->position})",
+            "📈 *Perubahan Poin*: {$sign}{$points} pt (Sebelumnya: {$oldPoints} pt ➔ *{$newPoints} pt*)",
+            "🏆 *Status Tingkatan*: *{$updated->tier_label}*",
+        ];
+
+        if ($tierRate > 0) {
+            $msg[] = '💵 *Tarif Insentif*: Rp '.number_format($updated->rate_per_point, 0, ',', '.').' / poin';
+        }
+
+        $msg[] = "💰 *Estimasi Bonus Poin*: {$updated->formatted_bonus_salary}";
+        $msg[] = "💼 *Estimasi Total Gaji*: {$updated->formatted_total_salary} (Pokok + Bonus)";
+
+        if ($isTierUp) {
+            $msg[] = "🎉 *Selamat! Karyawan telah naik ke {$updated->tier_label}!*";
+        }
+
+        if (! empty($validated['notes'])) {
+            $msg[] = "📝 *Catatan*: {$validated['notes']}";
+        }
+
+        return response()->json([
+            'status' => true,
+            'employee' => $updated,
+            'old_points' => $oldPoints,
+            'new_points' => $newPoints,
+            'diff' => $diff,
             'message' => implode("\n", $msg),
         ]);
     }

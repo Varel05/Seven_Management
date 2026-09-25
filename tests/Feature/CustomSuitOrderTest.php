@@ -158,6 +158,46 @@ class CustomSuitOrderTest extends TestCase
         ]);
     }
 
+    public function test_n8n_telegram_webhook_can_track_and_update_custom_suit_status(): void
+    {
+        $secret = 'test-secret';
+        config(['services.webhook.secret' => $secret]);
+
+        $order = CustomSuitOrder::create([
+            'order_number' => 'CST-TEST-001',
+            'customer_name' => 'Bpk. Hendra Testing',
+            'customer_phone' => '0812345678',
+            'order_date' => now()->toDateString(),
+            'due_date' => now()->addDays(14)->toDateString(),
+            'suit_type' => 'jas_blazer_pria',
+            'production_status' => 'consultation',
+            'payment_status' => 'partial_dp',
+            'total_price' => 1500000,
+            'down_payment' => 500000,
+        ]);
+
+        // 1. Cek Tracking Status via Webhook
+        $trackResponse = $this->withHeader('X-Webhook-Secret', $secret)
+            ->getJson('/api/webhook/custom-suit/status?q=Hendra');
+
+        $trackResponse->assertOk();
+        $trackResponse->assertJsonPath('status', true);
+        $this->assertStringContainsString('CST-TEST-001', $trackResponse->json('message'));
+        $this->assertStringContainsString('Konsultasi / Ukur', $trackResponse->json('message'));
+
+        // 2. Update Status Produksi via Webhook
+        $updateResponse = $this->withHeader('X-Webhook-Secret', $secret)
+            ->postJson('/api/webhook/custom-suit/update-status', [
+                'order_query' => 'CST-TEST-001',
+                'status' => 'fitting',
+            ]);
+
+        $updateResponse->assertOk();
+        $updateResponse->assertJsonPath('status', true);
+        $this->assertEquals('fitting', $order->fresh()->production_status);
+        $this->assertStringContainsString('Fitting Klien', $updateResponse->json('message'));
+    }
+
     public function test_estimate_integrates_supporting_materials_labor_and_overhead_from_hpp(): void
     {
         // Buat master material HPP di database
