@@ -13,6 +13,7 @@ class RetailSale extends Model
 
     protected $fillable = [
         'invoice_number',
+        'employee_id',
         'transaction_type',
         'sale_date',
         'rental_start_date',
@@ -70,6 +71,14 @@ class RetailSale extends Model
     public function items(): HasMany
     {
         return $this->hasMany(RetailSaleItem::class);
+    }
+
+    /**
+     * Customer Service (CS) yang melayani transaksi.
+     */
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
     }
 
     /**

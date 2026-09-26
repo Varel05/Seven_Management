@@ -142,8 +142,11 @@
         form: {
             id: null,
             name: '',
+            role: 'cs',
             position: '',
             phone: '',
+            telegram_user_id: '',
+            telegram_username: '',
             base_salary: 0,
             current_points: 0,
             rate_per_point: 0,
@@ -201,8 +204,11 @@
             this.form = {
                 id: null,
                 name: '',
+                role: 'staff',
                 position: '',
                 phone: '',
+                telegram_user_id: '',
+                telegram_username: '',
                 base_salary: 3000000,
                 current_points: 0,
                 rate_per_point: 0,
@@ -217,8 +223,11 @@
             this.form = {
                 id: emp.id,
                 name: emp.name,
+                role: emp.role_value || (emp.role && emp.role.value ? emp.role.value : (emp.role || 'staff')),
                 position: emp.position,
                 phone: emp.phone || '',
+                telegram_user_id: emp.telegram_user_id || '',
+                telegram_username: emp.telegram_username || '',
                 base_salary: Number(emp.base_salary),
                 current_points: emp.current_points,
                 rate_per_point: Number(emp.rate_per_point),
@@ -465,23 +474,31 @@
                                                 {{ strtoupper(substr($emp->name, 0, 2)) }}
                                             </div>
                                             <div class="space-y-0.5">
-                                                <!-- Baris 1: Nama & ID -->
-                                                <div class="font-bold text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5 leading-tight">
+                                                <!-- Baris 1: Nama, ID & Role Badge -->
+                                                <div class="font-bold text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5 flex-wrap leading-tight">
                                                     <span>{{ $emp->name }}</span>
                                                     <span class="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded {{ $emp->status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700' }}">
                                                         #{{ $emp->id }}
+                                                    </span>
+                                                    <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border {{ $emp->role_badge_class }}">
+                                                        {{ $emp->role_label }}
                                                     </span>
                                                 </div>
                                                 <!-- Baris 2: Jabatan / Posisi -->
                                                 <div class="text-[11px] font-medium text-slate-600 dark:text-slate-400 leading-tight">
                                                     {{ $emp->position }}
                                                 </div>
-                                                <!-- Baris 3: No. Telepon -->
-                                                @if($emp->phone)
-                                                    <div class="text-[10px] text-slate-400 dark:text-slate-500 font-mono leading-tight">
-                                                        {{ $emp->phone }}
-                                                    </div>
-                                                @endif
+                                                <!-- Baris 3: No. Telepon & Telegram -->
+                                                <div class="flex items-center gap-2 text-[10px] text-slate-400 dark:text-slate-500 font-mono leading-tight flex-wrap">
+                                                    @if($emp->phone)
+                                                        <span>{{ $emp->phone }}</span>
+                                                    @endif
+                                                    @if($emp->telegram_username || $emp->telegram_user_id)
+                                                        <span class="text-sky-600 dark:text-sky-400 font-semibold" title="Telegram User ID: {{ $emp->telegram_user_id }}">
+                                                            ✈️ {{ $emp->telegram_username ? '@'.$emp->telegram_username : 'ID: '.$emp->telegram_user_id }}
+                                                        </span>
+                                                    @endif
+                                                </div>
                                             </div>
                                         </div>
                                     </td>
@@ -755,13 +772,44 @@
                                 </div>
 
                                 <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Peran / Role Sistem</label>
+                                    <select name="role" x-model="form.role" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                                        <optgroup label="👑 Di Atas Staff (Manajemen & Pimpinan)">
+                                            <option value="owner">Owner / Pemilik</option>
+                                            <option value="manager">Manager / Pengelola</option>
+                                            <option value="akuntan">Akuntan / Finance</option>
+                                            <option value="hrd">HRD / Personalia</option>
+                                            <option value="supervisor">Supervisor / Pengawas</option>
+                                        </optgroup>
+                                        <optgroup label="💼 Tingkat Staff (Pelaksana & Operasional)">
+                                            <option value="staff">Staff Umum</option>
+                                            <option value="cs">Customer Service (CS)</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+
+                                <div>
                                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Jabatan / Posisi</label>
                                     <input type="text" name="position" x-model="form.position" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="Contoh: Staff IT, Admin">
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">No. Kontak / WA</label>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">No. Kontak / HP Telegram (Autentikasi)</label>
                                     <input type="text" name="phone" x-model="form.phone" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="08123456789">
+                                    <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">📱 Nomor HP aktif untuk autentikasi bot Telegram / n8n</span>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Telegram User ID (Opsional)</label>
+                                    <input type="text" name="telegram_user_id" x-model="form.telegram_user_id" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="Opsional (otomatis terisi)">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Username Telegram</label>
+                                    <div class="relative">
+                                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-slate-400">@</span>
+                                        <input type="text" name="telegram_username" x-model="form.telegram_username" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white pl-7 pr-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="username_tg">
+                                    </div>
                                 </div>
 
                                 <div>

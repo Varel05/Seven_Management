@@ -33,6 +33,16 @@
                 </button>
                 <button 
                     type="button" 
+                    @click="window.dispatchEvent(new CustomEvent('open-point-settings-modal'))"
+                    onclick="window.dispatchEvent(new CustomEvent('open-point-settings-modal'))" 
+                    class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-600/90 hover:bg-amber-500 border border-amber-500/80 text-white text-xs font-bold shadow-md shadow-amber-950/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    title="Atur Poin Insentif CS untuk Setiap Item Produk & Kategori"
+                >
+                    <svg class="w-4 h-4 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                    <span>⭐ Atur Poin Item</span>
+                </button>
+                <button 
+                    type="button" 
                     @click="window.dispatchEvent(new CustomEvent('open-product-modal'))"
                     onclick="window.dispatchEvent(new CustomEvent('open-product-modal'))" 
                     class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-900/80 hover:bg-emerald-800/80 dark:bg-slate-800 dark:hover:bg-slate-700 border border-emerald-600/60 dark:border-slate-700 text-emerald-100 dark:text-slate-200 text-xs font-semibold shadow-xs transition-all cursor-pointer"
@@ -48,6 +58,9 @@
         posModal: false, 
         productModal: false,
         editModal: false,
+        pointsModal: false,
+        pointsTab: 'items',
+        itemSearch: '',
         activeTab: 'catalog', // 'catalog', 'rentals', 'sales'
         editingProduct: {},
         transactionType: 'sale', // 'sale' atau 'rental'
@@ -116,7 +129,8 @@
         }
     }" 
     @open-pos-modal.window="posModal = true; if ($event.detail?.type) setTransactionType($event.detail.type);"
-    @open-product-modal.window="productModal = true">
+    @open-product-modal.window="productModal = true"
+    @open-point-settings-modal.window="pointsModal = true">
         <div class="max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 space-y-6">
 
             <!-- Flash Alert Messages -->
@@ -338,6 +352,7 @@
                                     <th class="py-3.5 px-4 text-right">Harga Modal (HPP)</th>
                                     <th class="py-3.5 px-4 text-right">Harga Beli (Jual)</th>
                                     <th class="py-3.5 px-4 text-right">Tarif Sewa (Rental)</th>
+                                    <th class="py-3.5 px-4 text-center">Poin CS</th>
                                     <th class="py-3.5 px-4 text-center">Stok Rak</th>
                                     <th class="py-3.5 px-4 text-center">Aksi Cepat</th>
                                 </tr>
@@ -371,6 +386,14 @@
                                         <td class="py-3.5 px-4 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400 text-sm">
                                             {{ $product->formatted_rental_price }}
                                             <span class="block text-[10px] text-slate-400 font-normal">/ 3 hari</span>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-center">
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold {{ $product->point_reward !== null ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700' }}" title="{{ $product->point_reward !== null ? 'Poin Kustom Produk: '.$product->point_reward.' pt' : 'Poin Standar Kategori '.$product->category_label.': '.$product->effective_point_reward.' pt' }}">
+                                                ⭐ {{ $product->effective_point_reward }} pt
+                                                @if ($product->point_reward !== null)
+                                                    <span class="text-[9px] font-normal uppercase text-amber-600 dark:text-amber-400">(Kustom)</span>
+                                                @endif
+                                            </span>
                                         </td>
                                         <td class="py-3.5 px-4 text-center">
                                             @if ($product->stock <= 0)
@@ -738,7 +761,7 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Metode Bayar</label>
                             <select name="payment_method" x-model="paymentMethod" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
@@ -751,6 +774,18 @@
                             <select name="account_id" x-model="selectedAccount" required class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
                                 @foreach ($paymentAccounts as $acc)
                                     <option value="{{ $acc->id }}">{{ $acc->code }} - {{ $acc->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                CS / Petugas Pelayan
+                                <span class="text-[10px] text-amber-600 font-normal">(Poin)</span>
+                            </label>
+                            <select name="employee_id" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+                                <option value="">-- Tanpa Poin CS --</option>
+                                @foreach ($employees as $emp)
+                                    <option value="{{ $emp->id }}">{{ $emp->name }} ({{ $emp->role_label }})</option>
                                 @endforeach
                             </select>
                         </div>
@@ -946,6 +981,14 @@
                         </div>
                     </div>
 
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Poin Insentif CS (Poin Item)
+                            <span class="text-[10px] text-amber-600 font-normal">(Kosongkan jika mengikuti standar kategori)</span>
+                        </label>
+                        <input type="number" name="point_reward" min="0" placeholder="Misal: 15 (Otomatis standar kategori jika kosong)" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-mono">
+                    </div>
+
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Jumlah Stok Awal *</label>
@@ -1034,6 +1077,14 @@
                         </div>
                     </div>
 
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Poin Insentif CS (Poin Item)
+                            <span class="text-[10px] text-amber-600 font-normal">(Kosongkan jika ingin mengikuti standar kategori)</span>
+                        </label>
+                        <input type="number" name="point_reward" x-model="editingProduct.point_reward" min="0" placeholder="Misal: 15 (Standar kategori jika kosong)" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-mono">
+                    </div>
+
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Stok Baju Sekarang *</label>
@@ -1050,6 +1101,215 @@
                         <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md cursor-pointer">Simpan Perubahan</button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- MODAL 4: ATUR POIN SETIAP ITEM & STANDAR KATEGORI (Khusus Owner & Akuntan) -->
+        <div 
+            x-show="pointsModal" 
+            x-cloak 
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+        >
+            <div 
+                @click.away="pointsModal = false" 
+                class="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 max-h-[92vh] flex flex-col"
+            >
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-slate-800 dark:text-white">Pengaturan Poin Insentif CS (Item & Kategori)</h3>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Edit poin untuk setiap item produk pakaian atau sesuaikan standar kategori & layanan bonus.</p>
+                        </div>
+                    </div>
+                    <button @click="pointsModal = false" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+                </div>
+
+                <!-- Tab Buttons -->
+                <div class="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2 shrink-0">
+                    <button 
+                        type="button" 
+                        @click="pointsTab = 'items'" 
+                        :class="pointsTab === 'items' ? 'bg-amber-600 text-white font-bold shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'"
+                        class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                        <span>👕 Poin Setiap Item Produk ({{ $allProducts->count() }} Item)</span>
+                    </button>
+                    <button 
+                        type="button" 
+                        @click="pointsTab = 'settings'" 
+                        :class="pointsTab === 'settings' ? 'bg-amber-600 text-white font-bold shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'"
+                        class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                        <span>⚙️ Standar Kategori & Layanan Tambahan</span>
+                    </button>
+                </div>
+
+                <!-- TAB 1: EDIT POIN PER SETIAP ITEM PRODUK -->
+                <div x-show="pointsTab === 'items'" class="flex-1 overflow-y-auto space-y-4 pr-1">
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-amber-50/60 dark:bg-amber-950/20 p-3 rounded-2xl border border-amber-200/60 dark:border-amber-900/40">
+                        <div class="text-xs text-amber-900 dark:text-amber-200">
+                            💡 <strong>Petunjuk:</strong> Masukkan angka poin pada kolom <strong>Poin CS</strong>. Jika dikosongkan, produk akan otomatis memakai standar kategori induknya.
+                        </div>
+                        <input 
+                            type="text" 
+                            x-model="itemSearch" 
+                            placeholder="Cari item / kode..." 
+                            class="px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 w-full sm:w-48 shrink-0"
+                        >
+                    </div>
+
+                    <form method="POST" action="{{ route('retail.products.update-points') }}" class="space-y-4">
+                        @csrf
+                        <div class="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden max-h-[50vh] overflow-y-auto">
+                            <table class="w-full text-left text-xs text-slate-600 dark:text-slate-300">
+                                <thead class="bg-slate-50 dark:bg-slate-800/80 uppercase text-[11px] font-bold text-slate-500 dark:text-slate-400 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
+                                    <tr>
+                                        <th class="py-2.5 px-3">Kode & Produk</th>
+                                        <th class="py-2.5 px-3">Kategori</th>
+                                        <th class="py-2.5 px-3 text-right">Harga Jual</th>
+                                        <th class="py-2.5 px-3 text-center">Standar Kategori</th>
+                                        <th class="py-2.5 px-3 text-center w-36">Poin Kustom Item</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                                    @foreach ($allProducts as $idx => $p)
+                                        @php
+                                            $defaultCatPoints = \App\Models\PointSetting::get('item_category:'.$p->category, \App\Models\EmployeePointLog::PRODUCT_POINTS[$p->category] ?? 10);
+                                        @endphp
+                                        <tr 
+                                            class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                                            x-show="!itemSearch || '{{ strtolower($p->name . ' ' . $p->code . ' ' . $p->category) }}'.includes(itemSearch.toLowerCase().trim())"
+                                        >
+                                            <td class="py-2 px-3">
+                                                <div class="font-bold text-slate-800 dark:text-white">{{ $p->name }}</div>
+                                                <div class="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">{{ $p->code }}</div>
+                                                <input type="hidden" name="products[{{ $idx }}][id]" value="{{ $p->id }}">
+                                            </td>
+                                            <td class="py-2 px-3">
+                                                <span class="inline-block px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                                    {{ $p->category_label }}
+                                                </span>
+                                            </td>
+                                            <td class="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-400">
+                                                Rp {{ number_format($p->selling_price, 0, ',', '.') }}
+                                            </td>
+                                            <td class="py-2 px-3 text-center text-slate-500 font-mono text-xs">
+                                                {{ $defaultCatPoints }} pt
+                                            </td>
+                                            <td class="py-2 px-3 text-center">
+                                                <div class="flex items-center justify-center gap-1">
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        name="products[{{ $idx }}][point_reward]" 
+                                                        value="{{ $p->point_reward !== null ? $p->point_reward : '' }}" 
+                                                        placeholder="{{ $defaultCatPoints }} (Standar)" 
+                                                        class="w-28 px-2 py-1 text-xs text-center font-mono font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-amber-500 focus:border-amber-500"
+                                                    >
+                                                    <span class="text-[11px] font-semibold text-slate-400">pt</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="flex justify-between items-center pt-2">
+                            <span class="text-xs text-slate-400">Poin akan otomatis digunakan saat CS melayani transaksi di Web atau Telegram.</span>
+                            <div class="flex gap-2">
+                                <button type="button" @click="pointsModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">Tutup</button>
+                                <button type="submit" class="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    <span>Simpan Poin Setiap Item</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- TAB 2: STANDAR KATEGORI & LAYANAN TAMBAHAN -->
+                <div x-show="pointsTab === 'settings'" class="flex-1 overflow-y-auto space-y-5 pr-1">
+                    <form method="POST" action="{{ route('retail.point-settings.update') }}" class="space-y-5">
+                        @csrf
+                        <!-- Grup 1: Standar Kategori Pakaian -->
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                <span>👕 Standar Poin per Kategori Pakaian</span>
+                            </h4>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                @php $settingIdx = 0; @endphp
+                                @foreach ($pointSettings->where('group', 'item_category') as $s)
+                                    <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between gap-2">
+                                        <div>
+                                            <div class="font-bold text-xs text-slate-800 dark:text-white">{{ $s->name }}</div>
+                                            <div class="text-[10px] text-slate-400">{{ $s->description }}</div>
+                                        </div>
+                                        <div class="flex items-center gap-1 shrink-0">
+                                            <input type="hidden" name="settings[{{ $settingIdx }}][key]" value="{{ $s->key }}">
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                name="settings[{{ $settingIdx }}][points]" 
+                                                value="{{ $s->points }}" 
+                                                class="w-16 px-2 py-1 text-xs text-center font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-white"
+                                            >
+                                            <span class="text-xs text-slate-400 font-bold">pt</span>
+                                        </div>
+                                    </div>
+                                    @php $settingIdx++; @endphp
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <!-- Grup 2: Standar Layanan & Bonus Tambahan -->
+                        <div class="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                <span>⭐ Bonus Pelayanan CS (COD, Sewa, Qty, Review, Mitra)</span>
+                            </h4>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                @foreach ($pointSettings->where('group', 'service') as $s)
+                                    <div class="p-3 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 flex items-center justify-between gap-3">
+                                        <div>
+                                            <div class="font-bold text-xs text-amber-950 dark:text-amber-200">{{ $s->name }}</div>
+                                            <div class="text-[11px] text-slate-500 dark:text-slate-400">{{ $s->description }}</div>
+                                        </div>
+                                        <div class="flex items-center gap-1 shrink-0">
+                                            <input type="hidden" name="settings[{{ $settingIdx }}][key]" value="{{ $s->key }}">
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                name="settings[{{ $settingIdx }}][points]" 
+                                                value="{{ $s->points }}" 
+                                                class="w-16 px-2 py-1 text-xs text-center font-mono font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300"
+                                            >
+                                            <span class="text-xs text-slate-400 font-bold">pt</span>
+                                        </div>
+                                    </div>
+                                    @php $settingIdx++; @endphp
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <button type="button" @click="pointsModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">Batal</button>
+                            <button type="submit" class="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                <span>Simpan Standar Kategori & Layanan</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>

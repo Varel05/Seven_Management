@@ -37,6 +37,7 @@ class Product extends Model
         'cost_sheet_variant_id',
         'selling_price',
         'rental_price',
+        'point_reward',
         'is_for_rent',
         'stock',
         'min_stock',
@@ -48,10 +49,24 @@ class Product extends Model
         'cost_price' => 'float',
         'selling_price' => 'float',
         'rental_price' => 'float',
+        'point_reward' => 'integer',
         'is_for_rent' => 'boolean',
         'stock' => 'integer',
         'min_stock' => 'integer',
     ];
+
+    /**
+     * Besaran poin insentif efektif untuk CS saat item ini terjual.
+     * Menggunakan point_reward kustom produk jika diset, atau fallback ke pengaturan kategori.
+     */
+    public function getEffectivePointRewardAttribute(): int
+    {
+        if ($this->point_reward !== null && $this->point_reward >= 0) {
+            return (int) $this->point_reward;
+        }
+
+        return PointSetting::get('item_category:'.$this->category, EmployeePointLog::PRODUCT_POINTS[$this->category] ?? 10);
+    }
 
     /**
      * Tarif sewa efektif (jika belum diset manual, estimasi standar 30% harga jual).

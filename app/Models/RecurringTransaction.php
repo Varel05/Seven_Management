@@ -47,12 +47,12 @@ class RecurringTransaction extends Model
 
             return JournalEntry::where(function ($q) {
                 $q->where('description', 'LIKE', "Pengeluaran Rutin: {$this->name}%")
-                  ->orWhere('description', 'LIKE', "%{$this->name}%");
+                    ->orWhere('description', 'LIKE', "%{$this->name}%");
             })
-            ->whereYear('date', $today->year)
-            ->whereMonth('date', $today->month)
-            ->where('status', '!=', 'rejected')
-            ->exists();
+                ->whereYear('date', $today->year)
+                ->whereMonth('date', $today->month)
+                ->where('status', '!=', 'rejected')
+                ->exists();
         }
 
         if ($this->frequency === 'yearly') {
@@ -62,11 +62,11 @@ class RecurringTransaction extends Model
 
             return JournalEntry::where(function ($q) {
                 $q->where('description', 'LIKE', "Pengeluaran Rutin: {$this->name}%")
-                  ->orWhere('description', 'LIKE', "%{$this->name}%");
+                    ->orWhere('description', 'LIKE', "%{$this->name}%");
             })
-            ->whereYear('date', $today->year)
-            ->where('status', '!=', 'rejected')
-            ->exists();
+                ->whereYear('date', $today->year)
+                ->where('status', '!=', 'rejected')
+                ->exists();
         }
 
         if ($this->frequency === 'weekly') {
@@ -76,11 +76,11 @@ class RecurringTransaction extends Model
 
             return JournalEntry::where(function ($q) {
                 $q->where('description', 'LIKE', "Pengeluaran Rutin: {$this->name}%")
-                  ->orWhere('description', 'LIKE', "%{$this->name}%");
+                    ->orWhere('description', 'LIKE', "%{$this->name}%");
             })
-            ->whereBetween('date', [$today->copy()->startOfWeek(), $today->copy()->endOfWeek()])
-            ->where('status', '!=', 'rejected')
-            ->exists();
+                ->whereBetween('date', [$today->copy()->startOfWeek(), $today->copy()->endOfWeek()])
+                ->where('status', '!=', 'rejected')
+                ->exists();
         }
 
         return false;
@@ -95,12 +95,12 @@ class RecurringTransaction extends Model
 
         $query = JournalEntry::where(function ($q) {
             $q->where('description', 'LIKE', "Pengeluaran Rutin: {$this->name}%")
-              ->orWhere('description', 'LIKE', "%{$this->name}%");
+                ->orWhere('description', 'LIKE', "%{$this->name}%");
         })->where('status', '!=', 'rejected');
 
         if ($this->frequency === 'monthly') {
             $query->whereYear('date', $today->year)
-                  ->whereMonth('date', $today->month);
+                ->whereMonth('date', $today->month);
         } elseif ($this->frequency === 'yearly') {
             $query->whereYear('date', $today->year);
         } elseif ($this->frequency === 'weekly') {
@@ -129,18 +129,21 @@ class RecurringTransaction extends Model
 
         if ($this->frequency === 'monthly') {
             $isMatchingDay = ($currentDay === $effectiveDay);
+
             return $isMatchingDay && ! $this->isPaidForCurrentPeriod();
         }
 
         if ($this->frequency === 'yearly') {
             $targetMonth = (int) ($this->month_of_year ?? 1);
             $isMatchingDate = ($today->month === $targetMonth && $currentDay === $effectiveDay);
+
             return $isMatchingDate && ! $this->isPaidForCurrentPeriod();
         }
 
         if ($this->frequency === 'weekly') {
             // day_of_month 1-7 merepresentasikan Monday-Sunday
             $isMatchingDayOfWeek = ((int) $today->dayOfWeekIso === ($targetDay % 7 ?: 7));
+
             return $isMatchingDayOfWeek && ! $this->isPaidForCurrentPeriod();
         }
 

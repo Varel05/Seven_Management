@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\EmployeeRole;
 use App\Models\Account;
+use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -115,5 +117,113 @@ class WebhookInfoEndpointsTest extends TestCase
         $this->assertStringContainsString('Rp 200.000', $response->json('message'));
         $this->assertStringContainsString('Laba Bersih', $response->json('message'));
         $this->assertStringContainsString('Rp 300.000', $response->json('message'));
+    }
+
+    public function test_identify_endpoint_rejects_unregistered_phone(): void
+    {
+        $response = $this->postJson('/api/webhook/auth/identify', [
+            'sender_phone' => '089999999999',
+            'sender_telegram_id' => '12345678',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(404)
+            ->assertJsonPath('status', false)
+            ->assertJsonPath('authenticated', false)
+            ->assertJsonPath('level', 'guest');
+    }
+
+    public function test_identify_endpoint_authenticates_cs_staff_and_binds_telegram_id(): void
+    {
+        $employee = Employee::create([
+            'name' => 'Budi CS',
+            'phone' => '081234567890',
+            'role' => EmployeeRole::Cs,
+            'position' => 'Customer Service',
+            'base_salary' => 2500000,
+            'status' => 'active',
+        ]);
+
+        $response = $this->postJson('/api/webhook/auth/identify', [
+            'sender_phone' => '081234567890',
+            'sender_telegram_id' => '99887766',
+            'sender_username' => 'budi_cs',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('authenticated', true)
+            ->assertJsonPath('level', 'staff')
+            ->assertJsonPath('role', 'cs')
+            ->assertJsonPath('is_staff', true)
+            ->assertJsonPath('is_above_staff', false)
+            ->assertJsonPath('employee.id', $employee->id);
+
+        $this->assertDatabaseHas('employees', [
+            'id' => $employee->id,
+            'telegram_user_id' => '99887766',
+            'telegram_username' => 'budi_cs',
+        ]);
+    }
+
+    public function test_identify_endpoint_authenticates_owner_from_config_or_role(): void
+    {
+        config(['services.telegram.owner_phones' => ['08111111111']]);
+
+        $response = $this->postJson('/api/webhook/auth/identify', [
+            'sender_phone' => '+628111111111',
+            'sender_telegram_id' => '11223344',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('authenticated', true)
+            ->assertJsonPath('level', 'above_staff')
+            ->assertJsonPath('role', 'owner')
+            ->assertJsonPath('is_above_staff', true);
+    }
+
+    public function test_balance_endpoint_denies_access_to_staff_role(): void
+    {
+        Employee::create([
+            'name' => 'Siti Staff',
+            'phone' => '08777777777',
+            'role' => EmployeeRole::Staff,
+            'position' => 'Staff Toko',
+            'base_salary' => 2200000,
+            'status' => 'active',
+        ]);
+
+        $response = $this->getJson('/api/webhook/balance?sender_phone=08777777777', [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(403)
+            ->assertJsonPath('status', false)
+            ->assertJsonPath('role', 'staff');
+    }
+
+    public function test_balance_endpoint_allows_access_to_above_staff_role(): void
+    {
+        Employee::create([
+            'name' => 'Pak Manager',
+            'phone' => '08888888888',
+            'role' => EmployeeRole::Manager,
+            'position' => 'Store Manager',
+            'base_salary' => 5000000,
+            'status' => 'active',
+        ]);
+
+        $response = $this->getJson('/api/webhook/balance?sender_phone=08888888888', [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true);
     }
 }

@@ -28,6 +28,7 @@ class CustomSuitOrder extends Model
 
     protected $fillable = [
         'order_number',
+        'employee_id',
         'customer_name',
         'customer_phone',
         'order_date',
@@ -69,6 +70,14 @@ class CustomSuitOrder extends Model
         'total_price' => 'float',
         'down_payment' => 'float',
     ];
+
+    /**
+     * Customer Service (CS) yang melayani pesanan ini.
+     */
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
 
     /**
      * Master bahan kain fisik yang digunakan dari stok gudang.

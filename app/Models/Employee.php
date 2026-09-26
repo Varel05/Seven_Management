@@ -2,16 +2,43 @@
 
 namespace App\Models;
 
+use App\Enums\EmployeeRole;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Employee extends Model
 {
+    public const ROLE_OWNER = 'owner';
+
+    public const ROLE_MANAGER = 'manager';
+
+    public const ROLE_AKUNTAN = 'akuntan';
+
+    public const ROLE_HRD = 'hrd';
+
+    public const ROLE_SUPERVISOR = 'supervisor';
+
+    public const ROLE_STAFF = 'staff';
+
+    public const ROLE_CS = 'cs';
+
+    public const ROLES = [
+        self::ROLE_OWNER => 'Owner / Pemilik',
+        self::ROLE_MANAGER => 'Manager / Pengelola',
+        self::ROLE_AKUNTAN => 'Akuntan / Finance',
+        self::ROLE_HRD => 'HRD / Personalia',
+        self::ROLE_SUPERVISOR => 'Supervisor / Pengawas',
+        self::ROLE_STAFF => 'Staff Umum',
+        self::ROLE_CS => 'Customer Service (CS)',
+    ];
+
     protected $guarded = [];
 
     protected $casts = [
+        'role' => EmployeeRole::class,
         'base_salary' => 'decimal:2',
         'rate_per_point' => 'decimal:2',
         'current_points' => 'integer',
@@ -23,11 +50,177 @@ class Employee extends Model
         'bonus_salary',
         'total_salary',
         'tier_label',
+        'role_label',
+        'role_value',
     ];
 
     public function assetAccount(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'asset_account_id');
+    }
+
+    public function pointLogs(): HasMany
+    {
+        return $this->hasMany(EmployeePointLog::class)->latest();
+    }
+
+    public function getRoleValueAttribute(): string
+    {
+        if ($this->role instanceof EmployeeRole) {
+            return $this->role->value;
+        }
+
+        return (string) ($this->role ?? EmployeeRole::Staff->value);
+    }
+
+    public function isOwner(): bool
+    {
+        return $this->role === EmployeeRole::Owner || $this->role_value === EmployeeRole::Owner->value;
+    }
+
+    public function isManager(): bool
+    {
+        return $this->role === EmployeeRole::Manager || $this->role_value === EmployeeRole::Manager->value;
+    }
+
+    public function isAkuntan(): bool
+    {
+        return $this->role === EmployeeRole::Akuntan || $this->role_value === EmployeeRole::Akuntan->value;
+    }
+
+    public function isHrd(): bool
+    {
+        return $this->role === EmployeeRole::Hrd || $this->role_value === EmployeeRole::Hrd->value;
+    }
+
+    public function isSupervisor(): bool
+    {
+        return $this->role === EmployeeRole::Supervisor || $this->role_value === EmployeeRole::Supervisor->value;
+    }
+
+    public function isAboveStaff(): bool
+    {
+        if ($this->role instanceof EmployeeRole) {
+            return $this->role->isAboveStaff();
+        }
+
+        $enum = EmployeeRole::tryFrom($this->role_value);
+
+        return $enum ? $enum->isAboveStaff() : false;
+    }
+
+    public function isStaff(): bool
+    {
+        return ! $this->isAboveStaff();
+    }
+
+    public function isCs(): bool
+    {
+        return $this->role === EmployeeRole::Cs || $this->role_value === EmployeeRole::Cs->value;
+    }
+
+    public function getRoleLabelAttribute(): string
+    {
+        if ($this->role instanceof EmployeeRole) {
+            return $this->role->label();
+        }
+
+        $enum = EmployeeRole::tryFrom($this->role_value);
+
+        return $enum ? $enum->label() : (self::ROLES[$this->role_value] ?? ucfirst($this->role_value));
+    }
+
+    public function getRoleBadgeClassAttribute(): string
+    {
+        if ($this->role instanceof EmployeeRole) {
+            return $this->role->badgeClass();
+        }
+
+        $enum = EmployeeRole::tryFrom($this->role_value);
+
+        return $enum ? $enum->badgeClass() : EmployeeRole::Staff->badgeClass();
+    }
+
+    /**
+     * Normalisasi nomor telepon / HP ke format angka standar lokal (contoh: 08123456789).
+     */
+    public static function normalizePhone(?string $phone): string
+    {
+        if (empty($phone)) {
+            return '';
+        }
+
+        $digits = preg_replace('/[^\d]/', '', (string) $phone);
+        if (empty($digits)) {
+            return '';
+        }
+
+        if (str_starts_with($digits, '62')) {
+            return '0'.substr($digits, 2);
+        }
+
+        return $digits;
+    }
+
+    /**
+     * Cari karyawan berdasarkan nomor HP (mendukung format 08..., 628..., +628..., maupun berformat spasi/strip).
+     */
+    public static function findByPhone(?string $phone): ?self
+    {
+        if (empty($phone)) {
+            return null;
+        }
+
+        $rawDigits = preg_replace('/[^\d]/', '', (string) $phone);
+        if (empty($rawDigits)) {
+            return null;
+        }
+
+        $local = str_starts_with($rawDigits, '62') ? '0'.substr($rawDigits, 2) : (str_starts_with($rawDigits, '0') ? $rawDigits : '0'.$rawDigits);
+        $intl = str_starts_with($local, '0') ? '62'.substr($local, 1) : $local;
+
+        return static::where(function ($q) use ($phone, $rawDigits, $local, $intl) {
+            $q->where('phone', $phone)
+                ->orWhere('phone', $rawDigits)
+                ->orWhere('phone', $local)
+                ->orWhere('phone', $intl)
+                ->orWhere('phone', '+'.$intl)
+                ->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(phone, '-', ''), ' ', ''), '+', ''), '.', '') IN (?, ?, ?)", [$local, $intl, $rawDigits]);
+        })->first();
+    }
+
+    /**
+     * Menambahkan atau mengurangi poin karyawan dengan pencatatan log riwayat transaksi poin.
+     */
+    public function addPoints(
+        int $points,
+        string $category = EmployeePointLog::CATEGORY_MANUAL,
+        ?string $notes = null,
+        ?string $refType = null,
+        ?int $refId = null,
+        ?string $actor = null
+    ): EmployeePointLog {
+        $oldPoints = (int) $this->current_points;
+        $newPoints = max(0, $oldPoints + $points);
+        $tierRate = self::getRateForPoints($newPoints);
+
+        $updateData = ['current_points' => $newPoints];
+        if ($tierRate > 0) {
+            $updateData['rate_per_point'] = $tierRate;
+        } elseif ($this->rate_per_point <= 2600) {
+            $updateData['rate_per_point'] = 0;
+        }
+
+        $this->update($updateData);
+
+        return $this->pointLogs()->create([
+            'points' => $points,
+            'category' => $category,
+            'reference_type' => $refType,
+            'reference_id' => $refId,
+            'actor' => $actor,
+            'notes' => $notes,
+        ]);
     }
 
     public function scopeActive($query)

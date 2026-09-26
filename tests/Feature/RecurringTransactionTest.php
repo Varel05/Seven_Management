@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Account;
+use App\Models\JournalEntry;
 use App\Models\RecurringTransaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -285,7 +286,7 @@ class RecurringTransactionTest extends TestCase
         $firstReference = $firstResponse->json('data.reference');
         $this->assertNotEmpty($firstReference);
 
-        $initialJournalCount = \App\Models\JournalEntry::count();
+        $initialJournalCount = JournalEntry::count();
 
         // Klik kedua kali pada tombol pesan sebelumnya di Telegram
         $secondResponse = $this->postJson("/api/webhook/recurring/{$recurring->id}/approve", [], [
@@ -301,7 +302,7 @@ class RecurringTransactionTest extends TestCase
         $this->assertStringContainsString($firstReference, $secondResponse->json('message'));
 
         // Pastikan tidak ada jurnal duplikat di database
-        $this->assertEquals($initialJournalCount, \App\Models\JournalEntry::count());
+        $this->assertEquals($initialJournalCount, JournalEntry::count());
     }
 
     public function test_manual_action_returns_fallback_if_already_paid(): void
@@ -324,7 +325,7 @@ class RecurringTransactionTest extends TestCase
             'X-Webhook-Secret' => 'test_secret_key',
         ])->assertStatus(201);
 
-        $journalCount = \App\Models\JournalEntry::count();
+        $journalCount = JournalEntry::count();
 
         // Eksekusi kedua kali (misal user mengetik /bayar lagi)
         $secondResponse = $this->postJson('/api/webhook/recurring/manual-action', [
@@ -342,7 +343,7 @@ class RecurringTransactionTest extends TestCase
         $this->assertStringContainsString('Pengeluaran Bulanan Sudah Dibayar!', $secondResponse->json('message'));
 
         // Tidak ada jurnal ganda
-        $this->assertEquals($journalCount, \App\Models\JournalEntry::count());
+        $this->assertEquals($journalCount, JournalEntry::count());
     }
 
     public function test_web_dashboard_prevents_duplicate_approval_if_already_paid(): void
@@ -363,13 +364,13 @@ class RecurringTransactionTest extends TestCase
         $this->actingAs($user)->post("/recurring-transactions/{$recurring->id}/approve")
             ->assertSessionHas('success');
 
-        $journalCount = \App\Models\JournalEntry::count();
+        $journalCount = JournalEntry::count();
 
         // Coba approve kedua kali via web
         $response = $this->actingAs($user)->post("/recurring-transactions/{$recurring->id}/approve");
         $response->assertSessionHas('warning');
 
         // Tidak ada jurnal ganda
-        $this->assertEquals($journalCount, \App\Models\JournalEntry::count());
+        $this->assertEquals($journalCount, JournalEntry::count());
     }
 }

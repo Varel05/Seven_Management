@@ -14,22 +14,27 @@ Route::middleware('webhook.secret')->group(function () {
     Route::post('/webhook/transaction', [WebhookTransactionController::class, 'store']);
 
     // Recurring & Subscription Endpoints
-    Route::get('/webhook/recurring/due', [WebhookTransactionController::class, 'dueRecurring']);
+    Route::match(['get', 'post'], '/webhook/recurring/due', [WebhookTransactionController::class, 'dueRecurring']);
     Route::post('/webhook/recurring/manual-action', [WebhookTransactionController::class, 'manualRecurringAction']);
     Route::post('/webhook/recurring/{recurringTransaction}/approve', [WebhookTransactionController::class, 'approveRecurring']);
     Route::post('/webhook/recurring/{recurringTransaction}/skip', [WebhookTransactionController::class, 'skipRecurring']);
 
     // Employee Payroll Webhook Endpoints
-    Route::get('/webhook/payroll/due', [WebhookTransactionController::class, 'duePayroll']);
-    Route::get('/webhook/payroll/list', [WebhookTransactionController::class, 'duePayroll']);
+    Route::match(['get', 'post'], '/webhook/payroll/due', [WebhookTransactionController::class, 'duePayroll']);
+    Route::match(['get', 'post'], '/webhook/payroll/list', [WebhookTransactionController::class, 'duePayroll']);
     Route::post('/webhook/payroll/{employee}/approve', [WebhookTransactionController::class, 'approvePayroll']);
     Route::post('/webhook/payroll/{employee}/skip', [WebhookTransactionController::class, 'skipPayroll']);
-    Route::get('/webhook/payroll/points', [WebhookTransactionController::class, 'listEmployeePoints']);
+    Route::match(['get', 'post'], '/webhook/payroll/points', [WebhookTransactionController::class, 'listEmployeePoints']);
+    Route::post('/webhook/payroll/points/update', [WebhookTransactionController::class, 'updateEmployeePoints']);
     Route::post('/webhook/payroll/points', [WebhookTransactionController::class, 'updateEmployeePoints']);
+    Route::match(['get', 'post'], '/webhook/payroll/my-points', [WebhookTransactionController::class, 'myPoints']);
+
+    // Auth & Telegram Identity Verification Endpoint
+    Route::match(['get', 'post'], '/webhook/auth/identify', [WebhookTransactionController::class, 'identifyTelegramUser']);
 
     // Information & Monitoring Endpoints (Balance & Summary)
-    Route::get('/webhook/balance', [WebhookTransactionController::class, 'balance']);
-    Route::get('/webhook/summary', [WebhookTransactionController::class, 'summary']);
+    Route::match(['get', 'post'], '/webhook/balance', [WebhookTransactionController::class, 'balance']);
+    Route::match(['get', 'post'], '/webhook/summary', [WebhookTransactionController::class, 'summary']);
 
     // Retail Clothing & Stock Endpoints for n8n / Telegram
     Route::get('/webhook/retail/stock', [WebhookTransactionController::class, 'checkRetailStock']);

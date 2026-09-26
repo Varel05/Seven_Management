@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\Employee;
+use App\Models\EmployeePointLog;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\PointSetting;
 use App\Models\Product;
 use App\Models\RetailSale;
 use App\Models\RetailSaleItem;
@@ -83,8 +86,21 @@ class RetailController extends Controller
         // Semua produk dengan stok > 0 untuk modal kasir cepat
         $availableProducts = Product::where('stock', '>', 0)->orderBy('name')->get();
 
+        // Semua produk untuk modal konfigurasi poin per item
+        $allProducts = Product::orderBy('category')->orderBy('name')->get();
+
+        // Konfigurasi standar poin item & layanan
+        PointSetting::seedDefaultsIfEmpty();
+        $pointSettings = PointSetting::orderBy('group')->orderBy('name')->get();
+
+        // Karyawan aktif untuk pemilihan kasir/CS
+        $employees = Employee::active()->orderBy('name')->get();
+
         return view('retail.index', [
             'products' => $products,
+            'allProducts' => $allProducts,
+            'pointSettings' => $pointSettings,
+            'employees' => $employees,
             'categories' => Product::CATEGORIES,
             'selectedCategory' => $categoryFilter,
             'search' => $search,
@@ -116,6 +132,7 @@ class RetailController extends Controller
             'cost_price' => ['required', 'numeric', 'min:0'],
             'selling_price' => ['required', 'numeric', 'min:0'],
             'rental_price' => ['nullable', 'numeric', 'min:0'],
+            'point_reward' => ['nullable', 'integer', 'min:0'],
             'is_for_rent' => ['nullable', 'boolean'],
             'stock' => ['required', 'integer', 'min:0'],
             'min_stock' => ['nullable', 'integer', 'min:0'],
@@ -130,10 +147,13 @@ class RetailController extends Controller
             $validated['rental_price'] = round(($validated['selling_price'] * 0.3) / 1000) * 1000;
         }
         $validated['is_for_rent'] = $request->has('is_for_rent') ? (bool) $request->input('is_for_rent') : true;
+        $validated['point_reward'] = ($request->filled('point_reward') && $request->input('point_reward') !== '')
+            ? (int) $request->input('point_reward')
+            : null;
 
         $product = Product::create($validated);
 
-        return back()->with('success', "Produk {$product->name} ({$product->code}) berhasil ditambahkan ke stok retail (bisa jual & sewa).");
+        return back()->with('success', "Produk {$product->name} ({$product->code}) berhasil ditambahkan ke stok retail (Poin CS: {$product->effective_point_reward} pt).");
     }
 
     /**
@@ -150,6 +170,7 @@ class RetailController extends Controller
             'cost_price' => ['required', 'numeric', 'min:0'],
             'selling_price' => ['required', 'numeric', 'min:0'],
             'rental_price' => ['nullable', 'numeric', 'min:0'],
+            'point_reward' => ['nullable'],
             'is_for_rent' => ['nullable', 'boolean'],
             'stock' => ['required', 'integer', 'min:0'],
             'min_stock' => ['nullable', 'integer', 'min:0'],
@@ -161,10 +182,65 @@ class RetailController extends Controller
             $validated['rental_price'] = round(($validated['selling_price'] * 0.3) / 1000) * 1000;
         }
         $validated['is_for_rent'] = $request->has('is_for_rent');
+        $validated['point_reward'] = ($request->filled('point_reward') && $request->input('point_reward') !== '')
+            ? max(0, (int) $request->input('point_reward'))
+            : null;
 
         $product->update($validated);
 
-        return back()->with('success', "Data produk {$product->name} berhasil diperbarui.");
+        return back()->with('success', "Data produk {$product->name} berhasil diperbarui (Poin CS: {$product->effective_point_reward} pt).");
+    }
+
+    /**
+     * Memperbarui poin insentif untuk setiap item produk pakaian melalui web.
+     */
+    public function updateItemPoints(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'products' => ['required', 'array', 'min:1'],
+            'products.*.id' => ['required', 'exists:products,id'],
+            'products.*.point_reward' => ['nullable'],
+        ]);
+
+        $updatedCount = 0;
+        foreach ($validated['products'] as $item) {
+            $val = $item['point_reward'] ?? null;
+            $pointReward = ($val !== null && $val !== '') ? max(0, (int) $val) : null;
+
+            Product::where('id', $item['id'])->update([
+                'point_reward' => $pointReward,
+            ]);
+            $updatedCount++;
+        }
+
+        return back()->with('success', "Berhasil memperbarui poin insentif untuk {$updatedCount} item produk ke database.");
+    }
+
+    /**
+     * Memperbarui standar poin per kategori pakaian dan layanan tambahan.
+     */
+    public function updatePointSettings(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'settings' => ['required', 'array', 'min:1'],
+            'settings.*.key' => ['required', 'string'],
+            'settings.*.points' => ['required', 'integer', 'min:0'],
+        ]);
+
+        foreach ($validated['settings'] as $item) {
+            $meta = PointSetting::DEFAULTS[$item['key']] ?? [];
+            PointSetting::updateOrCreate(
+                ['key' => $item['key']],
+                [
+                    'points' => (int) $item['points'],
+                    'name' => $meta['name'] ?? $item['key'],
+                    'group' => $meta['group'] ?? 'other',
+                    'description' => $meta['description'] ?? null,
+                ]
+            );
+        }
+
+        return back()->with('success', 'Standar poin kategori produk dan bonus layanan berhasil disimpan ke database.');
     }
 
     /**
@@ -191,6 +267,7 @@ class RetailController extends Controller
             'transaction_type' => ['nullable', 'string', Rule::in(['sale', 'rental'])],
             'customer_name' => ['nullable', 'string', 'max:255'],
             'customer_phone' => ['nullable', 'string', 'max:50'],
+            'employee_id' => ['nullable', 'exists:employees,id'],
             'payment_method' => ['required', 'string', Rule::in(['cash', 'transfer'])],
             'account_id' => ['required', 'exists:accounts,id'],
             'rental_start_date' => ['nullable', 'date'],
@@ -218,6 +295,7 @@ class RetailController extends Controller
             // Buat record transaksi retail (beli atau sewa)
             $retailSale = RetailSale::create([
                 'invoice_number' => $invoiceNumber,
+                'employee_id' => $validated['employee_id'] ?? null,
                 'transaction_type' => $isRental ? 'rental' : 'sale',
                 'sale_date' => now(),
                 'rental_start_date' => $isRental ? ($validated['rental_start_date'] ?? now()->toDateString()) : null,
@@ -398,8 +476,55 @@ class RetailController extends Controller
             return $retailSale;
         });
 
+        // Hitung & Berikan Poin Pelayanan ke CS jika dipilih di kasir
+        $pointEarnedMsg = '';
+        if (! empty($validated['employee_id'])) {
+            $csEmployee = Employee::find($validated['employee_id']);
+            if ($csEmployee) {
+                $totalPts = 0;
+                $totalQty = 0;
+                foreach ($validated['items'] as $itemData) {
+                    $prod = Product::find($itemData['product_id']);
+                    if ($prod) {
+                        $qty = (int) $itemData['quantity'];
+                        $totalQty += $qty;
+                        $itemPts = $isRental
+                            ? (PointSetting::get('service:rental', EmployeePointLog::DEFAULT_RENT_POINTS) * $qty)
+                            : ($prod->effective_point_reward * $qty);
+                        $totalPts += $itemPts;
+
+                        $csEmployee->addPoints(
+                            $itemPts,
+                            $isRental ? EmployeePointLog::CATEGORY_ITEM_RENT : EmployeePointLog::CATEGORY_ITEM_SALE,
+                            ($isRental ? 'Sewa ' : 'Jual ')."{$prod->name} (x{$qty} @{$prod->effective_point_reward} pt) via Kasir",
+                            'retail_sale',
+                            $sale->id,
+                            'Kasir Web'
+                        );
+                    }
+                }
+
+                if ($totalQty > 1) {
+                    $qtyBonus = ($totalQty - 1) * PointSetting::get('service:quantity_extra', EmployeePointLog::DEFAULT_QTY_EXTRA_POINTS);
+                    if ($qtyBonus > 0) {
+                        $totalPts += $qtyBonus;
+                        $csEmployee->addPoints(
+                            $qtyBonus,
+                            EmployeePointLog::CATEGORY_QUANTITY,
+                            "Bonus kuantitas x{$totalQty} item via Kasir",
+                            'retail_sale',
+                            $sale->id,
+                            'Kasir Web'
+                        );
+                    }
+                }
+                $pointEarnedMsg = " (⭐ +{$totalPts} poin insentif diberikan kepada {$csEmployee->name})";
+            }
+        }
+
         $tipeLabel = $isRental ? 'Penyewaan pakaian' : 'Penjualan retail';
-        return back()->with('success', "Transaksi {$tipeLabel} #{$sale->invoice_number} berhasil diproses. Total: Rp ".number_format($sale->total_amount, 0, ',', '.').' dan otomatis dibukukan ke jurnal akuntansi.');
+
+        return back()->with('success', "Transaksi {$tipeLabel} #{$sale->invoice_number} berhasil diproses{$pointEarnedMsg}. Total: Rp ".number_format($sale->total_amount, 0, ',', '.').' dan otomatis dibukukan ke jurnal akuntansi.');
     }
 
     /**

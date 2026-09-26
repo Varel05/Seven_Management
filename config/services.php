@@ -43,4 +43,11 @@ return [
         'custom_suit_webhook_url' => env('N8N_CUSTOM_SUIT_WEBHOOK_URL', 'http://localhost:5678/webhook/custom-suit-ai'),
     ],
 
+    'telegram' => [
+        'owner_ids' => array_filter(array_map('trim', explode(',', env('TELEGRAM_OWNER_IDS', env('TELEGRAM_ADMIN_IDS', ''))))),
+        'akuntan_ids' => array_filter(array_map('trim', explode(',', env('TELEGRAM_AKUNTAN_IDS', '')))),
+        'owner_phones' => array_filter(array_map('trim', explode(',', env('TELEGRAM_OWNER_PHONES', env('TELEGRAM_ADMIN_PHONES', ''))))),
+        'akuntan_phones' => array_filter(array_map('trim', explode(',', env('TELEGRAM_AKUNTAN_PHONES', '')))),
+    ],
+
 ];

@@ -14,6 +14,7 @@ class RetailRentalTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
+
     protected Account $cashAccount;
 
     protected function setUp(): void

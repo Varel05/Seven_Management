@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\EmployeeRole;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\CustomSuitOrder;
 use App\Models\Employee;
+use App\Models\EmployeePointLog;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Material;
 use App\Models\MaterialStockMovement;
+use App\Models\PointSetting;
 use App\Models\Product;
 use App\Models\RecurringTransaction;
 use App\Models\RetailSale;
@@ -22,6 +25,211 @@ use Illuminate\Support\Str;
 
 class WebhookTransactionController extends Controller
 {
+    /**
+     * Helper terpusat untuk mencari data karyawan yang mengirim pesan via Telegram:
+     * 1. Prioritas 1: Berdasarkan Nomor HP / Mobile Number (sender_phone / phone / contact / header X-Telegram-Phone)
+     * 2. Prioritas 2: Berdasarkan Telegram User ID (sender_telegram_id / header X-Telegram-User-Id)
+     * 3. Prioritas 3: Berdasarkan Telegram Username (sender_username)
+     * 4. Prioritas 4: Berdasarkan employee_id jika dikirim langsung
+     */
+    protected function resolveTelegramEmployee(Request $request): ?Employee
+    {
+        $senderPhone = trim((string) (
+            $request->input('sender_phone')
+            ?? $request->input('sender_mobile_number')
+            ?? $request->input('phone_number')
+            ?? $request->input('mobile_number')
+            ?? $request->input('phone')
+            ?? $request->header('X-Telegram-Phone')
+            ?? $request->header('X-Sender-Phone')
+            ?? ''
+        ));
+
+        if (! empty($senderPhone)) {
+            $emp = Employee::findByPhone($senderPhone);
+            if ($emp) {
+                return $emp;
+            }
+        }
+
+        $senderId = trim((string) (
+            $request->input('sender_telegram_id')
+            ?? $request->input('telegram_user_id')
+            ?? $request->header('X-Telegram-User-Id')
+            ?? ''
+        ));
+
+        if (! empty($senderId)) {
+            $emp = Employee::where('telegram_user_id', $senderId)->first();
+            if ($emp) {
+                return $emp;
+            }
+        }
+
+        $senderUsername = trim((string) ($request->input('sender_username') ?? ''));
+        if (! empty($senderUsername)) {
+            $emp = Employee::where('telegram_username', ltrim($senderUsername, '@'))->first();
+            if ($emp) {
+                return $emp;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolves the Telegram sender (via mobile phone number or Telegram ID) and enforces allowed roles.
+     */
+    protected function authorizeTelegramRole(Request $request, array $allowedRoles = []): array
+    {
+        $senderPhone = trim((string) (
+            $request->input('sender_phone')
+            ?? $request->input('sender_mobile_number')
+            ?? $request->input('phone_number')
+            ?? $request->input('mobile_number')
+            ?? $request->input('phone')
+            ?? $request->header('X-Telegram-Phone')
+            ?? $request->header('X-Sender-Phone')
+            ?? ''
+        ));
+
+        $senderId = trim((string) (
+            $request->input('sender_telegram_id')
+            ?? $request->input('telegram_user_id')
+            ?? $request->header('X-Telegram-User-Id')
+            ?? ''
+        ));
+
+        $senderUsername = trim((string) ($request->input('sender_username') ?? ''));
+
+        $ownerPhones = config('services.telegram.owner_phones', []);
+        $akuntanPhones = config('services.telegram.akuntan_phones', []);
+        $ownerIds = config('services.telegram.owner_ids', []);
+        $akuntanIds = config('services.telegram.akuntan_ids', []);
+
+        $role = null;
+
+        // 1. Cari Karyawan dari Request (HP -> ID -> Username)
+        $employee = $this->resolveTelegramEmployee($request);
+
+        // 2. Normalisasi nomor HP untuk pencocokan konfigurasi .env
+        $normalizedSenderPhone = ! empty($senderPhone) ? Employee::normalizePhone($senderPhone) : '';
+        $normalizedOwnerPhones = array_map([Employee::class, 'normalizePhone'], $ownerPhones);
+        $normalizedAkuntanPhones = array_map([Employee::class, 'normalizePhone'], $akuntanPhones);
+
+        // 3. Tentukan Peran (Role)
+        if (! empty($normalizedSenderPhone) && in_array($normalizedSenderPhone, $normalizedOwnerPhones, true)) {
+            $role = Employee::ROLE_OWNER;
+        } elseif (! empty($normalizedSenderPhone) && in_array($normalizedSenderPhone, $normalizedAkuntanPhones, true)) {
+            $role = Employee::ROLE_AKUNTAN;
+        } elseif (! empty($senderId) && in_array($senderId, $ownerIds, true)) {
+            $role = Employee::ROLE_OWNER;
+        } elseif (! empty($senderId) && in_array($senderId, $akuntanIds, true)) {
+            $role = Employee::ROLE_AKUNTAN;
+        } elseif ($employee) {
+            $role = $employee->role_value ?: Employee::ROLE_CS;
+            // Jika ID telegram baru diketahui dan belum tersimpan pada profil karyawan, otomatis simpan
+            if (! empty($senderId) && empty($employee->telegram_user_id)) {
+                $employee->update(['telegram_user_id' => $senderId]);
+            }
+        }
+
+        // 4. Validasi Peran yang Diizinkan (jika ada pembatasan peran)
+        $hasIdentifier = ! empty($senderPhone) || ! empty($senderId) || ! empty($senderUsername);
+
+        if ($hasIdentifier && ! empty($allowedRoles)) {
+            $allowedRoleValues = array_map(fn ($r) => $r instanceof EmployeeRole ? $r->value : (string) $r, $allowedRoles);
+            if (! $role || ! in_array($role, $allowedRoleValues, true)) {
+                $roleNames = array_map(fn ($r) => Employee::ROLES[$r] ?? ucfirst($r), $allowedRoleValues);
+                $allowedList = implode(' / ', $roleNames);
+                $currentRoleName = $role ? (Employee::ROLES[$role] ?? ucfirst($role)) : 'Belum Terdaftar';
+                $identityText = $senderPhone ?: ($senderId ? "ID: {$senderId}" : 'Tidak diketahui');
+
+                abort(response()->json([
+                    'status' => false,
+                    'role' => $role,
+                    'message' => "⛔ *Akses Ditolak!*\nFitur ini dibatasi khusus untuk: [{$allowedList}].\nAkun Telegram Anda ({$identityText}) teridentifikasi sebagai: *{$currentRoleName}*.\n\n💡 Pastikan nomor HP Telegram Anda sudah didaftarkan pada menu Manajemen Karyawan di sistem Seven Management.",
+                ], 403));
+            }
+        }
+
+        return [
+            'sender_id' => $senderId,
+            'sender_phone' => $senderPhone,
+            'role' => $role,
+            'employee' => $employee,
+        ];
+    }
+
+    /**
+     * Identifikasi dan hubungkan akun Telegram pengguna via nomor HP / Telegram ID.
+     */
+    public function identifyTelegramUser(Request $request)
+    {
+        $auth = $this->authorizeTelegramRole($request);
+        $senderPhone = $auth['sender_phone'] ?? '';
+        $senderId = $auth['sender_id'] ?? '';
+        $role = $auth['role'];
+        $employee = $auth['employee'];
+
+        // Jika data karyawan ditemukan dan ada senderId, tautkan otomatis jika belum tertaut
+        if ($employee && ! empty($senderId) && $employee->telegram_user_id !== $senderId) {
+            $employee->update(['telegram_user_id' => $senderId]);
+        }
+
+        $senderUsername = trim((string) ($request->input('sender_username') ?? ''));
+        if ($employee && ! empty($senderUsername) && empty($employee->telegram_username)) {
+            $employee->update(['telegram_username' => ltrim($senderUsername, '@')]);
+        }
+
+        if (! $role && ! $employee) {
+            $identity = $senderPhone ?: ($senderId ? "ID: {$senderId}" : 'Nomor HP tidak terdeteksi');
+
+            return response()->json([
+                'status' => false,
+                'authenticated' => false,
+                'role' => null,
+                'level' => 'guest',
+                'message' => "❌ *Akun Telegram Belum Terhubung*\n".
+                             "Nomor HP / Akun Telegram Anda ({$identity}) belum terdaftar pada sistem Seven Management.\n\n".
+                             "💡 Silakan hubungi HRD / Manajemen untuk mendaftarkan nomor HP Anda pada menu Karyawan, atau gunakan tombol '📱 Kirim Nomor HP' untuk menautkan akun.",
+            ], 404);
+        }
+
+        $roleLabel = $role ? (Employee::ROLES[$role] ?? ucfirst($role)) : ($employee ? $employee->role_label : 'Pegawai');
+        $isAboveStaff = in_array($role, [Employee::ROLE_OWNER, Employee::ROLE_AKUNTAN, Employee::ROLE_MANAGER, EmployeeRole::Hrd->value, EmployeeRole::Supervisor->value], true);
+        $level = $isAboveStaff ? 'above_staff' : 'staff';
+
+        $greetingName = $employee ? $employee->name : $roleLabel;
+        $levelTitle = $isAboveStaff ? '👑 Manajemen (Di Atas Staff)' : '💼 Operasional (Tingkat Staff)';
+
+        return response()->json([
+            'status' => true,
+            'authenticated' => true,
+            'role' => $role,
+            'level' => $level,
+            'is_above_staff' => $isAboveStaff,
+            'is_staff' => ! $isAboveStaff,
+            'role_label' => $roleLabel,
+            'employee' => $employee ? [
+                'id' => $employee->id,
+                'name' => $employee->name,
+                'phone' => $employee->phone,
+                'role' => $employee->role_value,
+                'position' => $employee->position,
+                'current_points' => $employee->current_points,
+                'tier_label' => $employee->tier_label,
+                'formatted_bonus' => $employee->formatted_bonus_salary,
+            ] : null,
+            'message' => "👋 Halo *{$greetingName}*!\n".
+                         "📱 Status: *Terautentikasi*\n".
+                         "💼 Jabatan: *{$roleLabel}* ({$levelTitle})\n\n".
+                         ($isAboveStaff
+                            ? 'Anda memiliki akses manajemen untuk memantau saldo, tagihan rutin, rekapitulasi gaji, dan evaluasi poin staf.'
+                            : 'Gunakan menu di bawah untuk mencatat kasir retail (/jual), cek stok pakaian (/stok), tracking jas (/status), dan cek perolehan poin Anda (/poinsaya).'),
+        ]);
+    }
+
     /**
      * Display a listing of recent journal transactions.
      */
@@ -339,6 +547,8 @@ class WebhookTransactionController extends Controller
      */
     public function dueRecurring(Request $request)
     {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
         $today = Carbon::today();
         $now = Carbon::now();
         $monthName = $now->translatedFormat('F Y');
@@ -589,6 +799,15 @@ class WebhookTransactionController extends Controller
      */
     public function duePayroll(Request $request)
     {
+        $auth = $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+        if ($auth['role'] === Employee::ROLE_CS || $auth['role'] === Employee::ROLE_STAFF) {
+            return response()->json([
+                'status' => false,
+                'role' => $auth['role'],
+                'message' => "⛔ *Akses Ditolak!*\nInformasi rekapitulasi gaji karyawan hanya dapat diakses oleh Manajemen (Owner / Akuntan / HRD / Manager).\n\n💡 Untuk mengecek poin dan estimasi bonus kinerja Anda sendiri, gunakan perintah `/poinsaya`.",
+            ], 403);
+        }
+
         $today = now();
         $daysInMonth = $today->daysInMonth;
         $monthName = $today->translatedFormat('F Y');
@@ -741,6 +960,8 @@ class WebhookTransactionController extends Controller
      */
     public function approveRecurring(Request $request, RecurringTransaction $recurringTransaction)
     {
+        $this->authorizeTelegramRole($request, [Employee::ROLE_OWNER, Employee::ROLE_AKUNTAN]);
+
         // 1. Cek database sebelum eksekusi bayar apakah tagihan sudah dibayar pada periode berjalan
         if ($recurringTransaction->isPaidForCurrentPeriod()) {
             $existingEntry = $recurringTransaction->findExistingCurrentPeriodJournal();
@@ -807,6 +1028,8 @@ class WebhookTransactionController extends Controller
      */
     public function approvePayroll(Request $request, Employee $employee)
     {
+        $this->authorizeTelegramRole($request, [Employee::ROLE_OWNER, Employee::ROLE_AKUNTAN]);
+
         // Cek database sebelum eksekusi bayar apakah gaji bulan ini sudah dibayar
         if ($employee->isPaidThisMonth()) {
             $existingEntry = $employee->findExistingCurrentMonthPayrollJournal();
@@ -866,6 +1089,8 @@ class WebhookTransactionController extends Controller
      */
     public function skipPayroll(Request $request, Employee $employee)
     {
+        $this->authorizeTelegramRole($request, [Employee::ROLE_OWNER, Employee::ROLE_AKUNTAN]);
+
         if ($employee->isPaidThisMonth()) {
             return response()->json([
                 'status' => false,
@@ -887,6 +1112,8 @@ class WebhookTransactionController extends Controller
      */
     public function skipRecurring(Request $request, RecurringTransaction $recurringTransaction)
     {
+        $this->authorizeTelegramRole($request, [Employee::ROLE_OWNER, Employee::ROLE_AKUNTAN]);
+
         if ($recurringTransaction->isPaidForCurrentPeriod()) {
             return response()->json([
                 'status' => false,
@@ -1144,6 +1371,8 @@ class WebhookTransactionController extends Controller
      */
     public function balance(Request $request)
     {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
         $accounts = Account::where('type', 'asset')
             ->with('lines')
             ->orderBy('code')
@@ -1187,6 +1416,8 @@ class WebhookTransactionController extends Controller
      */
     public function summary(Request $request)
     {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
         $now = Carbon::now();
         $monthName = $now->translatedFormat('F Y');
 
@@ -1368,6 +1599,10 @@ class WebhookTransactionController extends Controller
             $paymentStatus = 'partial_dp';
         }
 
+        $senderId = trim((string) ($request->input('sender_telegram_id') ?? ''));
+        $employeeId = $request->input('employee_id');
+        $csEmployee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
+
         $order = DB::transaction(function () use (
             $validated,
             $orderNumber,
@@ -1379,8 +1614,8 @@ class WebhookTransactionController extends Controller
             $totalCost,
             $totalPrice,
             $downPayment,
-            $paymentStatus
-
+            $paymentStatus,
+            $csEmployee
         ) {
             $accountCode = $validated['account_code'] ?? '1001';
             $account = Account::where('code', $accountCode)->first()
@@ -1388,6 +1623,7 @@ class WebhookTransactionController extends Controller
 
             $customOrder = CustomSuitOrder::create([
                 'order_number' => $orderNumber,
+                'employee_id' => $csEmployee?->id,
                 'customer_name' => $validated['customer_name'],
                 'customer_phone' => $validated['customer_phone'] ?? null,
                 'order_date' => now()->toDateString(),
@@ -1407,7 +1643,7 @@ class WebhookTransactionController extends Controller
                 'production_status' => 'consultation',
                 'account_id' => $account?->id,
                 'source' => 'telegram',
-                'notes' => $validated['notes'] ?? 'Dibuat otomatis via Telegram n8n AI Agent',
+                'notes' => $validated['notes'] ?? 'Dibuat otomatis via Telegram n8n AI Agent'.($csEmployee ? " (CS: {$csEmployee->name})" : ''),
             ]);
 
             // Jika ada DP, bukukan langsung ke kasir akuntansi
@@ -1447,6 +1683,26 @@ class WebhookTransactionController extends Controller
             return $customOrder;
         });
 
+        // Berikan poin pelayanan jas custom ke CS jika teridentifikasi
+        $pointInfo = null;
+        if ($csEmployee) {
+            $suitPoints = PointSetting::get('service:custom_suit', EmployeePointLog::PRODUCT_POINTS['custom_made_jas'] ?? 25);
+            $csEmployee->addPoints(
+                $suitPoints,
+                EmployeePointLog::CATEGORY_ITEM_SALE,
+                "Pesanan Jas Custom {$order->order_number} ({$order->customer_name})",
+                'custom_order',
+                $order->id,
+                $senderId ? "Telegram:{$senderId}" : 'CS'
+            );
+
+            $pointInfo = [
+                'points' => $suitPoints,
+                'employee_name' => $csEmployee->name,
+                'new_points' => $csEmployee->fresh()->current_points,
+            ];
+        }
+
         $msg = [
             '✅ *Pesanan Pembuatan Jas Berhasil Dibuat!*',
             "📋 *No. Pesanan*: `{$order->order_number}`",
@@ -1459,9 +1715,16 @@ class WebhookTransactionController extends Controller
             '📅 *Target Jadi*: '.($order->due_date ? $order->due_date->format('d M Y') : '14 hari'),
         ];
 
+        if ($pointInfo) {
+            $msg[] = '───────────────────';
+            $msg[] = "⭐ *Poin Pelayanan CS*: +{$pointInfo['points']} pt ({$pointInfo['employee_name']})";
+            $msg[] = "   • Total Poin CS Sekarang: *{$pointInfo['new_points']} pt*";
+        }
+
         return response()->json([
             'status' => true,
             'order' => $order,
+            'points_awarded' => $pointInfo,
             'message' => implode("\n", $msg),
         ]);
     }
@@ -1670,6 +1933,10 @@ class WebhookTransactionController extends Controller
             'quantity' => 'nullable|integer|min:1',
             'customer_name' => 'nullable|string|max:255',
             'account_code' => 'nullable|string',
+            'payment_method' => 'nullable|string',
+            'sender_telegram_id' => 'nullable|string',
+            'employee_id' => 'nullable|exists:employees,id',
+            'is_rental' => 'nullable|boolean',
         ]);
 
         $qty = (int) ($validated['quantity'] ?? 1);
@@ -1694,39 +1961,50 @@ class WebhookTransactionController extends Controller
         $account = Account::where('code', $validated['account_code'] ?? '1001')->first()
             ?? Account::where('type', 'asset')->first();
 
-        $sale = DB::transaction(function () use ($product, $qty, $validated, $account) {
+        $senderId = trim((string) ($request->input('sender_telegram_id') ?? ''));
+        $employeeId = $request->input('employee_id');
+        $csEmployee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
+
+        $paymentMethod = strtolower($request->input('payment_method', 'cash'));
+        $isRental = $request->boolean('is_rental');
+
+        $sale = DB::transaction(function () use ($product, $qty, $validated, $account, $csEmployee, $paymentMethod, $isRental) {
             $product->decrement('stock', $qty);
 
             $unitCost = (float) $product->cost_price;
-            $unitPrice = (float) $product->selling_price;
+            $unitPrice = (float) ($isRental ? $product->effective_rental_price : $product->selling_price);
             $subtotal = $unitPrice * $qty;
             $totalCost = $unitCost * $qty;
-            $invoiceNumber = 'RTL-'.date('Ymd').'-'.strtoupper(Str::random(4));
+            $invoiceNumber = ($isRental ? 'RNT-' : 'RTL-').date('Ymd').'-'.strtoupper(Str::random(4));
 
             $retailSale = RetailSale::create([
                 'invoice_number' => $invoiceNumber,
+                'employee_id' => $csEmployee?->id,
+                'transaction_type' => $isRental ? 'rental' : 'sale',
                 'sale_date' => now(),
                 'customer_name' => $validated['customer_name'] ?? 'Pelanggan Telegram',
-                'payment_method' => 'cash',
+                'payment_method' => $paymentMethod,
                 'account_id' => $account?->id,
                 'total_amount' => $subtotal,
                 'total_cost' => $totalCost,
-                'notes' => 'Transaksi penjualan via Bot Telegram n8n',
+                'notes' => 'Transaksi via Bot Telegram n8n'.($csEmployee ? " (CS: {$csEmployee->name})" : ''),
             ]);
 
             RetailSaleItem::create([
                 'retail_sale_id' => $retailSale->id,
                 'product_id' => $product->id,
+                'transaction_type' => $isRental ? 'rental' : 'sale',
                 'quantity' => $qty,
                 'unit_cost_price' => $unitCost,
-                'unit_selling_price' => $unitPrice,
+                'unit_selling_price' => $isRental ? 0 : $unitPrice,
+                'unit_rental_price' => $isRental ? $unitPrice : 0,
                 'subtotal' => $subtotal,
             ]);
 
             // Posting otomatis ke Akuntansi
-            $pendapatanRetailAccount = Account::firstOrCreate(
-                ['code' => '4002'],
-                ['name' => 'Pendapatan Penjualan Retail', 'type' => 'revenue']
+            $pendapatanAccount = Account::firstOrCreate(
+                ['code' => $isRental ? '4003' : '4002'],
+                ['name' => $isRental ? 'Pendapatan Sewa Pakaian' : 'Pendapatan Penjualan Retail', 'type' => 'revenue']
             );
             $persediaanAccount = Account::firstOrCreate(
                 ['code' => '1003'],
@@ -1739,7 +2017,7 @@ class WebhookTransactionController extends Controller
 
             $journal = JournalEntry::create([
                 'reference' => $invoiceNumber,
-                'description' => "Penjualan Retail {$product->name} x{$qty} ({$invoiceNumber})",
+                'description' => ($isRental ? 'Sewa ' : 'Penjualan ')."Retail {$product->name} x{$qty} ({$invoiceNumber})",
                 'date' => now(),
                 'source' => 'retail',
                 'status' => 'verified',
@@ -1749,7 +2027,7 @@ class WebhookTransactionController extends Controller
                 JournalEntryLine::create([
                     'journal_entry_id' => $journal->id,
                     'account_id' => $account->id,
-                    'description' => "Penerimaan penjualan {$invoiceNumber}",
+                    'description' => "Penerimaan kas/bank {$invoiceNumber}",
                     'debit' => $subtotal,
                     'credit' => 0,
                 ]);
@@ -1757,13 +2035,13 @@ class WebhookTransactionController extends Controller
 
             JournalEntryLine::create([
                 'journal_entry_id' => $journal->id,
-                'account_id' => $pendapatanRetailAccount->id,
+                'account_id' => $pendapatanAccount->id,
                 'description' => "Pendapatan retail {$invoiceNumber}",
                 'debit' => 0,
                 'credit' => $subtotal,
             ]);
 
-            if ($totalCost > 0) {
+            if (! $isRental && $totalCost > 0) {
                 JournalEntryLine::create([
                     'journal_entry_id' => $journal->id,
                     'account_id' => $hppAccount->id,
@@ -1785,17 +2063,85 @@ class WebhookTransactionController extends Controller
             return $retailSale;
         });
 
+        // Hitung & Berikan Poin Pelayanan ke CS jika terdeteksi
+        $pointInfo = null;
+        if ($csEmployee) {
+            $itemBasePoints = $isRental
+                ? PointSetting::get('service:rental', EmployeePointLog::DEFAULT_RENT_POINTS)
+                : $product->effective_point_reward;
+
+            $qtyBonus = ($qty > 1) ? ($qty - 1) * PointSetting::get('service:quantity_extra', EmployeePointLog::DEFAULT_QTY_EXTRA_POINTS) : 0;
+            $codBonus = ($paymentMethod === 'cod') ? PointSetting::get('service:cod', EmployeePointLog::DEFAULT_COD_POINTS) : 0;
+            $totalPointsEarned = $itemBasePoints + $qtyBonus + $codBonus;
+
+            $pointCategory = $isRental ? EmployeePointLog::CATEGORY_ITEM_RENT : EmployeePointLog::CATEGORY_ITEM_SALE;
+            $actor = $senderId ? "Telegram:{$senderId}" : 'CS';
+
+            // 1. Poin dasar item
+            $csEmployee->addPoints(
+                $itemBasePoints,
+                $pointCategory,
+                ($isRental ? 'Sewa ' : 'Jual ')."{$product->name} (x{$qty})",
+                'retail_sale',
+                $sale->id,
+                $actor
+            );
+
+            // 2. Bonus kuantitas (jika > 1 pcs)
+            if ($qtyBonus > 0) {
+                $csEmployee->addPoints(
+                    $qtyBonus,
+                    EmployeePointLog::CATEGORY_QUANTITY,
+                    "Bonus kuantitas x{$qty} {$product->name}",
+                    'retail_sale',
+                    $sale->id,
+                    $actor
+                );
+            }
+
+            // 3. Bonus Cash on Delivery (COD)
+            if ($codBonus > 0) {
+                $csEmployee->addPoints(
+                    $codBonus,
+                    EmployeePointLog::CATEGORY_COD,
+                    "Layanan Cash on Delivery (COD) {$product->name}",
+                    'retail_sale',
+                    $sale->id,
+                    $actor
+                );
+            }
+
+            $pointInfo = [
+                'total' => $totalPointsEarned,
+                'item_points' => $itemBasePoints,
+                'qty_bonus' => $qtyBonus,
+                'cod_bonus' => $codBonus,
+                'employee_name' => $csEmployee->name,
+                'new_points' => $csEmployee->fresh()->current_points,
+            ];
+        }
+
+        $typeLabel = $isRental ? 'Penyewaan Baju' : 'Penjualan Retail';
         $msg = [
-            '🛍️ *Penjualan Retail Berhasil Dicatat!*',
+            "🛍️ *{$typeLabel} Berhasil Dicatat!*",
             "🧾 *Invoice*: `{$sale->invoice_number}`",
             "📦 *Item*: {$product->name} (x{$qty})",
+            '💳 *Metode*: '.strtoupper($paymentMethod),
             '💰 *Total Bayar*: Rp '.number_format($sale->total_amount, 0, ',', '.'),
             '📉 *Sisa Stok*: '.($product->fresh()->stock).' pcs',
         ];
 
+        if ($pointInfo) {
+            $msg[] = '───────────────────';
+            $msg[] = "⭐ *Poin Pelayanan CS*: +{$pointInfo['total']} pt ({$pointInfo['employee_name']})";
+            $msg[] = "   • Item: +{$pointInfo['item_points']} pt | Qty: +{$pointInfo['qty_bonus']} pt".($pointInfo['cod_bonus'] > 0 ? " | COD: +{$pointInfo['cod_bonus']} pt" : '');
+            $msg[] = "   • Total Poin CS Sekarang: *{$pointInfo['new_points']} pt*";
+        }
+
         return response()->json([
             'status' => true,
             'sale' => $sale,
+            'points_awarded' => $pointInfo,
             'message' => implode("\n", $msg),
         ]);
     }
@@ -2031,6 +2377,9 @@ class WebhookTransactionController extends Controller
      */
     public function listEmployeePoints(Request $request)
     {
+        $auth = $this->authorizeTelegramRole($request);
+        $isCs = ($auth['role'] === Employee::ROLE_CS);
+
         $employees = Employee::active()
             ->orderBy('current_points', 'desc')
             ->orderBy('name', 'asc')
@@ -2058,22 +2407,119 @@ class WebhookTransactionController extends Controller
 
             $lines[] = "{$rankIcon} *#".($index + 1).". {$emp->name}* ({$emp->position})";
             $lines[] = "   • ⭐ Poin: *{$points} pt* | {$tier}";
-            if ($points > 0) {
+            // Privasi: CS tidak diperkenankan melihat nominal rupiah gaji/bonus staf lain di publik
+            if (! $isCs && $points > 0) {
                 $lines[] = "   • 💰 Bonus: {$bonus} (Total Gaji: {$emp->formatted_total_salary})";
             }
             $lines[] = '';
         }
 
-        $lines[] = '💡 *Format Cepat Tambah Poin*:';
-        $lines[] = '`/poin <nama/id> <+poin> [keterangan]`';
-        $lines[] = 'Contoh: `/poin Budi 25 Selesai jas Pak Joko`';
+        if ($isCs) {
+            $lines[] = '💡 *Info*: Untuk melihat rincian bonus & estimasi gaji pribadi Anda, gunakan `/poinsaya`.';
+        } else {
+            $lines[] = '💡 *Format Cepat Tambah Poin (Khusus Owner/Akuntan)*:';
+            $lines[] = '`/poin <nama/id> <+poin> [kategori] [keterangan]`';
+            $lines[] = 'Contoh: `/poin Budi 15 review Pelanggan puas bintang 5`';
+        }
 
         return response()->json([
             'status' => true,
+            'is_cs' => $isCs,
             'count' => $employees->count(),
             'total_points' => $totalPoints,
-            'employees' => $employees,
+            'employees' => $isCs ? $employees->makeHidden(['base_salary', 'bonus_salary', 'total_salary', 'formatted_bonus_salary', 'formatted_total_salary']) : $employees,
             'message' => trim(implode("\n", $lines)),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Cek rekapitulasi poin & estimasi bonus pribadi karyawan / CS.
+     */
+    public function myPoints(Request $request)
+    {
+        $employeeId = $request->input('employee_id');
+        $employee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
+
+        if (! $employee) {
+            $senderPhone = trim((string) ($request->input('sender_phone') ?? $request->input('phone') ?? $request->header('X-Telegram-Phone') ?? ''));
+            $senderId = trim((string) ($request->input('sender_telegram_id') ?? $request->header('X-Telegram-User-Id') ?? ''));
+            $identifier = $senderPhone ?: ($senderId ? "ID: {$senderId}" : 'nomor HP / Telegram Anda');
+
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Akun Telegram / Nomor HP Anda belum terhubung dengan data karyawan di sistem Seven Management.\n\n💡 Hubungi Admin/Akuntan untuk mendaftarkan Nomor HP Anda (`{$identifier}`) pada data karyawan.",
+            ], 404);
+        }
+
+        $now = now();
+        $logs = $employee->pointLogs()
+            ->whereMonth('created_at', $now->month)
+            ->whereYear('created_at', $now->year)
+            ->get();
+
+        $categorySummary = [];
+        foreach (EmployeePointLog::CATEGORIES as $key => $label) {
+            $sum = $logs->where('category', $key)->sum('points');
+            if ($sum != 0) {
+                $categorySummary[$label] = $sum;
+            }
+        }
+
+        // Hitung target tier berikutnya
+        $currentPoints = (int) $employee->current_points;
+        $nextTierInfo = '';
+        if ($currentPoints < 200) {
+            $needed = 200 - $currentPoints;
+            $nextTierInfo = "🎯 *Target*: Butuh *{$needed} pt* lagi untuk mencapai *Tier 1* (Rp 1.000 / pt)";
+        } elseif ($currentPoints < 295) {
+            $needed = 295 - $currentPoints;
+            $nextTierInfo = "🎯 *Target*: Butuh *{$needed} pt* lagi untuk mencapai *Tier 2* (Rp 1.400 / pt)";
+        } elseif ($currentPoints < 370) {
+            $needed = 370 - $currentPoints;
+            $nextTierInfo = "🎯 *Target*: Butuh *{$needed} pt* lagi untuk mencapai *Tier 3* (Rp 1.800 / pt)";
+        } elseif ($currentPoints < 445) {
+            $needed = 445 - $currentPoints;
+            $nextTierInfo = "🎯 *Target*: Butuh *{$needed} pt* lagi untuk mencapai *Tier 4* (Rp 2.200 / pt)";
+        } elseif ($currentPoints < 500) {
+            $needed = 500 - $currentPoints;
+            $nextTierInfo = "🎯 *Target*: Butuh *{$needed} pt* lagi untuk mencapai *Tier 5 (Maksimal)* (Rp 2.600 / pt)";
+        } else {
+            $nextTierInfo = '🏆 *Luar Biasa!* Anda sudah berada di *Tier Tertinggi (Tier 5)*!';
+        }
+
+        $msg = [
+            "⭐ *Rekapitulasi Poin Pelayanan CS Bulan {$now->translatedFormat('F Y')}*",
+            "👤 *Nama*: *{$employee->name}* ({$employee->position} - {$employee->role_label})",
+            "📊 *Total Poin*: *{$currentPoints} pt*",
+            "🏆 *Status Tingkatan*: *{$employee->tier_label}*",
+        ];
+
+        if ($employee->rate_per_point > 0) {
+            $msg[] = '💵 *Tarif per Poin*: Rp '.number_format($employee->rate_per_point, 0, ',', '.').' / pt';
+            $msg[] = "💰 *Estimasi Bonus Poin*: *{$employee->formatted_bonus_salary}*";
+        } else {
+            $msg[] = '💰 *Estimasi Bonus Poin*: Rp 0 (Belum mencapai batas Tier 1: 200 pt)';
+        }
+
+        if (! empty($categorySummary)) {
+            $msg[] = "\n📋 *Rincian Poin Bulan Ini*:";
+            foreach ($categorySummary as $catLabel => $pts) {
+                $sign = $pts > 0 ? '+' : '';
+                $msg[] = "   • {$catLabel}: *{$sign}{$pts} pt*";
+            }
+        }
+
+        $msg[] = "\n{$nextTierInfo}";
+
+        return response()->json([
+            'status' => true,
+            'employee' => $employee,
+            'current_points' => $currentPoints,
+            'tier_label' => $employee->tier_label,
+            'rate_per_point' => (float) $employee->rate_per_point,
+            'bonus_salary' => (float) $employee->bonus_salary,
+            'category_summary' => $categorySummary,
+            'message' => implode("\n", $msg),
         ]);
     }
 
@@ -2082,26 +2528,38 @@ class WebhookTransactionController extends Controller
      */
     public function updateEmployeePoints(Request $request)
     {
+        // Hanya Manajemen (Di Atas Staff) yang berhak memberi / menyesuaikan poin secara manual
+        $auth = $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
         $validated = $request->validate([
-            'employee_query' => 'required',
+            'employee_query' => 'required_without:employee_id',
+            'employee_id' => 'nullable|exists:employees,id',
             'points' => 'required|integer',
             'mode' => 'nullable|in:add,set,subtract',
+            'operation' => 'nullable|in:add,set,subtract',
+            'category' => 'nullable|string|in:review,cross_company,manual,cod,quantity,item_sale,item_rent',
             'notes' => 'nullable|string|max:255',
         ]);
 
-        $search = trim((string) $validated['employee_query']);
-        $mode = $validated['mode'] ?? 'add';
+        $mode = $validated['mode'] ?? $validated['operation'] ?? 'add';
         $points = (int) $validated['points'];
+        $category = $validated['category'] ?? EmployeePointLog::CATEGORY_MANUAL;
 
         $employee = null;
-        if (is_numeric($search)) {
-            $employee = Employee::find((int) $search);
-        }
+        if (! empty($validated['employee_id'])) {
+            $employee = Employee::find($validated['employee_id']);
+            $search = $employee?->name ?? (string) $validated['employee_id'];
+        } else {
+            $search = trim((string) $validated['employee_query']);
+            if (is_numeric($search)) {
+                $employee = Employee::find((int) $search);
+            }
 
-        if (! $employee) {
-            $employee = Employee::where('name', $search)
-                ->orWhere('name', 'like', "%{$search}%")
-                ->first();
+            if (! $employee) {
+                $employee = Employee::where('name', $search)
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->first();
+            }
         }
 
         if (! $employee) {
@@ -2141,6 +2599,23 @@ class WebhookTransactionController extends Controller
         }
 
         $employee->update($updateData);
+
+        // Catat mutasi poin ke log riwayat
+        $actor = $auth['employee']
+            ? "{$auth['employee']->name} ({$auth['role']})"
+            : ($auth['sender_id'] ? "Telegram:{$auth['sender_id']}" : 'Admin Webhook');
+        $categoryLabel = EmployeePointLog::CATEGORIES[$category] ?? 'Penyesuaian Manual';
+        $logNotes = ! empty($validated['notes']) ? $validated['notes'] : $categoryLabel;
+
+        if ($diff !== 0) {
+            $employee->pointLogs()->create([
+                'points' => $diff,
+                'category' => $category,
+                'actor' => $actor,
+                'notes' => $logNotes,
+            ]);
+        }
+
         $updated = $employee->fresh();
 
         $tierChanged = ($oldTier !== $updated->tier_label);
@@ -2148,7 +2623,8 @@ class WebhookTransactionController extends Controller
 
         $msg = [
             '⭐ *Poin Insentif Karyawan Berhasil Dicatat!*',
-            "👤 *Karyawan*: *{$updated->name}* ({$updated->position})",
+            "👤 *Karyawan*: *{$updated->name}* ({$updated->position} - {$updated->role_label})",
+            "🏷️ *Kategori*: {$categoryLabel}",
             "📈 *Perubahan Poin*: {$sign}{$points} pt (Sebelumnya: {$oldPoints} pt ➔ *{$newPoints} pt*)",
             "🏆 *Status Tingkatan*: *{$updated->tier_label}*",
         ];
@@ -2171,6 +2647,7 @@ class WebhookTransactionController extends Controller
         return response()->json([
             'status' => true,
             'employee' => $updated,
+            'category' => $category,
             'old_points' => $oldPoints,
             'new_points' => $newPoints,
             'diff' => $diff,

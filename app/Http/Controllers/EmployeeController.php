@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EmployeeRole;
 use App\Models\Account;
 use App\Models\Employee;
+use App\Models\EmployeePointLog;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class EmployeeController extends Controller
 {
@@ -52,8 +55,11 @@ class EmployeeController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'role' => ['nullable', Rule::enum(EmployeeRole::class)],
             'position' => 'required|string|max:100',
             'phone' => 'nullable|string|max:50',
+            'telegram_user_id' => 'nullable|string|max:50|unique:employees,telegram_user_id',
+            'telegram_username' => 'nullable|string|max:50',
             'base_salary' => 'required|numeric|min:0',
             'current_points' => 'nullable|integer|min:0',
             'rate_per_point' => 'nullable|numeric|min:0',
@@ -62,6 +68,7 @@ class EmployeeController extends Controller
             'status' => 'required|in:active,inactive',
         ]);
 
+        $validated['role'] = $validated['role'] ?? EmployeeRole::Staff->value;
         $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
         $tierRate = Employee::getRateForPoints($validated['current_points']);
         $validated['rate_per_point'] = $tierRate > 0
@@ -80,8 +87,11 @@ class EmployeeController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'role' => ['nullable', Rule::enum(EmployeeRole::class)],
             'position' => 'required|string|max:100',
             'phone' => 'nullable|string|max:50',
+            'telegram_user_id' => ['nullable', 'string', 'max:50', Rule::unique('employees')->ignore($employee->id)],
+            'telegram_username' => 'nullable|string|max:50',
             'base_salary' => 'required|numeric|min:0',
             'current_points' => 'nullable|integer|min:0',
             'rate_per_point' => 'nullable|numeric|min:0',
@@ -112,14 +122,17 @@ class EmployeeController extends Controller
         ]);
 
         $points = (int) $validated['points'];
-        $newPoints = $employee->current_points;
+        $oldPoints = $employee->current_points;
 
         if ($validated['mode'] === 'set') {
             $newPoints = max(0, $points);
+            $diff = $newPoints - $oldPoints;
         } elseif ($validated['mode'] === 'add') {
-            $newPoints = $employee->current_points + $points;
+            $diff = $points;
+            $newPoints = $oldPoints + $points;
         } elseif ($validated['mode'] === 'subtract') {
-            $newPoints = max(0, $employee->current_points - $points);
+            $diff = -abs($points);
+            $newPoints = max(0, $oldPoints - abs($points));
         }
 
         $tierRate = Employee::getRateForPoints($newPoints);
@@ -132,6 +145,15 @@ class EmployeeController extends Controller
         }
 
         $employee->update($updateData);
+
+        if ($diff !== 0) {
+            $employee->pointLogs()->create([
+                'points' => $diff,
+                'category' => EmployeePointLog::CATEGORY_MANUAL,
+                'actor' => auth()->user()?->name ?? 'Admin Web',
+                'notes' => 'Penyesuaian manual dari Web Dashboard',
+            ]);
+        }
 
         return back()->with('success', "Poin karyawan '{$employee->name}' berhasil diperbarui menjadi {$newPoints} poin.");
     }

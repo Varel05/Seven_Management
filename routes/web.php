@@ -66,6 +66,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/retail', [RetailController::class, 'index'])->name('retail.index');
     Route::post('/retail/products', [RetailController::class, 'storeProduct'])->name('retail.products.store');
     Route::put('/retail/products/{product}', [RetailController::class, 'updateProduct'])->name('retail.products.update');
+    Route::post('/retail/products/update-points', [RetailController::class, 'updateItemPoints'])->name('retail.products.update-points');
+    Route::post('/retail/point-settings', [RetailController::class, 'updatePointSettings'])->name('retail.point-settings.update');
     Route::delete('/retail/products/{product}', [RetailController::class, 'destroyProduct'])->name('retail.products.destroy');
     Route::post('/retail/sales', [RetailController::class, 'storeSale'])->name('retail.sales.store');
     Route::post('/retail/rentals/{sale}/return', [RetailController::class, 'returnRental'])->name('retail.rentals.return');
