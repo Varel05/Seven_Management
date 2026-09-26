@@ -2406,7 +2406,7 @@ class WebhookTransactionController extends Controller
         foreach ($employees as $index => $emp) {
             $rankIcon = $medals[$index] ?? '🎖️';
             $points = (int) $emp->current_points;
-            $tier = $emp->tier_label;
+            $tier = $emp->tier_name;
             $bonus = $emp->formatted_bonus_salary;
 
             $lines[] = "{$rankIcon} *#".($index + 1).". {$emp->name}* ({$emp->position})";

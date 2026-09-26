@@ -543,6 +543,8 @@ class EmployeePayrollTest extends TestCase
         $this->assertEquals(490, $listResponse->json('total_points'));
         $this->assertStringContainsString('Budi Penjahit', $listResponse->json('message'));
         $this->assertStringContainsString('Andi Pemotong', $listResponse->json('message'));
+        $this->assertStringContainsString('Tier 2', $listResponse->json('message'));
+        $this->assertStringNotContainsString('(295 - 369 Poin)', $listResponse->json('message'));
 
         // 2. POST update/tambah poin Budi (+20 pt) -> dari 190 ke 210 (Naik ke Tier 1)
         $updateResponse = $this->withHeader('X-Webhook-Secret', $secret)
