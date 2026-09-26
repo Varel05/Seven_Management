@@ -2491,7 +2491,7 @@ class WebhookTransactionController extends Controller
             "⭐ *Rekapitulasi Poin Pelayanan CS Bulan {$now->translatedFormat('F Y')}*",
             "👤 *Nama*: *{$employee->name}* ({$employee->position} - {$employee->role_label})",
             "📊 *Total Poin*: *{$currentPoints} pt*",
-            "🏆 *Status Tingkatan*: *{$employee->tier_label}*",
+            "🏆 *Status Tingkatan*: *{$employee->tier_name}*",
         ];
 
         if ($employee->rate_per_point > 0) {
@@ -2515,7 +2515,8 @@ class WebhookTransactionController extends Controller
             'status' => true,
             'employee' => $employee,
             'current_points' => $currentPoints,
-            'tier_label' => $employee->tier_label,
+            'tier_name' => $employee->tier_name,
+            'tier_label' => $employee->tier_name,
             'rate_per_point' => (float) $employee->rate_per_point,
             'bonus_salary' => (float) $employee->bonus_salary,
             'category_summary' => $categorySummary,
@@ -2572,7 +2573,7 @@ class WebhookTransactionController extends Controller
         }
 
         $oldPoints = (int) $employee->current_points;
-        $oldTier = $employee->tier_label;
+        $oldTier = $employee->tier_name;
 
         if ($mode === 'set') {
             $newPoints = max(0, $points);
@@ -2618,7 +2619,7 @@ class WebhookTransactionController extends Controller
 
         $updated = $employee->fresh();
 
-        $tierChanged = ($oldTier !== $updated->tier_label);
+        $tierChanged = ($oldTier !== $updated->tier_name);
         $isTierUp = $tierChanged && ($newPoints > $oldPoints);
 
         $msg = [
@@ -2626,7 +2627,7 @@ class WebhookTransactionController extends Controller
             "👤 *Karyawan*: *{$updated->name}* ({$updated->position} - {$updated->role_label})",
             "🏷️ *Kategori*: {$categoryLabel}",
             "📈 *Perubahan Poin*: {$sign}{$points} pt (Sebelumnya: {$oldPoints} pt ➔ *{$newPoints} pt*)",
-            "🏆 *Status Tingkatan*: *{$updated->tier_label}*",
+            "🏆 *Status Tingkatan*: *{$updated->tier_name}*",
         ];
 
         if ($tierRate > 0) {
@@ -2637,7 +2638,7 @@ class WebhookTransactionController extends Controller
         $msg[] = "💼 *Estimasi Total Gaji*: {$updated->formatted_total_salary} (Pokok + Bonus)";
 
         if ($isTierUp) {
-            $msg[] = "🎉 *Selamat! Karyawan telah naik ke {$updated->tier_label}!*";
+            $msg[] = "🎉 *Selamat! Karyawan telah naik ke {$updated->tier_name}!*";
         }
 
         if (! empty($validated['notes'])) {

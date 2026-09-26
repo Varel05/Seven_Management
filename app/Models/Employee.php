@@ -50,6 +50,7 @@ class Employee extends Model
         'bonus_salary',
         'total_salary',
         'tier_label',
+        'tier_name',
         'role_label',
         'role_value',
     ];
@@ -255,13 +256,21 @@ class Employee extends Model
     public static function getTierInfoForPoints(int $points): array
     {
         return match (true) {
-            $points >= 500 => ['tier' => 5, 'rate' => 2600.0, 'min_points' => 500, 'label' => 'Tier 5 (≥ 500 Poin)'],
-            $points >= 445 => ['tier' => 4, 'rate' => 2200.0, 'min_points' => 445, 'label' => 'Tier 4 (445 - 499 Poin)'],
-            $points >= 370 => ['tier' => 3, 'rate' => 1800.0, 'min_points' => 370, 'label' => 'Tier 3 (370 - 444 Poin)'],
-            $points >= 295 => ['tier' => 2, 'rate' => 1400.0, 'min_points' => 295, 'label' => 'Tier 2 (295 - 369 Poin)'],
-            $points >= 200 => ['tier' => 1, 'rate' => 1000.0, 'min_points' => 200, 'label' => 'Tier 1 (200 - 294 Poin)'],
-            default => ['tier' => 0, 'rate' => 0.0, 'min_points' => 0, 'label' => '< 200 Poin (Belum Capai Tier)'],
+            $points >= 500 => ['tier' => 5, 'rate' => 2600.0, 'min_points' => 500, 'name' => 'Tier 5', 'label' => 'Tier 5 (≥ 500 Poin)'],
+            $points >= 445 => ['tier' => 4, 'rate' => 2200.0, 'min_points' => 445, 'name' => 'Tier 4', 'label' => 'Tier 4 (445 - 499 Poin)'],
+            $points >= 370 => ['tier' => 3, 'rate' => 1800.0, 'min_points' => 370, 'name' => 'Tier 3', 'label' => 'Tier 3 (370 - 444 Poin)'],
+            $points >= 295 => ['tier' => 2, 'rate' => 1400.0, 'min_points' => 295, 'name' => 'Tier 2', 'label' => 'Tier 2 (295 - 369 Poin)'],
+            $points >= 200 => ['tier' => 1, 'rate' => 1000.0, 'min_points' => 200, 'name' => 'Tier 1', 'label' => 'Tier 1 (200 - 294 Poin)'],
+            default => ['tier' => 0, 'rate' => 0.0, 'min_points' => 0, 'name' => 'Belum Capai Tier', 'label' => '< 200 Poin (Belum Capai Tier)'],
         };
+    }
+
+    /**
+     * Dapatkan nama tingkatan (tier) saja tanpa rentang poin, misal: 'Tier 1', 'Tier 2', atau 'Belum Capai Tier'.
+     */
+    public function getTierNameAttribute(): string
+    {
+        return self::getTierInfoForPoints((int) $this->current_points)['name'];
     }
 
     /**

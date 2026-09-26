@@ -226,4 +226,31 @@ class WebhookInfoEndpointsTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('status', true);
     }
+
+    public function test_my_points_endpoint_formats_status_tingkatan_with_tier_name_only_without_point_ranges(): void
+    {
+        $employee = Employee::create([
+            'name' => 'Doni CS',
+            'phone' => '081299998888',
+            'role' => EmployeeRole::Cs,
+            'position' => 'Customer Service',
+            'base_salary' => 2500000,
+            'current_points' => 250, // Tier 1
+            'status' => 'active',
+        ]);
+
+        $response = $this->postJson('/api/webhook/payroll/my-points', [
+            'sender_phone' => '081299998888',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('tier_name', 'Tier 1');
+
+        $message = $response->json('message');
+        $this->assertStringContainsString('🏆 *Status Tingkatan*: *Tier 1*', $message);
+        $this->assertStringNotContainsString('(200 - 294 Poin)', $message);
+    }
 }
