@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\EmployeeRole;
 use App\Models\Account;
+use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\RecurringTransaction;
 use App\Models\User;
@@ -372,5 +374,32 @@ class RecurringTransactionTest extends TestCase
 
         // Tidak ada jurnal ganda
         $this->assertEquals($journalCount, JournalEntry::count());
+    }
+
+    public function test_manual_action_handles_daftar_gaji_with_emoji(): void
+    {
+        Employee::create([
+            'name' => 'Budi Staff',
+            'phone' => '081234567890',
+            'role' => EmployeeRole::Staff,
+            'position' => 'Staff Gudang',
+            'base_salary' => 3000000,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+
+        $response = $this->postJson('/api/webhook/recurring/manual-action', [
+            'query' => '👥 Daftar Gaji',
+            'action' => 'list',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'status' => true,
+            'count' => 1,
+        ]);
+        $this->assertStringContainsString('Budi Staff', $response->json('message'));
     }
 }

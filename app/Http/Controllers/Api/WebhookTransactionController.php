@@ -1143,15 +1143,19 @@ class WebhookTransactionController extends Controller
         ]);
 
         $rawQuery = trim($validated['query']);
+        $cleanLeading = trim(preg_replace('/^[^\p{L}\p{N}\/]+/u', '', $rawQuery));
         $action = strtolower($validated['action'] ?? 'approve');
         $customAmount = ! empty($validated['amount']) ? (float) $validated['amount'] : null;
 
-        // Cek jika perintah secara spesifik menargetkan gaji karyawan (misal: "gaji budi", "/gaji", "salary 1", "karyawan asep", atau "gaji")
+        // Cek jika perintah secara spesifik menargetkan gaji karyawan (misal: "gaji budi", "/gaji", "salary 1", "karyawan asep", atau "gaji", "daftar gaji")
         $isExplicitPayroll = false;
-        $cleanQuery = $rawQuery;
-        if (preg_match('/^\/?(?:gaji|salary|karyawan|daftar\s*gaji)\s*(.*)$/i', $rawQuery, $matches)) {
+        $cleanQuery = $cleanLeading;
+        if (preg_match('/^\/?(?:gaji|salary|karyawan|daftar\s*gaji)\s*(.*)$/i', $cleanLeading, $matches) || str_contains(strtolower($cleanLeading), 'daftar gaji')) {
             $isExplicitPayroll = true;
-            $cleanQuery = trim($matches[1]);
+            $cleanQuery = trim($matches[1] ?? '');
+            if (str_contains(strtolower($cleanLeading), 'daftar gaji')) {
+                $cleanQuery = trim(preg_replace('/^\/?(?:daftar\s*gaji)\s*/i', '', $cleanLeading));
+            }
         }
 
         // Jika action adalah 'list' atau query murni "gaji" / "daftar gaji" tanpa nama: tampilkan daftar gaji & statusnya!
