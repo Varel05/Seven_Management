@@ -28,6 +28,15 @@
                 </div>
                 <button 
                     type="button" 
+                    @click="$dispatch('open-allowance-modal')"
+                    onclick="window.dispatchEvent(new CustomEvent('open-allowance-modal'))"
+                    class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                >
+                    <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                    <span>Kelola Tunjangan ({{ $allowances->count() }})</span>
+                </button>
+                <button 
+                    type="button" 
                     @click="$dispatch('open-add-employee')"
                     onclick="window.dispatchEvent(new CustomEvent('open-add-employee'))"
                     class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
@@ -132,6 +141,7 @@
         },
         init() {
             window.addEventListener('open-add-employee', () => { this.openAddModal(); });
+            window.addEventListener('open-allowance-modal', () => { this.openAddAllowanceModal(); });
             this.$watch('filterStatus', () => { this.currentPage = 1; });
             this.$watch('searchQuery', () => { this.currentPage = 1; });
             this.$watch('perPage', () => { this.currentPage = 1; });
@@ -164,6 +174,76 @@
         employeeToPay: null,
         showDeleteModal: false,
         employeeToDelete: null,
+
+        showAllowanceModal: false,
+        isEditAllowance: false,
+        allowanceEmployeeSearch: '',
+        allowanceForm: {
+            id: null,
+            name: '',
+            target_type: 'all',
+            target_role: 'cs',
+            employee_id: '{{ $employees->first()->id ?? '' }}',
+            target_employee_ids: [],
+            amount: 100000,
+            notes: '',
+            is_active: true
+        },
+        toggleAllowanceEmployee(id) {
+            id = Number(id);
+            if (this.allowanceForm.target_employee_ids.includes(id)) {
+                this.allowanceForm.target_employee_ids = this.allowanceForm.target_employee_ids.filter(x => x !== id);
+            } else {
+                this.allowanceForm.target_employee_ids.push(id);
+            }
+        },
+        selectAllAllowanceEmployees() {
+            this.allowanceForm.target_employee_ids = {{ Js::from($employees->pluck('id')->map(fn ($id) => (int) $id)->values()) }};
+        },
+        clearAllAllowanceEmployees() {
+            this.allowanceForm.target_employee_ids = [];
+        },
+        openAddAllowanceModal() {
+            this.isEditAllowance = false;
+            this.allowanceEmployeeSearch = '';
+            this.allowanceForm = {
+                id: null,
+                name: '',
+                target_type: 'all',
+                target_role: 'cs',
+                employee_id: '{{ $employees->first()->id ?? '' }}',
+                target_employee_ids: [],
+                amount: 100000,
+                notes: '',
+                is_active: true
+            };
+            this.showAllowanceModal = true;
+        },
+        openEditAllowanceModal(alw) {
+            this.isEditAllowance = true;
+            this.allowanceEmployeeSearch = '';
+            let targetIds = [];
+            if (alw.target_employee_ids_list && Array.isArray(alw.target_employee_ids_list)) {
+                targetIds = alw.target_employee_ids_list.map(Number);
+            } else if (alw.target_employee_ids && Array.isArray(alw.target_employee_ids)) {
+                targetIds = alw.target_employee_ids.map(Number);
+            } else if (alw.employee_id) {
+                targetIds = [Number(alw.employee_id)];
+            }
+
+            this.allowanceForm = {
+                id: alw.id,
+                name: alw.name,
+                target_type: alw.target_type,
+                target_role: alw.target_role || 'cs',
+                employee_id: alw.employee_id || (targetIds[0] || ''),
+                target_employee_ids: targetIds,
+                amount: Number(alw.amount),
+                notes: alw.notes || '',
+                is_active: Boolean(alw.is_active)
+            };
+            this.showAllowanceModal = true;
+        },
 
         getTierRate(points) {
             points = Number(points) || 0;
@@ -250,7 +330,7 @@
             this.employeeToDelete = emp;
             this.showDeleteModal = true;
         }
-    }" @open-add-employee.window="openAddModal()" class="py-8">
+    }" @open-add-employee.window="openAddModal()" @open-allowance-modal.window="openAddAllowanceModal()" class="py-8">
         <div class="max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 space-y-8">
 
             <!-- Flash Notifications -->
@@ -276,8 +356,8 @@
                 </div>
             @endif
 
-            <!-- 4 SUMMARY METRIC CARDS -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- 5 SUMMARY METRIC CARDS -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <!-- Card 1: Total Karyawan Aktif -->
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-blue-300 dark:hover:border-slate-700 transition-all group flex flex-col justify-between">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
@@ -313,12 +393,32 @@
                         </div>
                         <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                            <span>Sebelum akumulasi bonus poin</span>
+                            <span>Gaji pokok tetap bulanan</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Card 3: Total Bonus Poin -->
+                <!-- Card 3: Total Tunjangan -->
+                <div @click="openAddAllowanceModal()" class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-teal-300 dark:hover:border-slate-700 transition-all group flex flex-col justify-between cursor-pointer">
+                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-teal-500 to-emerald-500"></div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700 dark:text-teal-300 uppercase tracking-wider">Total Tunjangan</span>
+                        <div class="p-2.5 rounded-xl bg-teal-50 text-teal-600 dark:bg-teal-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        </div>
+                    </div>
+                    <div class="mt-3.5">
+                        <div class="text-2xl font-extrabold font-mono tracking-tight text-teal-700 dark:text-teal-300">
+                            Rp {{ number_format($totalAllowanceEstimate, 0, ',', '.') }}
+                        </div>
+                        <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+                            <span>{{ $allowances->where('is_active', true)->count() }} jenis tunjangan aktif</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 4: Total Bonus Poin -->
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-slate-700 transition-all group flex flex-col justify-between">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 to-orange-500"></div>
                     <div class="flex items-center justify-between">
@@ -338,7 +438,7 @@
                     </div>
                 </div>
 
-                <!-- Card 4: Total Estimasi Payroll -->
+                <!-- Card 5: Total Estimasi Payroll -->
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-300 dark:hover:border-slate-700 transition-all group flex flex-col justify-between">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
                     <div class="flex items-center justify-between">
@@ -449,6 +549,7 @@
                             <tr class="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800/80 dark:to-slate-800/60 border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                                 <th class="px-4 py-3 min-w-[170px]">Karyawan</th>
                                 <th class="px-3.5 py-3 whitespace-nowrap">Gaji Pokok</th>
+                                <th class="px-3.5 py-3 whitespace-nowrap">Tunjangan</th>
                                 <th class="px-3.5 py-3 whitespace-nowrap">Poin Kinerja</th>
                                 <th class="px-3.5 py-3 whitespace-nowrap">Bonus Poin</th>
                                 <th class="px-3.5 py-3 whitespace-nowrap text-right">Total Gaji</th>
@@ -506,6 +607,22 @@
                                     <!-- Gaji Pokok -->
                                     <td class="px-3.5 py-3 whitespace-nowrap font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
                                         {{ $emp->formatted_base_salary }}
+                                    </td>
+
+                                    <!-- Tunjangan -->
+                                    <td class="px-3.5 py-3 whitespace-nowrap text-xs">
+                                        @if($emp->total_allowance > 0)
+                                            <div class="space-y-0.5">
+                                                <span class="font-mono font-bold text-teal-700 dark:text-teal-300">
+                                                    {{ $emp->formatted_total_allowance }}
+                                                </span>
+                                                <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[130px]" title="{{ $emp->applicable_allowances->pluck('name')->implode(', ') }}">
+                                                    {{ $emp->applicable_allowances->pluck('name')->implode(', ') }}
+                                                </div>
+                                            </div>
+                                        @else
+                                            <span class="text-slate-400 dark:text-slate-600 font-mono text-[11px]">-</span>
+                                        @endif
                                     </td>
 
                                     <!-- Poin Kinerja -->
@@ -949,13 +1066,17 @@
                                         <span class="text-slate-500">Gaji Pokok:</span>
                                         <span class="font-mono text-slate-700 dark:text-slate-300" x-text="'Rp ' + Number(employeeToPay.base_salary).toLocaleString('id-ID')"></span>
                                     </div>
+                                    <div class="flex items-center justify-between" x-show="Number(employeeToPay.total_allowance) > 0">
+                                        <span class="text-slate-500">Tunjangan:</span>
+                                        <span class="font-mono text-teal-600 dark:text-teal-400" x-text="'Rp ' + (Number(employeeToPay.total_allowance) || 0).toLocaleString('id-ID')"></span>
+                                    </div>
                                     <div class="flex items-center justify-between">
                                         <span class="text-slate-500">Bonus Poin:</span>
                                         <span class="font-mono text-amber-600 dark:text-amber-400" x-text="'Rp ' + (employeeToPay.current_points * (getTierRate(employeeToPay.current_points) || employeeToPay.rate_per_point)).toLocaleString('id-ID') + ' (' + employeeToPay.current_points + ' poin)'"></span>
                                     </div>
                                     <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-sm font-extrabold">
                                         <span class="text-slate-800 dark:text-slate-200">Total Dibukukan:</span>
-                                        <span class="font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + (Number(employeeToPay.base_salary) + (employeeToPay.current_points * (getTierRate(employeeToPay.current_points) || employeeToPay.rate_per_point))).toLocaleString('id-ID')"></span>
+                                        <span class="font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + (Number(employeeToPay.base_salary) + (Number(employeeToPay.total_allowance) || 0) + (employeeToPay.current_points * (getTierRate(employeeToPay.current_points) || employeeToPay.rate_per_point))).toLocaleString('id-ID')"></span>
                                     </div>
                                 </div>
 
@@ -1000,6 +1121,291 @@
                                 </div>
                             </form>
                         </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL KELOLA TUNJANGAN PEGAWAI -->
+            <div x-show="showAllowanceModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+                <div class="min-h-screen px-4 text-center flex items-center justify-center">
+                    <div class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity" @click="showAllowanceModal = false"></div>
+                    <div class="inline-block w-full max-w-3xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl relative z-10 max-h-[90vh] flex flex-col">
+                        
+                        <!-- Header Modal -->
+                        <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-2xl bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 flex items-center justify-center shadow-xs">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-extrabold text-slate-900 dark:text-white" x-text="isEditAllowance ? 'Edit Jenis Tunjangan' : 'Kelola Tunjangan Pegawai'"></h3>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">Atur jenis alokasi tunjangan per divisi atau per individu karyawan</p>
+                                </div>
+                            </div>
+                            <button type="button" @click="showAllowanceModal = false" class="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+
+                        <!-- Content Scrollable -->
+                        <div class="overflow-y-auto space-y-6 pt-4 pr-1">
+                            
+                            <!-- Form Tambah / Edit Tunjangan -->
+                            <div class="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-slate-700 dark:text-slate-200" x-text="isEditAllowance ? '✏️ Edit Data Tunjangan' : '➕ Tambah Jenis Tunjangan Baru'"></span>
+                                    <button 
+                                        type="button" 
+                                        x-show="isEditAllowance" 
+                                        @click="openAddAllowanceModal()"
+                                        class="text-xs text-teal-600 dark:text-teal-400 hover:underline font-semibold"
+                                    >
+                                        Batal Edit & Tambah Baru
+                                    </button>
+                                </div>
+
+                                <form 
+                                    :action="isEditAllowance ? '{{ url('allowances') }}/' + allowanceForm.id : '{{ route('allowances.store') }}'" 
+                                    method="POST" 
+                                    class="space-y-4"
+                                    @submit="if(allowanceForm.target_type === 'employee' && allowanceForm.target_employee_ids.length === 0) { alert('Silakan pilih minimal satu pegawai penerima tunjangan.'); $event.preventDefault(); }"
+                                >
+                                    @csrf
+                                    <template x-if="isEditAllowance">
+                                        <input type="hidden" name="_method" value="PUT">
+                                    </template>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                                        <!-- Nama Tunjangan -->
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Tunjangan</label>
+                                            <input 
+                                                type="text" 
+                                                name="name" 
+                                                x-model="allowanceForm.name" 
+                                                required 
+                                                placeholder="Contoh: Tunjangan Makan, Transport, Jabatan" 
+                                                class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
+                                            >
+                                        </div>
+
+                                        <!-- Nominal Tunjangan -->
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Besaran Tunjangan (Rp)</label>
+                                            <input 
+                                                type="number" 
+                                                name="amount" 
+                                                x-model="allowanceForm.amount" 
+                                                required 
+                                                min="0" 
+                                                step="1000" 
+                                                placeholder="100000" 
+                                                class="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
+                                            >
+                                        </div>
+
+                                        <!-- Target Tunjangan -->
+                                        <div :class="allowanceForm.target_type === 'role' ? 'md:col-span-1' : 'md:col-span-2'">
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Alokasi Penerima</label>
+                                            <select 
+                                                name="target_type" 
+                                                x-model="allowanceForm.target_type" 
+                                                class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
+                                            >
+                                                <option value="all">Semua Karyawan Aktif</option>
+                                                <option value="role">Berdasarkan Divisi / Role</option>
+                                                <option value="employee">Khusus Pegawai Tertentu (Bisa Multi-Pilih)</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Divisi (Role) jika target_type = role -->
+                                        <div x-show="allowanceForm.target_type === 'role'">
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Pilih Divisi / Role</label>
+                                            <select 
+                                                name="target_role" 
+                                                x-model="allowanceForm.target_role" 
+                                                class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
+                                            >
+                                                @foreach(\App\Models\Employee::ROLES as $roleVal => $roleLabel)
+                                                    <option value="{{ $roleVal }}">{{ $roleLabel }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        <!-- Karyawan Spesifik jika target_type = employee (Bisa 2 atau lebih pegawai) -->
+                                        <div x-show="allowanceForm.target_type === 'employee'" class="md:col-span-2 space-y-2">
+                                            <div class="flex items-center justify-between">
+                                                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    Pilih Karyawan Penerima (<span class="text-teal-600 dark:text-teal-400 font-bold" x-text="allowanceForm.target_employee_ids.length"></span> dipilih)
+                                                </label>
+                                                <div class="flex items-center gap-2 text-[11px]">
+                                                    <button type="button" @click="selectAllAllowanceEmployees()" class="text-teal-600 dark:text-teal-400 hover:underline font-semibold cursor-pointer">Pilih Semua</button>
+                                                    <span class="text-slate-300 dark:text-slate-700">|</span>
+                                                    <button type="button" @click="clearAllAllowanceEmployees()" class="text-slate-500 hover:text-rose-500 hover:underline cursor-pointer">Hapus Pilihan</button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Pencarian nama karyawan cepat -->
+                                            <div class="relative">
+                                                <input 
+                                                    type="text" 
+                                                    x-model="allowanceEmployeeSearch" 
+                                                    placeholder="Ketik untuk memfilter nama pegawai..." 
+                                                    class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 pl-8 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
+                                                >
+                                                <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                            </div>
+
+                                            <!-- Daftar Checkbox Karyawan (Scrollable) -->
+                                            <div class="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60 p-2 space-y-1">
+                                                @foreach($employees as $empOption)
+                                                    <label 
+                                                        x-show="!allowanceEmployeeSearch || '{{ strtolower(addslashes($empOption->name)) }}'.includes(allowanceEmployeeSearch.toLowerCase()) || '{{ strtolower(addslashes($empOption->position)) }}'.includes(allowanceEmployeeSearch.toLowerCase())"
+                                                        class="flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer border border-transparent"
+                                                        :class="allowanceForm.target_employee_ids.includes({{ $empOption->id }}) ? 'bg-teal-50 dark:bg-teal-950/50 border-teal-200 dark:border-teal-800 text-teal-950 dark:text-teal-200 font-semibold' : 'hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'"
+                                                    >
+                                                        <div class="flex items-center gap-2.5">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                name="target_employee_ids[]" 
+                                                                value="{{ $empOption->id }}"
+                                                                :checked="allowanceForm.target_employee_ids.includes({{ $empOption->id }})"
+                                                                @change="toggleAllowanceEmployee({{ $empOption->id }})"
+                                                                class="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300 dark:border-slate-600"
+                                                            >
+                                                            <span class="text-xs">{{ $empOption->name }}</span>
+                                                        </div>
+                                                        <span class="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
+                                                            {{ $empOption->position ?: ($empOption->role_label ?? '') }}
+                                                        </span>
+                                                    </label>
+                                                @endforeach
+                                            </div>
+                                            <p class="text-[11px] text-slate-400 dark:text-slate-500">
+                                                * Anda dapat mencentang 2 atau lebih pegawai yang berhak menerima tunjangan ini.
+                                            </p>
+                                        </div>
+
+                                        <!-- Catatan -->
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Keterangan / Catatan</label>
+                                            <input 
+                                                type="text" 
+                                                name="notes" 
+                                                x-model="allowanceForm.notes" 
+                                                placeholder="Catatan tambahan (opsional)" 
+                                                class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
+                                            >
+                                        </div>
+                                    </div>
+
+                                    <div class="flex items-center justify-between pt-1">
+                                        <label class="inline-flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" name="is_active" value="1" x-model="allowanceForm.is_active" class="w-4 h-4 rounded text-teal-600 focus:ring-teal-500">
+                                            <span class="text-xs font-medium text-slate-700 dark:text-slate-300">Tunjangan Aktif</span>
+                                        </label>
+
+                                        <button 
+                                            type="submit" 
+                                            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-sm transition-all"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                            <span x-text="isEditAllowance ? 'Simpan Perubahan' : 'Tambahkan Tunjangan'"></span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <!-- Daftar Master Tunjangan Yang Ada -->
+                            <div class="space-y-3">
+                                <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                                    Daftar Jenis Tunjangan Terdaftar ({{ $allowances->count() }})
+                                </h4>
+
+                                <div class="overflow-x-auto rounded-2xl border border-slate-200/90 dark:border-slate-700">
+                                    <table class="w-full text-left border-collapse text-xs">
+                                        <thead>
+                                            <tr class="bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase">
+                                                <th class="px-3.5 py-2.5">Nama Tunjangan</th>
+                                                <th class="px-3 py-2.5">Target Alokasi</th>
+                                                <th class="px-3 py-2.5">Besaran (Rp)</th>
+                                                <th class="px-3 py-2.5 text-center">Status</th>
+                                                <th class="px-3 py-2.5 text-center">Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-200/70 dark:divide-slate-800">
+                                            @forelse($allowances as $alw)
+                                                <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                                                    <td class="px-3.5 py-2.5 font-bold text-slate-900 dark:text-white">
+                                                        <div>{{ $alw->name }}</div>
+                                                        @if($alw->notes)
+                                                            <div class="text-[10px] font-normal text-slate-400">{{ $alw->notes }}</div>
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-3 py-2.5">
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                                            {{ $alw->target_label }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-3 py-2.5 font-mono font-bold text-teal-700 dark:text-teal-300">
+                                                        {{ $alw->formatted_amount }}
+                                                    </td>
+                                                    <td class="px-3 py-2.5 text-center">
+                                                        <form action="{{ route('allowances.toggle', $alw) }}" method="POST" class="inline">
+                                                            @csrf
+                                                            @method('PATCH')
+                                                            <button 
+                                                                type="submit" 
+                                                                class="px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer {{ $alw->is_active ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400' }}"
+                                                                title="Klik untuk mengubah status aktif/nonaktif"
+                                                            >
+                                                                {{ $alw->is_active ? '● Aktif' : '○ Nonaktif' }}
+                                                            </button>
+                                                        </form>
+                                                    </td>
+                                                    <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                                                        <div class="inline-flex items-center gap-1.5">
+                                                            <button 
+                                                                type="button" 
+                                                                @click="openEditAllowanceModal({{ Js::from($alw) }})" 
+                                                                class="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                                                                title="Edit Tunjangan"
+                                                            >
+                                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                                            </button>
+                                                            <form action="{{ route('allowances.destroy', $alw) }}" method="POST" class="inline" onsubmit="return confirm('Hapus tunjangan {{ $alw->name }}?');">
+                                                                @csrf
+                                                                @method('DELETE')
+                                                                <button 
+                                                                    type="submit" 
+                                                                    class="p-1.5 rounded-lg text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                                                                    title="Hapus Tunjangan"
+                                                                >
+                                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            @empty
+                                                <tr>
+                                                    <td colspan="5" class="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                                                        Belum ada jenis tunjangan yang dibuat. Silakan tambahkan melalui form di atas.
+                                                    </td>
+                                                </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Footer Modal -->
+                        <div class="flex items-center justify-end pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0 mt-4">
+                            <button type="button" @click="showAllowanceModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Tutup</button>
+                        </div>
+
                     </div>
                 </div>
             </div>

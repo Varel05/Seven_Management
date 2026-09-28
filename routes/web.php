@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\AllowanceController;
 use App\Http\Controllers\CostSheetController;
 use App\Http\Controllers\CustomSuitOrderController;
 use App\Http\Controllers\DashboardController;
@@ -61,6 +62,12 @@ Route::middleware('auth')->group(function () {
     Route::patch('/employees/{employee}/points', [EmployeeController::class, 'updatePoints'])->name('employees.points');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
     Route::post('/employees/{employee}/pay', [EmployeeController::class, 'pay'])->name('employees.pay');
+
+    // Manajemen Tunjangan Pegawai
+    Route::post('/allowances', [AllowanceController::class, 'store'])->name('allowances.store');
+    Route::put('/allowances/{allowance}', [AllowanceController::class, 'update'])->name('allowances.update');
+    Route::patch('/allowances/{allowance}/toggle', [AllowanceController::class, 'toggle'])->name('allowances.toggle');
+    Route::delete('/allowances/{allowance}', [AllowanceController::class, 'destroy'])->name('allowances.destroy');
 
     // Manajemen Retail Pakaian & Kasir
     Route::get('/retail', [RetailController::class, 'index'])->name('retail.index');

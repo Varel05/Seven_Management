@@ -48,6 +48,8 @@ class Employee extends Model
 
     protected $appends = [
         'bonus_salary',
+        'total_allowance',
+        'formatted_total_allowance',
         'total_salary',
         'tier_label',
         'tier_name',
@@ -63,6 +65,11 @@ class Employee extends Model
     public function pointLogs(): HasMany
     {
         return $this->hasMany(EmployeePointLog::class)->latest();
+    }
+
+    public function allowances(): HasMany
+    {
+        return $this->hasMany(Allowance::class);
     }
 
     public function getRoleValueAttribute(): string
@@ -307,11 +314,36 @@ class Employee extends Model
     }
 
     /**
-     * Total gaji = Gaji Pokok + Bonus Poin.
+     * Dapatkan semua tunjangan aktif yang berlaku untuk karyawan ini
+     * (berlaku untuk semua, sesuai divisi/role, atau khusus untuk karyawan ini).
+     */
+    public function getApplicableAllowancesAttribute()
+    {
+        return Allowance::active()->get()->filter(fn (Allowance $allowance) => $allowance->appliesTo($this))->values();
+    }
+
+    /**
+     * Total nominal tunjangan karyawan.
+     */
+    public function getTotalAllowanceAttribute(): float
+    {
+        return (float) $this->applicable_allowances->sum('amount');
+    }
+
+    /**
+     * Format Rupiah untuk Total Tunjangan.
+     */
+    public function getFormattedTotalAllowanceAttribute(): string
+    {
+        return 'Rp '.number_format($this->total_allowance, 0, ',', '.');
+    }
+
+    /**
+     * Total gaji = Gaji Pokok + Total Tunjangan + Bonus Poin.
      */
     public function getTotalSalaryAttribute(): float
     {
-        return (float) ($this->base_salary + $this->bonus_salary);
+        return (float) ($this->base_salary + $this->total_allowance + $this->bonus_salary);
     }
 
     /**
@@ -436,6 +468,11 @@ class Employee extends Model
                 'status' => 'verified',
             ]);
 
+            $allowanceNames = $this->applicable_allowances->pluck('name')->implode(', ');
+            $allowanceText = $this->total_allowance > 0
+                ? ', Tunjangan: '.$this->formatted_total_allowance.($allowanceNames ? " ({$allowanceNames})" : '')
+                : '';
+
             $bonusText = $this->bonus_salary > 0
                 ? ', Bonus: '.$this->formatted_bonus_salary." ({$this->current_points} poin)"
                 : '';
@@ -444,7 +481,7 @@ class Employee extends Model
             JournalEntryLine::create([
                 'journal_entry_id' => $journalEntry->id,
                 'account_id' => $expenseAccount->id,
-                'description' => "Gaji {$this->name} (Pokok: {$this->formatted_base_salary}{$bonusText})",
+                'description' => "Gaji {$this->name} (Pokok: {$this->formatted_base_salary}{$allowanceText}{$bonusText})",
                 'debit' => $finalAmount,
                 'credit' => 0,
             ]);

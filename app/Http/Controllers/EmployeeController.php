@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\EmployeeRole;
 use App\Models\Account;
+use App\Models\Allowance;
 use App\Models\Employee;
 use App\Models\EmployeePointLog;
 use Illuminate\Http\Request;
@@ -26,9 +27,11 @@ class EmployeeController extends Controller
         $activeEmployees = $employees->where('status', 'active');
         $totalActive = $activeEmployees->count();
 
+        $allowances = Allowance::with('employee')->latest()->get();
         $totalBaseSalary = $activeEmployees->sum('base_salary');
+        $totalAllowanceEstimate = $activeEmployees->sum('total_allowance');
         $totalBonusSalary = $activeEmployees->sum('bonus_salary');
-        $totalPayrollEstimate = $totalBaseSalary + $totalBonusSalary;
+        $totalPayrollEstimate = $totalBaseSalary + $totalAllowanceEstimate + $totalBonusSalary;
 
         $paidThisMonth = $activeEmployees->filter(fn ($e) => $e->last_paid_at && $e->last_paid_at->isCurrentMonth());
         $totalPaidThisMonth = $paidThisMonth->sum('total_salary');
@@ -39,8 +42,10 @@ class EmployeeController extends Controller
         return view('employees.index', compact(
             'employees',
             'assetAccounts',
+            'allowances',
             'totalActive',
             'totalBaseSalary',
+            'totalAllowanceEstimate',
             'totalBonusSalary',
             'totalPayrollEstimate',
             'totalPaidThisMonth',

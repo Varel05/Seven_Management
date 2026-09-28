@@ -848,6 +848,9 @@ class WebhookTransactionController extends Controller
                 'position' => $emp->position,
                 'base_salary' => (float) $emp->base_salary,
                 'formatted_base' => $emp->formatted_base_salary,
+                'total_allowance' => (float) $emp->total_allowance,
+                'formatted_allowance' => $emp->formatted_total_allowance,
+                'allowance_names' => $emp->applicable_allowances->pluck('name')->implode(', '),
                 'current_points' => (int) $emp->current_points,
                 'rate_per_point' => (float) $emp->rate_per_point,
                 'bonus_salary' => (float) $emp->bonus_salary,
@@ -880,9 +883,10 @@ class WebhookTransactionController extends Controller
         if (! empty($dueToday)) {
             $messageLines[] = '🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*';
             foreach ($dueToday as $d) {
+                $allowanceStr = $d['total_allowance'] > 0 ? " • Tunjangan: {$d['formatted_allowance']}" : '';
                 $bonusStr = $d['current_points'] > 0 ? " • Bonus: {$d['formatted_bonus']} ({$d['current_points']} pt)" : '';
                 $messageLines[] = "• 👤 *#{$d['id']} {$d['name']}* ({$d['position']})";
-                $messageLines[] = "  💵 Gaji: {$d['formatted_base']}{$bonusStr} ➔ *{$d['formatted_amount']}*";
+                $messageLines[] = "  💵 Pokok: {$d['formatted_base']}{$allowanceStr}{$bonusStr} ➔ *{$d['formatted_amount']}*";
                 $messageLines[] = "  💳 Bayar via: {$d['asset_account_name']}";
                 $messageLines[] = "  👉 Bayar cepat: `/bayar gaji {$d['id']}`";
             }
@@ -892,9 +896,10 @@ class WebhookTransactionController extends Controller
         if (! empty($overdue)) {
             $messageLines[] = '⚠️ *Terlewat (Belum Dibayar):*';
             foreach ($overdue as $o) {
+                $allowanceStr = $o['total_allowance'] > 0 ? " • Tunjangan: {$o['formatted_allowance']}" : '';
                 $bonusStr = $o['current_points'] > 0 ? " • Bonus: {$o['formatted_bonus']} ({$o['current_points']} pt)" : '';
                 $messageLines[] = "• 👤 *#{$o['id']} {$o['name']}* ({$o['position']})";
-                $messageLines[] = "  💵 Gaji: {$o['formatted_base']}{$bonusStr} ➔ *{$o['formatted_amount']}*";
+                $messageLines[] = "  💵 Pokok: {$o['formatted_base']}{$allowanceStr}{$bonusStr} ➔ *{$o['formatted_amount']}*";
                 $messageLines[] = "  📅 Jatuh Tempo: Tgl {$o['pay_day']} {$today->translatedFormat('M')}";
                 $messageLines[] = "  💳 Bayar via: {$o['asset_account_name']}";
                 $messageLines[] = "  👉 Bayar cepat: `/bayar gaji {$o['id']}`";
@@ -908,8 +913,9 @@ class WebhookTransactionController extends Controller
                 $daysLeft = (int) $u['days_left'];
                 $daysText = $daysLeft === 1 ? 'Besok' : "{$daysLeft} hari lagi";
                 $bonusStr = $u['current_points'] > 0 ? " • Bonus: {$u['formatted_bonus']}" : '';
+                $allowanceStr = $u['total_allowance'] > 0 ? " • Tunjangan: {$u['formatted_allowance']}" : '';
                 $messageLines[] = "• 👤 *#{$u['id']} {$u['name']}* ({$u['position']}): *{$u['formatted_amount']}*";
-                $messageLines[] = "  📅 Tgl {$u['pay_day']} {$today->translatedFormat('M')} ({$daysText}) • via {$u['asset_account_name']}";
+                $messageLines[] = "  📅 Tgl {$u['pay_day']} {$today->translatedFormat('M')} ({$daysText}){$allowanceStr} • via {$u['asset_account_name']}";
             }
             $messageLines[] = '';
         }

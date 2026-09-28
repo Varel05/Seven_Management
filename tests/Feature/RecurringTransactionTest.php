@@ -132,6 +132,7 @@ class RecurringTransactionTest extends TestCase
             'expense_account_id' => $this->expenseAccount->id,
             'asset_account_id' => $this->assetAccount->id,
             'status' => 'active',
+            'last_posted_at' => now(),
         ]);
 
         $response = $this->getJson('/api/webhook/recurring/due', [
