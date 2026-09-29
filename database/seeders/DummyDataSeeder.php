@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\RetailSale;
 use App\Models\RetailSaleItem;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class DummyDataSeeder extends Seeder
 {
@@ -350,5 +351,84 @@ class DummyDataSeeder extends Seeder
                 'created_at' => now()->subDays(5),
             ]
         );
+
+        // =========================================================================
+        // 7. DATA DUMMY SALDO AWAL GUDANG BAHAN BAKU & TAUTAN KARTU HPP
+        // =========================================================================
+        $dummyStocks = [
+            'MAT-JTB' => 120.0,
+            'MAT-FRR' => 80.0,
+            'MAT-GDF' => 50.0,
+            'MAT-DRL' => 60.0,
+            'MAT-SPX' => 40.0,
+            'MAT-DRM' => 150.0,
+            'MAT-VSL' => 100.0,
+            'MAT-MRG' => 60.0,
+            'MAT-HTX' => 50.0,
+            'MAT-BSB' => 250.0,
+            'MAT-BST' => 150.0,
+            'MAT-KKJ' => 1000.0,
+            'MAT-KKC' => 800.0,
+            'ACC-KCB' => 500.0,
+            'ACC-KCK' => 1000.0,
+            'ACC-RNG' => 150.0,
+            'ACC-RSL-C' => 120.0,
+            'ACC-HAK' => 300.0,
+            'ACC-RIB' => 25.0,
+            'ACC-KNB' => 400.0,
+        ];
+
+        foreach ($dummyStocks as $code => $qty) {
+            $mat = Material::where('code', $code)->first();
+            if ($mat) {
+                $mat->update(['stock' => $qty]);
+
+                DB::table('material_stock_movements')->updateOrInsert(
+                    [
+                        'material_id' => $mat->id,
+                        'reference_number' => 'INIT-STOCK-'.$code,
+                    ],
+                    [
+                        'type' => 'in',
+                        'quantity' => $qty,
+                        'unit_cost' => $mat->standard_cost,
+                        'reference_type' => 'purchase',
+                        'notes' => 'Saldo awal persediaan bahan baku gudang untuk simulasi.',
+                        'updated_at' => now(),
+                        'created_at' => now(),
+                    ]
+                );
+            }
+        }
+
+        // Tautkan kartu HPP sampel ke produk retail sampel
+        $productCostSheetLinks = [
+            'JAS-001' => 'HPP-JAS-REG-JTB',
+            'STF-001' => 'HPP-JAS-PRM-JTB',
+            'TXD-001' => 'HPP-JAS-EXC-JTB',
+        ];
+
+        foreach ($productCostSheetLinks as $prodCode => $csCode) {
+            $costSheet = DB::table('cost_sheets')->where('code', $csCode)->first();
+            $product = Product::where('code', $prodCode)->first();
+
+            if ($costSheet && $product) {
+                DB::table('cost_sheets')->where('id', $costSheet->id)->update([
+                    'product_id' => $product->id,
+                ]);
+
+                $variant = DB::table('cost_sheet_variants')
+                    ->where('cost_sheet_id', $costSheet->id)
+                    ->where('size', 'S')
+                    ->first();
+
+                if ($variant) {
+                    $product->update([
+                        'cost_sheet_variant_id' => $variant->id,
+                        'cost_price' => $variant->total_cost_price,
+                    ]);
+                }
+            }
+        }
     }
 }
