@@ -42,6 +42,8 @@ class Employee extends Model
         'base_salary' => 'decimal:2',
         'rate_per_point' => 'decimal:2',
         'current_points' => 'integer',
+        'claim_bonus' => 'boolean',
+        'is_on_duty' => 'boolean',
         'pay_day' => 'integer',
         'last_paid_at' => 'datetime',
     ];
@@ -53,6 +55,7 @@ class Employee extends Model
         'total_salary',
         'tier_label',
         'tier_name',
+        'tier_points_to_deduct',
         'role_label',
         'role_value',
     ];
@@ -305,11 +308,41 @@ class Employee extends Model
         return (float) ($value ?? 0);
     }
 
+    public static function getOnDutyCs(): ?self
+    {
+        return static::where('is_on_duty', true)->first();
+    }
+
+    public function setAsOnDuty(): void
+    {
+        static::query()->update(['is_on_duty' => false]);
+        $this->update(['is_on_duty' => true]);
+    }
+
+    /**
+     * Hitung besar poin yang akan dikurangi dari tier jika karyawan memilih mengambil bonus.
+     */
+    public function getTierPointsToDeductAttribute(): int
+    {
+        if (! ($this->claim_bonus ?? true)) {
+            return 0;
+        }
+
+        $tierInfo = self::getTierInfoForPoints((int) $this->current_points);
+
+        return $tierInfo['tier'] > 0 ? (int) $tierInfo['min_points'] : 0;
+    }
+
     /**
      * Hitung bonus gaji dari total poin kinerja dikalikan tarif per poin bertingkat.
+     * Jika karyawan memilih untuk tidak mengambil bonus pada bulan ini, bonus bernilai 0.
      */
     public function getBonusSalaryAttribute(): float
     {
+        if (! ($this->claim_bonus ?? true)) {
+            return 0.0;
+        }
+
         return (float) ($this->current_points * $this->rate_per_point);
     }
 
@@ -474,7 +507,7 @@ class Employee extends Model
                 : '';
 
             $bonusText = $this->bonus_salary > 0
-                ? ', Bonus: '.$this->formatted_bonus_salary." ({$this->current_points} poin)"
+                ? ', Bonus: '.$this->formatted_bonus_salary." ({$this->tier_points_to_deduct} poin)"
                 : '';
 
             // 1. Debit Akun Beban Gaji (5002)
@@ -494,6 +527,27 @@ class Employee extends Model
                 'debit' => 0,
                 'credit' => $finalAmount,
             ]);
+
+            // 3. Kurangi poin terakumulasi sebesar besar poin tier jika mengambil bonus gaji
+            $pointsToDeduct = $this->tier_points_to_deduct;
+            if ($pointsToDeduct > 0) {
+                $oldPoints = (int) $this->current_points;
+                $newPoints = max(0, $oldPoints - $pointsToDeduct);
+                $tierRate = self::getRateForPoints($newPoints);
+                $tierInfo = self::getTierInfoForPoints($oldPoints);
+
+                $this->update([
+                    'current_points' => $newPoints,
+                    'rate_per_point' => $tierRate,
+                ]);
+
+                $this->pointLogs()->create([
+                    'points' => -$pointsToDeduct,
+                    'category' => EmployeePointLog::CATEGORY_MANUAL,
+                    'actor' => $source === 'telegram' ? 'Payroll Telegram' : 'Payroll System',
+                    'notes' => "Pencairan bonus gaji {$tierInfo['name']} ({$period})",
+                ]);
+            }
 
             // Tandai sudah dibayarkan untuk periode ini
             $this->update(['last_paid_at' => now()]);

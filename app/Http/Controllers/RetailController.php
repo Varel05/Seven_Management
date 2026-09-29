@@ -488,9 +488,8 @@ class RetailController extends Controller
                     if ($prod) {
                         $qty = (int) $itemData['quantity'];
                         $totalQty += $qty;
-                        $itemPts = $isRental
-                            ? (PointSetting::get('service:rental', EmployeePointLog::DEFAULT_RENT_POINTS) * $qty)
-                            : ($prod->effective_point_reward * $qty);
+                        // 1. Poin mentah (jual / sewa): berdasarkan item
+                        $itemPts = $prod->effective_point_reward * $qty;
                         $totalPts += $itemPts;
 
                         $csEmployee->addPoints(
@@ -504,8 +503,9 @@ class RetailController extends Controller
                     }
                 }
 
-                if ($totalQty > 1) {
-                    $qtyBonus = ($totalQty - 1) * PointSetting::get('service:quantity_extra', EmployeePointLog::DEFAULT_QTY_EXTRA_POINTS);
+                // 2. Poin quantity: bernilai 1 untuk setiap jumlah barang sekali transaksi
+                if ($totalQty > 0) {
+                    $qtyBonus = $totalQty * PointSetting::get('service:quantity_extra', EmployeePointLog::DEFAULT_QTY_EXTRA_POINTS);
                     if ($qtyBonus > 0) {
                         $totalPts += $qtyBonus;
                         $csEmployee->addPoints(
@@ -518,6 +518,41 @@ class RetailController extends Controller
                         );
                     }
                 }
+
+                // 3. Poin COD: bernilai 1 setiap transaksi COD yang dilayani
+                $isCod = strtolower($sale->payment_method ?? '') === 'cod';
+                if ($isCod) {
+                    $codBonus = PointSetting::get('service:cod', EmployeePointLog::DEFAULT_COD_POINTS);
+                    if ($codBonus > 0) {
+                        $totalPts += $codBonus;
+                        $csEmployee->addPoints(
+                            $codBonus,
+                            EmployeePointLog::CATEGORY_COD,
+                            'Layanan Cash on Delivery (COD) via Kasir',
+                            'retail_sale',
+                            $sale->id,
+                            'Kasir Web'
+                        );
+                    }
+                }
+
+                // 4. Poin bonus perusahaan: bernilai 1 jika CS yang melayani berbeda dari CS yang sedang berjaga
+                $onDutyCs = Employee::getOnDutyCs();
+                if ($onDutyCs && $onDutyCs->id !== $csEmployee->id) {
+                    $crossBonus = PointSetting::get('service:cross_company', 1);
+                    if ($crossBonus > 0) {
+                        $totalPts += $crossBonus;
+                        $csEmployee->addPoints(
+                            $crossBonus,
+                            EmployeePointLog::CATEGORY_CROSS_COMPANY,
+                            "Bonus perusahaan: melayani saat CS berjaga adalah {$onDutyCs->name}",
+                            'retail_sale',
+                            $sale->id,
+                            'Kasir Web'
+                        );
+                    }
+                }
+
                 $pointEarnedMsg = " (⭐ +{$totalPts} poin insentif diberikan kepada {$csEmployee->name})";
             }
         }

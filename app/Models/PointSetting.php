@@ -94,14 +94,14 @@ class PointSetting extends Model
         'service:cod' => [
             'name' => 'Layanan Cash On Delivery (COD)',
             'group' => 'service',
-            'points' => 10,
+            'points' => 1,
             'description' => 'Bonus poin saat CS melayani pesanan COD',
         ],
         'service:quantity_extra' => [
-            'name' => 'Bonus Qty Tambahan (per Pcs)',
+            'name' => 'Bonus Qty (per Pcs)',
             'group' => 'service',
-            'points' => 2,
-            'description' => 'Tambahan poin per pcs untuk item ke-2 dst dalam 1 transaksi',
+            'points' => 1,
+            'description' => 'Poin bonus per jumlah barang dalam sekali transaksi',
         ],
         'service:custom_suit' => [
             'name' => 'Pesanan Custom Jas Tailor',
@@ -112,14 +112,14 @@ class PointSetting extends Model
         'service:review' => [
             'name' => 'Review Bagus Pelanggan',
             'group' => 'service',
-            'points' => 15,
+            'points' => 1,
             'description' => 'Poin apresiasi review positif / bintang 5 dari pelanggan',
         ],
         'service:cross_company' => [
-            'name' => 'Bantuan Antar Perusahaan',
+            'name' => 'Bonus Perusahaan',
             'group' => 'service',
-            'points' => 20,
-            'description' => 'Poin bonus saat CS membantu penanganan CS mitra perusahaan',
+            'points' => 1,
+            'description' => 'Poin bonus jika CS yang melayani berbeda dari CS yang sedang berjaga',
         ],
     ];
 

@@ -161,6 +161,8 @@
             current_points: 0,
             rate_per_point: 0,
             pay_day: 25,
+            claim_bonus: true,
+            is_on_duty: false,
             asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
             status: 'active'
         },
@@ -293,6 +295,8 @@
                 current_points: 0,
                 rate_per_point: 0,
                 pay_day: 25,
+                claim_bonus: true,
+                is_on_duty: false,
                 asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
                 status: 'active'
             };
@@ -312,6 +316,8 @@
                 current_points: emp.current_points,
                 rate_per_point: Number(emp.rate_per_point),
                 pay_day: emp.pay_day,
+                claim_bonus: emp.claim_bonus !== undefined ? Boolean(emp.claim_bonus) : true,
+                is_on_duty: Boolean(emp.is_on_duty),
                 asset_account_id: emp.asset_account_id,
                 status: emp.status
             };
@@ -584,6 +590,11 @@
                                                     <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border {{ $emp->role_badge_class }}">
                                                         {{ $emp->role_label }}
                                                     </span>
+                                                    @if($emp->is_on_duty)
+                                                        <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shadow-2xs" title="Sedang bertugas sebagai CS jaga / piket">
+                                                            🟢 Jaga CS
+                                                        </span>
+                                                    @endif
                                                 </div>
                                                 <!-- Baris 2: Jabatan / Posisi -->
                                                 <div class="text-[11px] font-medium text-slate-600 dark:text-slate-400 leading-tight">
@@ -644,6 +655,11 @@
                                             <span>@ Rp {{ number_format($emp->rate_per_point, 0, ',', '.') }}/poin</span>
                                             @if($emp->current_points >= 200)
                                                 <span class="inline-block px-1.5 py-0.2 rounded-md bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-bold text-[9px]">{{ $emp->tier_label }}</span>
+                                            @endif
+                                            @if(!$emp->claim_bonus)
+                                                <span class="inline-block px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold text-[9px]" title="Poin disimpan (tidak diklaim bulan ini)">💤 Simpan</span>
+                                            @else
+                                                <span class="inline-block px-1.5 py-0.2 rounded-md bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[9px]" title="Poin akan dicairkan saat gajian">⚡ Klaim</span>
                                             @endif
                                         </div>
                                     </td>
@@ -963,6 +979,31 @@
                                         <option value="inactive">Nonaktif</option>
                                     </select>
                                 </div>
+
+                                <div class="sm:col-span-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 space-y-2.5">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <span class="text-xs font-bold text-slate-800 dark:text-slate-200 block">Klaim Bonus Poin Bulan Ini</span>
+                                            <span class="text-[10px] text-slate-500 dark:text-slate-400">Jika dinonaktifkan, poin disimpan dan tidak dipotong saat gajian</span>
+                                        </div>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="hidden" name="claim_bonus" value="0">
+                                            <input type="checkbox" name="claim_bonus" value="1" x-model="form.claim_bonus" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                                        <div>
+                                            <span class="text-xs font-bold text-slate-800 dark:text-slate-200 block">CS Jaga / Piket Hari Ini</span>
+                                            <span class="text-[10px] text-slate-500 dark:text-slate-400">Penanda CS yang sedang berjaga (menentukan trigger bonus perusahaan)</span>
+                                        </div>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="hidden" name="is_on_duty" value="0">
+                                            <input type="checkbox" name="is_on_duty" value="1" x-model="form.is_on_duty" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
@@ -1072,11 +1113,14 @@
                                     </div>
                                     <div class="flex items-center justify-between">
                                         <span class="text-slate-500">Bonus Poin:</span>
-                                        <span class="font-mono text-amber-600 dark:text-amber-400" x-text="'Rp ' + (employeeToPay.current_points * (getTierRate(employeeToPay.current_points) || employeeToPay.rate_per_point)).toLocaleString('id-ID') + ' (' + employeeToPay.current_points + ' poin)'"></span>
+                                        <div class="text-right">
+                                            <span class="font-mono text-amber-600 dark:text-amber-400 font-bold" x-text="employeeToPay.claim_bonus ? ('Rp ' + Number(employeeToPay.bonus_salary).toLocaleString('id-ID')) : 'Rp 0'"></span>
+                                            <div class="text-[10px] text-slate-400" x-text="employeeToPay.claim_bonus ? ('Diproyeksi potong: ' + employeeToPay.tier_points_to_deduct + ' poin tier') : ('Poin disimpan: ' + employeeToPay.current_points + ' poin')"></div>
+                                        </div>
                                     </div>
                                     <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-sm font-extrabold">
                                         <span class="text-slate-800 dark:text-slate-200">Total Dibukukan:</span>
-                                        <span class="font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + (Number(employeeToPay.base_salary) + (Number(employeeToPay.total_allowance) || 0) + (employeeToPay.current_points * (getTierRate(employeeToPay.current_points) || employeeToPay.rate_per_point))).toLocaleString('id-ID')"></span>
+                                        <span class="font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + (Number(employeeToPay.base_salary) + (Number(employeeToPay.total_allowance) || 0) + (employeeToPay.claim_bonus ? Number(employeeToPay.bonus_salary) : 0)).toLocaleString('id-ID')"></span>
                                     </div>
                                 </div>
 

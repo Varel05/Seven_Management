@@ -220,10 +220,10 @@ class EmployeeRoleAndPointsTest extends TestCase
 
         // Point calculation:
         // Jas (jas_blazer_pria): 15 pt
-        // Quantity bonus: (3 - 1) * 2 = 4 pt
-        // COD bonus: 10 pt
-        // Total = 29 pt
-        $this->assertEquals(29, $this->csEmployee->fresh()->current_points);
+        // Quantity bonus (3 item x 1 pt): 3 pt
+        // COD bonus: 1 pt
+        // Total = 19 pt
+        $this->assertEquals(19, $this->csEmployee->fresh()->current_points);
 
         $this->assertDatabaseHas('employee_point_logs', [
             'employee_id' => $this->csEmployee->id,
@@ -234,13 +234,13 @@ class EmployeeRoleAndPointsTest extends TestCase
         $this->assertDatabaseHas('employee_point_logs', [
             'employee_id' => $this->csEmployee->id,
             'category' => EmployeePointLog::CATEGORY_QUANTITY,
-            'points' => 4,
+            'points' => 3,
         ]);
 
         $this->assertDatabaseHas('employee_point_logs', [
             'employee_id' => $this->csEmployee->id,
             'category' => EmployeePointLog::CATEGORY_COD,
-            'points' => 10,
+            'points' => 1,
         ]);
 
         // Verify retail_sales has employee_id set
@@ -604,8 +604,8 @@ class EmployeeRoleAndPointsTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('status', true);
 
-        // Verify points were awarded to Rina CS
-        $this->assertEquals($initialPoints + 20, $this->csEmployee->fresh()->current_points);
+        // Verify points were awarded to Rina CS (20 pt item + 1 pt qty)
+        $this->assertEquals($initialPoints + 21, $this->csEmployee->fresh()->current_points);
         $this->assertDatabaseHas('retail_sales', [
             'employee_id' => $this->csEmployee->id,
         ]);

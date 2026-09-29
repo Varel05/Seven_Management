@@ -71,6 +71,8 @@ class EmployeeController extends Controller
             'pay_day' => 'required|integer|min:1|max:31',
             'asset_account_id' => 'nullable|exists:accounts,id',
             'status' => 'required|in:active,inactive',
+            'claim_bonus' => 'nullable|boolean',
+            'is_on_duty' => 'nullable|boolean',
         ]);
 
         $validated['role'] = $validated['role'] ?? EmployeeRole::Staff->value;
@@ -79,6 +81,12 @@ class EmployeeController extends Controller
         $validated['rate_per_point'] = $tierRate > 0
             ? $tierRate
             : (float) ($validated['rate_per_point'] ?? 0);
+        if ($request->has('claim_bonus')) {
+            $validated['claim_bonus'] = $request->boolean('claim_bonus');
+        }
+        if ($request->has('is_on_duty')) {
+            $validated['is_on_duty'] = $request->boolean('is_on_duty');
+        }
 
         Employee::create($validated);
 
@@ -103,6 +111,8 @@ class EmployeeController extends Controller
             'pay_day' => 'required|integer|min:1|max:31',
             'asset_account_id' => 'nullable|exists:accounts,id',
             'status' => 'required|in:active,inactive',
+            'claim_bonus' => 'nullable|boolean',
+            'is_on_duty' => 'nullable|boolean',
         ]);
 
         $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
@@ -110,6 +120,12 @@ class EmployeeController extends Controller
         $validated['rate_per_point'] = $tierRate > 0
             ? $tierRate
             : (float) ($validated['rate_per_point'] ?? 0);
+        if ($request->has('claim_bonus')) {
+            $validated['claim_bonus'] = $request->boolean('claim_bonus');
+        }
+        if ($request->has('is_on_duty')) {
+            $validated['is_on_duty'] = $request->boolean('is_on_duty');
+        }
 
         $employee->update($validated);
 

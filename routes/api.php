@@ -28,6 +28,9 @@ Route::middleware('webhook.secret')->group(function () {
     Route::post('/webhook/payroll/points/update', [WebhookTransactionController::class, 'updateEmployeePoints']);
     Route::post('/webhook/payroll/points', [WebhookTransactionController::class, 'updateEmployeePoints']);
     Route::match(['get', 'post'], '/webhook/payroll/my-points', [WebhookTransactionController::class, 'myPoints']);
+    Route::match(['get', 'post'], '/webhook/payroll/bonus-preference', [WebhookTransactionController::class, 'toggleBonusPreference']);
+    Route::match(['get', 'post'], '/webhook/payroll/claim-bonus', [WebhookTransactionController::class, 'toggleBonusPreference']);
+    Route::match(['get', 'post'], '/webhook/payroll/duty', [WebhookTransactionController::class, 'manageDuty']);
 
     // Auth & Telegram Identity Verification Endpoint
     Route::match(['get', 'post'], '/webhook/auth/identify', [WebhookTransactionController::class, 'identifyTelegramUser']);

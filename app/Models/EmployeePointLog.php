@@ -30,7 +30,7 @@ class EmployeePointLog extends Model
         self::CATEGORY_QUANTITY => 'Bonus Kuantitas (Qty)',
         self::CATEGORY_COD => 'Layanan Cash On Delivery (COD)',
         self::CATEGORY_REVIEW => 'Review Bagus Pelanggan',
-        self::CATEGORY_CROSS_COMPANY => 'Bantuan Antar Perusahaan',
+        self::CATEGORY_CROSS_COMPANY => 'Bonus Perusahaan',
         self::CATEGORY_MANUAL => 'Penyesuaian Manual',
     ];
 
@@ -52,11 +52,11 @@ class EmployeePointLog extends Model
 
     public const DEFAULT_RENT_POINTS = 10;
 
-    public const DEFAULT_COD_POINTS = 10;
+    public const DEFAULT_COD_POINTS = 1;
 
-    public const DEFAULT_REVIEW_POINTS = 15;
+    public const DEFAULT_REVIEW_POINTS = 1;
 
-    public const DEFAULT_QTY_EXTRA_POINTS = 2; // Poin tambahan per pcs untuk item ke-2 dst
+    public const DEFAULT_QTY_EXTRA_POINTS = 1; // Poin bonus per pcs dalam transaksi
 
     protected $fillable = [
         'employee_id',

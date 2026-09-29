@@ -852,6 +852,8 @@ class WebhookTransactionController extends Controller
                 'formatted_allowance' => $emp->formatted_total_allowance,
                 'allowance_names' => $emp->applicable_allowances->pluck('name')->implode(', '),
                 'current_points' => (int) $emp->current_points,
+                'claim_bonus' => (bool) ($emp->claim_bonus ?? true),
+                'tier_points_to_deduct' => (int) $emp->tier_points_to_deduct,
                 'rate_per_point' => (float) $emp->rate_per_point,
                 'bonus_salary' => (float) $emp->bonus_salary,
                 'formatted_bonus' => $emp->formatted_bonus_salary,
@@ -884,7 +886,9 @@ class WebhookTransactionController extends Controller
             $messageLines[] = '🔴 *Jatuh Tempo Hari Ini (Perlu Dibayar):*';
             foreach ($dueToday as $d) {
                 $allowanceStr = $d['total_allowance'] > 0 ? " • Tunjangan: {$d['formatted_allowance']}" : '';
-                $bonusStr = $d['current_points'] > 0 ? " • Bonus: {$d['formatted_bonus']} ({$d['current_points']} pt)" : '';
+                $bonusStr = $d['bonus_salary'] > 0
+                    ? " • Bonus: {$d['formatted_bonus']} (-{$d['tier_points_to_deduct']} pt)"
+                    : (! $d['claim_bonus'] && $d['current_points'] >= 200 ? " • Bonus: Disimpan CS ({$d['current_points']} pt)" : ($d['current_points'] > 0 ? " ({$d['current_points']} pt)" : ''));
                 $messageLines[] = "• 👤 *#{$d['id']} {$d['name']}* ({$d['position']})";
                 $messageLines[] = "  💵 Pokok: {$d['formatted_base']}{$allowanceStr}{$bonusStr} ➔ *{$d['formatted_amount']}*";
                 $messageLines[] = "  💳 Bayar via: {$d['asset_account_name']}";
@@ -897,7 +901,9 @@ class WebhookTransactionController extends Controller
             $messageLines[] = '⚠️ *Terlewat (Belum Dibayar):*';
             foreach ($overdue as $o) {
                 $allowanceStr = $o['total_allowance'] > 0 ? " • Tunjangan: {$o['formatted_allowance']}" : '';
-                $bonusStr = $o['current_points'] > 0 ? " • Bonus: {$o['formatted_bonus']} ({$o['current_points']} pt)" : '';
+                $bonusStr = $o['bonus_salary'] > 0
+                    ? " • Bonus: {$o['formatted_bonus']} (-{$o['tier_points_to_deduct']} pt)"
+                    : (! $o['claim_bonus'] && $o['current_points'] >= 200 ? " • Bonus: Disimpan CS ({$o['current_points']} pt)" : ($o['current_points'] > 0 ? " ({$o['current_points']} pt)" : ''));
                 $messageLines[] = "• 👤 *#{$o['id']} {$o['name']}* ({$o['position']})";
                 $messageLines[] = "  💵 Pokok: {$o['formatted_base']}{$allowanceStr}{$bonusStr} ➔ *{$o['formatted_amount']}*";
                 $messageLines[] = "  📅 Jatuh Tempo: Tgl {$o['pay_day']} {$today->translatedFormat('M')}";
@@ -1696,6 +1702,7 @@ class WebhookTransactionController extends Controller
         // Berikan poin pelayanan jas custom ke CS jika teridentifikasi
         $pointInfo = null;
         if ($csEmployee) {
+            $actor = $senderId ? "Telegram:{$senderId}" : 'CS';
             $suitPoints = PointSetting::get('service:custom_suit', EmployeePointLog::PRODUCT_POINTS['custom_made_jas'] ?? 25);
             $csEmployee->addPoints(
                 $suitPoints,
@@ -1703,11 +1710,30 @@ class WebhookTransactionController extends Controller
                 "Pesanan Jas Custom {$order->order_number} ({$order->customer_name})",
                 'custom_order',
                 $order->id,
-                $senderId ? "Telegram:{$senderId}" : 'CS'
+                $actor
             );
 
+            // Poin bonus perusahaan jika CS yang melayani berbeda dari CS yang sedang berjaga
+            $onDutyCs = Employee::getOnDutyCs();
+            $companyBonus = 0;
+            if ($onDutyCs && $onDutyCs->id !== $csEmployee->id) {
+                $companyBonus = PointSetting::get('service:cross_company', 1);
+                if ($companyBonus > 0) {
+                    $csEmployee->addPoints(
+                        $companyBonus,
+                        EmployeePointLog::CATEGORY_CROSS_COMPANY,
+                        "Bonus perusahaan: melayani saat CS berjaga adalah {$onDutyCs->name}",
+                        'custom_order',
+                        $order->id,
+                        $actor
+                    );
+                }
+            }
+
             $pointInfo = [
-                'points' => $suitPoints,
+                'points' => $suitPoints + $companyBonus,
+                'suit_points' => $suitPoints,
+                'company_bonus' => $companyBonus,
                 'employee_name' => $csEmployee->name,
                 'new_points' => $csEmployee->fresh()->current_points,
             ];
@@ -1976,6 +2002,18 @@ class WebhookTransactionController extends Controller
         $csEmployee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
 
         $paymentMethod = strtolower($request->input('payment_method', 'cash'));
+        $rawText = strtolower(implode(' ', [
+            $paymentMethod,
+            (string) $request->input('notes', ''),
+            (string) $request->input('text', ''),
+            (string) $request->input('message', ''),
+            (string) $request->input('description', ''),
+        ]));
+        $isCod = preg_match('/\bcod\b/i', $rawText) || str_contains($rawText, 'cod') || ($paymentMethod === 'cod');
+        if ($isCod) {
+            $paymentMethod = 'cod';
+        }
+
         $isRental = $request->boolean('is_rental');
 
         $sale = DB::transaction(function () use ($product, $qty, $validated, $account, $csEmployee, $paymentMethod, $isRental) {
@@ -2076,13 +2114,23 @@ class WebhookTransactionController extends Controller
         // Hitung & Berikan Poin Pelayanan ke CS jika terdeteksi
         $pointInfo = null;
         if ($csEmployee) {
-            $itemBasePoints = $isRental
-                ? PointSetting::get('service:rental', EmployeePointLog::DEFAULT_RENT_POINTS)
-                : $product->effective_point_reward;
+            // 1. Poin mentah (jual / sewa): berdasarkan item
+            $itemBasePoints = $product->effective_point_reward;
 
-            $qtyBonus = ($qty > 1) ? ($qty - 1) * PointSetting::get('service:quantity_extra', EmployeePointLog::DEFAULT_QTY_EXTRA_POINTS) : 0;
-            $codBonus = ($paymentMethod === 'cod') ? PointSetting::get('service:cod', EmployeePointLog::DEFAULT_COD_POINTS) : 0;
-            $totalPointsEarned = $itemBasePoints + $qtyBonus + $codBonus;
+            // 2. Poin quantity: bernilai 1 untuk setiap jumlah barang sekali transaksi
+            $qtyBonus = $qty * PointSetting::get('service:quantity_extra', EmployeePointLog::DEFAULT_QTY_EXTRA_POINTS);
+
+            // 3. Poin COD: bernilai 1 setiap transaksi COD yang dilayani (kata kunci 'cod')
+            $codBonus = ($paymentMethod === 'cod' || $isCod) ? PointSetting::get('service:cod', EmployeePointLog::DEFAULT_COD_POINTS) : 0;
+
+            // 4. Poin bonus perusahaan: bernilai 1 jika CS yang melayani berbeda dari CS yang sedang berjaga
+            $onDutyCs = Employee::getOnDutyCs();
+            $companyBonus = 0;
+            if ($onDutyCs && $onDutyCs->id !== $csEmployee->id) {
+                $companyBonus = PointSetting::get('service:cross_company', 1);
+            }
+
+            $totalPointsEarned = $itemBasePoints + $qtyBonus + $codBonus + $companyBonus;
 
             $pointCategory = $isRental ? EmployeePointLog::CATEGORY_ITEM_RENT : EmployeePointLog::CATEGORY_ITEM_SALE;
             $actor = $senderId ? "Telegram:{$senderId}" : 'CS';
@@ -2097,7 +2145,7 @@ class WebhookTransactionController extends Controller
                 $actor
             );
 
-            // 2. Bonus kuantitas (jika > 1 pcs)
+            // 2. Bonus kuantitas
             if ($qtyBonus > 0) {
                 $csEmployee->addPoints(
                     $qtyBonus,
@@ -2121,11 +2169,24 @@ class WebhookTransactionController extends Controller
                 );
             }
 
+            // 4. Bonus Perusahaan (CS pengganti/berbeda dari CS yang berjaga)
+            if ($companyBonus > 0 && $onDutyCs) {
+                $csEmployee->addPoints(
+                    $companyBonus,
+                    EmployeePointLog::CATEGORY_CROSS_COMPANY,
+                    "Bonus perusahaan: melayani saat CS berjaga adalah {$onDutyCs->name}",
+                    'retail_sale',
+                    $sale->id,
+                    $actor
+                );
+            }
+
             $pointInfo = [
                 'total' => $totalPointsEarned,
                 'item_points' => $itemBasePoints,
                 'qty_bonus' => $qtyBonus,
                 'cod_bonus' => $codBonus,
+                'company_bonus' => $companyBonus,
                 'employee_name' => $csEmployee->name,
                 'new_points' => $csEmployee->fresh()->current_points,
             ];
@@ -2144,7 +2205,14 @@ class WebhookTransactionController extends Controller
         if ($pointInfo) {
             $msg[] = '───────────────────';
             $msg[] = "⭐ *Poin Pelayanan CS*: +{$pointInfo['total']} pt ({$pointInfo['employee_name']})";
-            $msg[] = "   • Item: +{$pointInfo['item_points']} pt | Qty: +{$pointInfo['qty_bonus']} pt".($pointInfo['cod_bonus'] > 0 ? " | COD: +{$pointInfo['cod_bonus']} pt" : '');
+            $subDetails = ["Item: +{$pointInfo['item_points']} pt", "Qty: +{$pointInfo['qty_bonus']} pt"];
+            if ($pointInfo['cod_bonus'] > 0) {
+                $subDetails[] = "COD: +{$pointInfo['cod_bonus']} pt";
+            }
+            if ($pointInfo['company_bonus'] > 0) {
+                $subDetails[] = "Bonus Perusahaan: +{$pointInfo['company_bonus']} pt";
+            }
+            $msg[] = '   • '.implode(' | ', $subDetails);
             $msg[] = "   • Total Poin CS Sekarang: *{$pointInfo['new_points']} pt*";
         }
 
@@ -2447,6 +2515,14 @@ class WebhookTransactionController extends Controller
      */
     public function myPoints(Request $request)
     {
+        $rawText = strtolower(trim((string) ($request->input('text') ?? '')));
+        if (str_starts_with($rawText, '/klaim') || str_contains($rawText, 'klaim bonus') || str_contains($rawText, 'ambil bonus') || str_contains($rawText, 'simpan poin') || $request->has('choice') || $request->has('claim')) {
+            return $this->toggleBonusPreference($request);
+        }
+        if (str_starts_with($rawText, '/jaga') || str_starts_with($rawText, '/duty') || str_contains($rawText, 'cs jaga') || str_contains($rawText, 'jaga cs')) {
+            return $this->manageDuty($request);
+        }
+
         $employeeId = $request->input('employee_id');
         $employee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
 
@@ -2504,11 +2580,23 @@ class WebhookTransactionController extends Controller
             "🏆 *Status Tingkatan*: *{$employee->tier_name}*",
         ];
 
-        if ($employee->rate_per_point > 0) {
-            $msg[] = '💵 *Tarif per Poin*: Rp '.number_format($employee->rate_per_point, 0, ',', '.').' / pt';
-            $msg[] = "💰 *Estimasi Bonus Poin*: *{$employee->formatted_bonus_salary}*";
+        $isClaimingBonus = (bool) ($employee->claim_bonus ?? true);
+        $claimLabel = $isClaimingBonus ? '✅ Ambil Bonus' : '🛡️ Simpan Poin (Tidak Diambil)';
+        $msg[] = "🎁 *Pilihan Bonus Bulan Ini*: *{$claimLabel}*";
+
+        if ($isClaimingBonus) {
+            if ($employee->rate_per_point > 0) {
+                $msg[] = '💵 *Tarif per Poin*: Rp '.number_format($employee->rate_per_point, 0, ',', '.').' / pt';
+                $msg[] = "💰 *Estimasi Bonus Poin*: *{$employee->formatted_bonus_salary}*";
+                $deduct = $employee->tier_points_to_deduct;
+                $rem = max(0, $currentPoints - $deduct);
+                $msg[] = "🔻 *Poin Dikurangi Saat Gajian*: *{$deduct} pt* (Sisa *{$rem} pt* tetap tersimpan)";
+            } else {
+                $msg[] = '💰 *Estimasi Bonus Poin*: Rp 0 (Belum mencapai batas Tier 1: 200 pt)';
+            }
         } else {
-            $msg[] = '💰 *Estimasi Bonus Poin*: Rp 0 (Belum mencapai batas Tier 1: 200 pt)';
+            $msg[] = '💰 *Bonus Bulan Ini*: Rp 0 (Poin disimpan, tidak ada potongan saat gajian)';
+            $msg[] = "🛡️ *Poin Tersimpan*: *{$currentPoints} pt* utuh untuk akumulasi tier lebih tinggi";
         }
 
         if (! empty($categorySummary)) {
@@ -2521,16 +2609,179 @@ class WebhookTransactionController extends Controller
 
         $msg[] = "\n{$nextTierInfo}";
 
+        $msg[] = "\n⚙️ *Pengaturan Pengambilan Bonus*:";
+        $msg[] = '• Ketik `/klaimbonus ambil` jika ingin mencairkan bonus tier bulan ini';
+        $msg[] = '• Ketik `/klaimbonus simpan` jika ingin menabung poin untuk tier berikutnya';
+
         return response()->json([
             'status' => true,
             'employee' => $employee,
             'current_points' => $currentPoints,
+            'claim_bonus' => $isClaimingBonus,
             'tier_name' => $employee->tier_name,
             'tier_label' => $employee->tier_name,
             'rate_per_point' => (float) $employee->rate_per_point,
             'bonus_salary' => (float) $employee->bonus_salary,
+            'tier_points_to_deduct' => (int) $employee->tier_points_to_deduct,
             'category_summary' => $categorySummary,
             'message' => implode("\n", $msg),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Pengaturan pilihan CS untuk mengambil atau menyimpan bonus gaji bulan ini via Telegram.
+     */
+    public function toggleBonusPreference(Request $request)
+    {
+        $employeeId = $request->input('employee_id');
+        $employee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
+
+        if (! $employee) {
+            return response()->json([
+                'status' => false,
+                'message' => '❌ Akun Telegram / Nomor HP Anda belum terhubung dengan data karyawan di sistem Seven Management.',
+            ], 404);
+        }
+
+        $rawChoice = strtolower(trim((string) (
+            $request->input('claim')
+            ?? $request->input('choice')
+            ?? $request->input('action')
+            ?? $request->input('status')
+            ?? $request->input('preference')
+            ?? ''
+        )));
+
+        $text = strtolower(trim((string) $request->input('text', '')));
+        if (empty($rawChoice) && ! empty($text)) {
+            if (str_contains($text, 'ambil') || str_contains($text, 'ya') || str_contains($text, 'claim')) {
+                $rawChoice = 'ambil';
+            } elseif (str_contains($text, 'simpan') || str_contains($text, 'tidak') || str_contains($text, 'save') || str_contains($text, 'skip')) {
+                $rawChoice = 'simpan';
+            }
+        }
+
+        if (in_array($rawChoice, ['ya', 'ambil', 'yes', 'claim', 'true', '1'], true)) {
+            $claim = true;
+        } elseif (in_array($rawChoice, ['tidak', 'simpan', 'no', 'save', 'skip', 'false', '0'], true)) {
+            $claim = false;
+        } else {
+            // Jika kosong/toggle
+            $claim = ! ($employee->claim_bonus ?? true);
+        }
+
+        $employee->update(['claim_bonus' => $claim]);
+        $employee->refresh();
+
+        $currentPoints = (int) $employee->current_points;
+        $tierName = $employee->tier_name;
+        $deduct = $employee->tier_points_to_deduct;
+        $remaining = max(0, $currentPoints - $deduct);
+
+        if ($claim) {
+            $lines = [
+                '✅ *Pilihan Pengambilan Bonus Berhasil Diperbarui!*',
+                "👤 *Karyawan*: {$employee->name} ({$employee->position})",
+                '🎁 *Status*: *MENGAMBIL BONUS BULAN INI*',
+                "⭐ *Akumulasi Poin*: *{$currentPoints} pt* ({$tierName})",
+            ];
+            if ($employee->rate_per_point > 0) {
+                $lines[] = "💰 *Estimasi Bonus*: *{$employee->formatted_bonus_salary}*";
+                $lines[] = "🔻 *Poin Dikurangi Saat Gajian*: *{$deduct} pt*";
+                $lines[] = "📦 *Sisa Poin Tersimpan*: *{$remaining} pt*";
+            } else {
+                $lines[] = 'ℹ️ *Catatan*: Belum mencapai batas minimum Tier 1 (200 pt), bonus belum dapat dicairkan.';
+            }
+            $lines[] = "\n💡 Jika sewaktu-waktu ingin menabung poin ke bulan depan, ketik `/klaimbonus simpan`.";
+        } else {
+            $lines = [
+                '🛡️ *Pilihan Pengambilan Bonus Berhasil Diperbarui!*',
+                "👤 *Karyawan*: {$employee->name} ({$employee->position})",
+                '🎁 *Status*: *MENYIMPAN POIN (BONUS TIDAK DIAMBIL BULAN INI)*',
+                "⭐ *Akumulasi Poin*: *{$currentPoints} pt* ({$tierName})",
+                '💰 *Bonus Bulan Ini*: Rp 0',
+                '🛡️ *Poin Tersimpan*: Seluruh poin Anda aman dan *TIDAK AKAN DIPOTONG* saat penggajian bulan ini.',
+                '🎯 Poin akan terus bertambah untuk membantu Anda mencapai Tier yang lebih tinggi dengan tarif bonus yang lebih besar!',
+                "\n💡 Jika sewaktu-waktu ingin mencairkan bonus bulan ini, ketik `/klaimbonus ambil`.",
+            ];
+        }
+
+        return response()->json([
+            'status' => true,
+            'claim_bonus' => $claim,
+            'employee' => $employee,
+            'current_points' => $currentPoints,
+            'bonus_salary' => (float) $employee->bonus_salary,
+            'tier_points_to_deduct' => $deduct,
+            'remaining_points' => $remaining,
+            'message' => implode("\n", $lines),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Atur / pantau CS yang sedang bertugas/berjaga (On-Duty).
+     */
+    public function manageDuty(Request $request)
+    {
+        $action = strtolower(trim((string) $request->input('action', '')));
+        $text = strtolower(trim((string) $request->input('text', '')));
+        if (empty($action) && ! empty($text)) {
+            if (str_contains($text, 'off') || str_contains($text, 'selesai') || str_contains($text, 'stop') || str_contains($text, 'keluar')) {
+                $action = 'off';
+            } elseif (str_contains($text, 'status') || str_contains($text, 'siapa') || str_contains($text, 'cek')) {
+                $action = 'status';
+            } else {
+                $action = 'set';
+            }
+        }
+        if (empty($action)) {
+            $action = 'set';
+        }
+        $employeeId = $request->input('employee_id');
+        $employee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
+
+        if ($action === 'status' || (! $employee && $action !== 'set')) {
+            $onDuty = Employee::getOnDutyCs();
+            if ($onDuty) {
+                return response()->json([
+                    'status' => true,
+                    'on_duty' => $onDuty,
+                    'message' => "👮 *Status CS Berjaga:*\nSaat ini yang sedang berjaga adalah: *{$onDuty->name}* ({$onDuty->position}).",
+                ]);
+            }
+
+            return response()->json([
+                'status' => true,
+                'on_duty' => null,
+                'message' => "ℹ️ Belum ada CS yang tercatat sedang berjaga saat ini.\nKetik `/jaga` untuk menetapkan diri Anda sebagai CS yang bertugas.",
+            ]);
+        }
+
+        if (! $employee) {
+            return response()->json([
+                'status' => false,
+                'message' => '❌ Akun Telegram / Nomor HP Anda belum terdaftar sebagai karyawan di sistem Seven Management.',
+            ], 404);
+        }
+
+        if ($action === 'clear' || $action === 'off') {
+            $employee->update(['is_on_duty' => false]);
+
+            return response()->json([
+                'status' => true,
+                'is_on_duty' => false,
+                'message' => "🚪 *Selesai Jaga*: {$employee->name} telah mengakhiri status bertugas/berjaga.",
+            ]);
+        }
+
+        // Set this employee as on duty
+        $employee->setAsOnDuty();
+
+        return response()->json([
+            'status' => true,
+            'is_on_duty' => true,
+            'employee' => $employee,
+            'message' => "👮 *CS Berjaga*: *{$employee->name}* sekarang tercatat sebagai CS yang sedang bertugas/berjaga.\n\n💡 CS lain yang melayani transaksi saat Anda berjaga akan mendapatkan bonus perusahaan (+1 poin)!",
         ]);
     }
 
