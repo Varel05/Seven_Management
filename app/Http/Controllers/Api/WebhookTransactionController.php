@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\CustomSuitOrder;
 use App\Models\Employee;
+use App\Models\EmployeePayroll;
 use App\Models\EmployeePointLog;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
@@ -2932,6 +2933,207 @@ class WebhookTransactionController extends Controller
             'new_points' => $newPoints,
             'diff' => $diff,
             'message' => implode("\n", $msg),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Generate / kirim rincian slip gaji karyawan ke Telegram (sesuai format Excel).
+     */
+    public function generatePayrollSlip(Request $request)
+    {
+        $auth = $this->authorizeTelegramRole($request);
+        $isAboveStaff = in_array($auth['role'], EmployeeRole::aboveStaff(), true);
+
+        $query = trim((string) ($request->input('employee_query') ?? $request->input('query') ?? $request->input('name') ?? $request->input('employee_id') ?? ''));
+
+        $employee = null;
+        if (! empty($query)) {
+            if (is_numeric($query)) {
+                $employee = Employee::find((int) $query);
+            }
+            if (! $employee) {
+                $employee = Employee::where('name', $query)
+                    ->orWhere('name', 'like', "%{$query}%")
+                    ->first();
+            }
+        }
+
+        // Jika tidak mengisi nama/query, defaultkan ke karyawan pengirim Telegram itu sendiri
+        if (! $employee) {
+            $employee = $this->resolveTelegramEmployee($request);
+        }
+
+        if (! $employee) {
+            $activeList = Employee::active()->pluck('name')->implode(', ');
+
+            return response()->json([
+                'status' => false,
+                'message' => "❌ Karyawan tidak ditemukan.\n\n💡 Silakan sebutkan nama atau ID karyawan yang ingin dicari slip gajinya.\nContoh: `/slip Maya` atau `Buatkan slip gaji Budi`.\n\n👥 Daftar karyawan aktif: {$activeList}",
+            ], 404);
+        }
+
+        // Verifikasi privasi: Staf biasa/CS hanya boleh mengakses slip gaji milik dirinya sendiri
+        if (! $isAboveStaff) {
+            $senderEmployee = $this->resolveTelegramEmployee($request);
+            if (! $senderEmployee || $senderEmployee->id !== $employee->id) {
+                return response()->json([
+                    'status' => false,
+                    'message' => "⛔ *Akses Ditolak!*\nAnda hanya diizinkan melihat slip gaji milik Anda sendiri.\n\n💡 Ketik `/slip` atau `Slip gaji saya` untuk melihat slip gaji Anda.",
+                ], 403);
+            }
+        }
+
+        $period = $request->input('period') ?: now()->translatedFormat('F Y');
+
+        // Cek apakah sudah pernah dibukukan / ada arsip EmployeePayroll
+        $existingPayroll = EmployeePayroll::where('employee_id', $employee->id)
+            ->where(function ($q) use ($period) {
+                $q->where('period', $period)
+                    ->orWhere('period', 'like', "%{$period}%");
+            })
+            ->latest()
+            ->first();
+
+        if (! $existingPayroll && ! $request->has('period')) {
+            $existingPayroll = $employee->latestPayroll;
+        }
+
+        if ($existingPayroll) {
+            $isFinal = true;
+            $periodLabel = $existingPayroll->period;
+            $periodStart = $existingPayroll->period_start ? $existingPayroll->period_start->translatedFormat('d M') : '26';
+            $periodEnd = $existingPayroll->period_end ? $existingPayroll->period_end->translatedFormat('d M Y') : '25';
+            $totalShifts = $existingPayroll->total_shifts;
+            $totalPresent = $existingPayroll->total_present;
+            $lateCount = $existingPayroll->late_count;
+            $disciplinePresent = $existingPayroll->discipline_present;
+            $holidayShifts = $existingPayroll->holiday_shifts;
+            $dailyRate = (float) $existingPayroll->daily_rate;
+            $disciplineRate = (float) $existingPayroll->discipline_rate;
+            $holidayRate = (float) $existingPayroll->holiday_rate;
+            $mainSalary = (float) $existingPayroll->main_salary;
+            $disciplineBonus = (float) $existingPayroll->discipline_bonus;
+            $salesBonus = (float) $existingPayroll->sales_bonus;
+            $holidayBonus = (float) $existingPayroll->holiday_bonus;
+            $allowanceTotal = (float) $existingPayroll->allowance_total;
+            $takeHomePay = (float) $existingPayroll->take_home_pay;
+            $closingPoints = $existingPayroll->closing_points;
+            $ratePerPoint = (float) $existingPayroll->rate_per_point;
+            $statusText = '🟢 Sudah Dibukukan (Final)';
+            $refText = $existingPayroll->journalEntry?->reference ? "Ref: `{$existingPayroll->journalEntry->reference}`" : '';
+            $slipUrl = url("/employees/payroll/{$existingPayroll->id}/slip");
+        } else {
+            $isFinal = false;
+            $periodLabel = $period;
+            $periodStart = now()->subMonth()->setDay(26)->translatedFormat('d M');
+            $periodEnd = now()->setDay(25)->translatedFormat('d M Y');
+            $totalShifts = (int) ($request->input('total_shifts') ?? 27);
+            $totalPresent = (int) ($request->input('total_present') ?? 27);
+            $lateCount = (int) ($request->input('late_count') ?? 0);
+            $disciplinePresent = (int) ($request->input('discipline_present') ?? max(0, $totalPresent - $lateCount));
+            $holidayShifts = (int) ($request->input('holiday_shifts') ?? 0);
+            $dailyRate = $employee->effective_daily_rate;
+            $disciplineRate = $employee->effective_discipline_rate;
+            $holidayRate = $employee->effective_holiday_rate;
+            $mainSalary = $totalPresent * $dailyRate;
+            $disciplineBonus = $disciplinePresent * $disciplineRate;
+            $salesBonus = (float) $employee->bonus_salary;
+            $holidayBonus = $holidayShifts * $holidayRate;
+            $allowanceTotal = (float) $employee->total_allowance;
+            $takeHomePay = $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal;
+            $closingPoints = (int) $employee->current_points;
+            $ratePerPoint = (float) $employee->rate_per_point;
+            $statusText = '⏳ Estimasi / Draft (Belum Dibukukan)';
+            $refText = '';
+            $slipUrl = url('/employees');
+        }
+
+        $cb = $existingPayroll?->closing_breakdown ?: [];
+        $sd = $cb['SD'] ?? 0;
+        $fc = $cb['FC'] ?? 0;
+        $jk = $cb['JK'] ?? 0;
+        $ina = $cb['INA'] ?? 0;
+        $bj = $cb['BJ'] ?? 0;
+        $lm = $cb['LM'] ?? 0;
+
+        $closingPcs = $existingPayroll?->closing_pcs ?: $closingPoints;
+        $rateFormatted = number_format($ratePerPoint, 0, ',', '.');
+        $closingMultiplierText = $ratePerPoint > 0 ? "x Rp {$rateFormatted}" : 'x .....';
+
+        // Hitung masa kerja (bulan ke- berapa)
+        $hireDate = $employee->hire_date ?? $employee->created_at;
+        $monthsWorked = $hireDate ? (int) max(1, (int) ceil(Carbon::parse($hireDate)->diffInMonths(now()) + 1)) : 1;
+        $honorariumTitle = "Honorarium (bln ke-{$monthsWorked})";
+
+        $dateFooter = $existingPayroll?->paid_at
+            ? $existingPayroll->paid_at->format('Y-n-j')
+            : now()->format('Y-n-j');
+        $hrdName = $existingPayroll?->hrd_name ?: 'Ari Husbana';
+        $totalHonor = $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal;
+
+        $lines = [];
+        $lines[] = '📋 *SLIP GAJI KARYAWAN*';
+        $lines[] = "Periode               : *{$periodLabel}*";
+        $lines[] = "Nama                  : *{$employee->name}*";
+        $lines[] = 'Metode Pembayaran     : Transfer';
+        $lines[] = "Jumlah Closing        : {$closingPoints} poin = {$closingPcs} pcs ({$closingMultiplierText})";
+        $lines[] = "(SD = {$sd} pcs, FC = {$fc} pcs, JK= {$jk} pcs, INA = {$ina} pcs, BJ = {$bj} pcs, LM = {$lm} pcs)";
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = "Total Shift ({$periodStart} - {$periodEnd}) : *{$totalShifts}*";
+        $lines[] = "Terlambat                             : *{$lateCount}*";
+        $lines[] = "Total Hadir Disiplin                  : *{$disciplinePresent}*";
+        $lines[] = "Total Kehadiran                       : *{$totalPresent}*";
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = "*{$honorariumTitle}*";
+        $lines[] = '1. Honor Utama (jumlah hadir x upah per hari)       : *Rp '.number_format($mainSalary, 0, ',', '.').'*';
+        $lines[] = '2. Bonus Disiplin (jumlah disiplin x bonus per hari) : *Rp '.number_format($disciplineBonus, 0, ',', '.').'*';
+        $lines[] = '3. Bonus Penjualan (poin atau pcs x nominal pengali) : *Rp '.number_format($salesBonus, 0, ',', '.').'*';
+        $lines[] = '4. Bonus Tgl Merah                                   : *Rp '.number_format($holidayBonus, 0, ',', '.').'*';
+        if ($allowanceTotal > 0) {
+            $lines[] = '5. Tunjangan Tambahan                                : *Rp '.number_format($allowanceTotal, 0, ',', '.').'*';
+        }
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '*TOTAL HONOR*                                          : *Rp '.number_format($totalHonor, 0, ',', '.').'*';
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '🟩 *Total Take Home Pay*                               : *Rp '.number_format($takeHomePay, 0, ',', '.').'*';
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = "Yogyakarta, {$dateFooter}                               Note :";
+        $lines[] = "*{$hrdName}*                                           {$statusText}";
+        $lines[] = 'HRD'.($refText ? "                                                 {$refText}" : '');
+        if ($existingPayroll) {
+            $lines[] = '';
+            $lines[] = "📄 *Cetak / PDF*: [Buka Slip Gaji Web]({$slipUrl})";
+        }
+
+        return response()->json([
+            'status' => true,
+            'is_final' => $isFinal,
+            'employee' => [
+                'id' => $employee->id,
+                'name' => $employee->name,
+                'position' => $employee->position,
+                'role' => $employee->role_label,
+            ],
+            'payroll' => [
+                'period' => $periodLabel,
+                'total_shifts' => $totalShifts,
+                'total_present' => $totalPresent,
+                'late_count' => $lateCount,
+                'discipline_present' => $disciplinePresent,
+                'holiday_shifts' => $holidayShifts,
+                'daily_rate' => $dailyRate,
+                'discipline_rate' => $disciplineRate,
+                'holiday_rate' => $holidayRate,
+                'main_salary' => $mainSalary,
+                'discipline_bonus' => $disciplineBonus,
+                'sales_bonus' => $salesBonus,
+                'holiday_bonus' => $holidayBonus,
+                'allowance_total' => $allowanceTotal,
+                'take_home_pay' => $takeHomePay,
+                'formatted_take_home_pay' => 'Rp '.number_format($takeHomePay, 0, ',', '.'),
+                'slip_url' => $slipUrl,
+            ],
+            'message' => implode("\n", $lines),
         ]);
     }
 }

@@ -158,6 +158,9 @@
             telegram_user_id: '',
             telegram_username: '',
             base_salary: 0,
+            daily_rate: 0,
+            discipline_rate: 10000,
+            holiday_rate: 50000,
             current_points: 0,
             rate_per_point: 0,
             pay_day: 25,
@@ -174,6 +177,46 @@
         },
         showPayModal: false,
         employeeToPay: null,
+        payForm: {
+            period: '{{ now()->translatedFormat("F Y") }}',
+            period_start: '{{ now()->subMonth()->setDay(26)->format("Y-m-d") }}',
+            period_end: '{{ now()->setDay(25)->format("Y-m-d") }}',
+            payment_method: 'Transfer',
+            total_shifts: 27,
+            late_count: 0,
+            total_present: 27,
+            discipline_present: 27,
+            holiday_shifts: 0,
+            daily_rate: 100000,
+            discipline_rate: 10000,
+            holiday_rate: 50000,
+            closing_points: 0,
+            closing_pcs: 0,
+            sales_bonus: 0,
+            notes: ''
+        },
+        updateDisciplinePresent() {
+            let present = Number(this.payForm.total_present) || 0;
+            let late = Number(this.payForm.late_count) || 0;
+            this.payForm.discipline_present = Math.max(0, present - late);
+        },
+        calculateMainSalary() {
+            return (Number(this.payForm.total_present) || 0) * (Number(this.payForm.daily_rate) || 0);
+        },
+        calculateDisciplineBonus() {
+            return (Number(this.payForm.discipline_present) || 0) * (Number(this.payForm.discipline_rate) || 0);
+        },
+        calculateHolidayBonus() {
+            return (Number(this.payForm.holiday_shifts) || 0) * (Number(this.payForm.holiday_rate) || 0);
+        },
+        calculatePayTHP() {
+            let main = this.calculateMainSalary();
+            let disc = this.calculateDisciplineBonus();
+            let sales = Number(this.payForm.sales_bonus) || 0;
+            let hol = this.calculateHolidayBonus();
+            let alw = this.employeeToPay ? (Number(this.employeeToPay.total_allowance) || 0) : 0;
+            return main + disc + sales + hol + alw;
+        },
         showDeleteModal: false,
         employeeToDelete: null,
 
@@ -292,6 +335,9 @@
                 telegram_user_id: '',
                 telegram_username: '',
                 base_salary: 3000000,
+                daily_rate: 0,
+                discipline_rate: 10000,
+                holiday_rate: 50000,
                 current_points: 0,
                 rate_per_point: 0,
                 pay_day: 25,
@@ -313,6 +359,9 @@
                 telegram_user_id: emp.telegram_user_id || '',
                 telegram_username: emp.telegram_username || '',
                 base_salary: Number(emp.base_salary),
+                daily_rate: Number(emp.daily_rate) || 0,
+                discipline_rate: Number(emp.discipline_rate) || 0,
+                holiday_rate: Number(emp.holiday_rate) || 0,
                 current_points: emp.current_points,
                 rate_per_point: Number(emp.rate_per_point),
                 pay_day: emp.pay_day,
@@ -330,6 +379,29 @@
         },
         openPayModal(emp) {
             this.employeeToPay = emp;
+            let dailyRate = Number(emp.daily_rate) > 0 ? Number(emp.daily_rate) : (Number(emp.effective_daily_rate) || 100000);
+            let discRate = Number(emp.discipline_rate) > 0 ? Number(emp.discipline_rate) : (Number(emp.effective_discipline_rate) || 10000);
+            let holRate = Number(emp.holiday_rate) > 0 ? Number(emp.holiday_rate) : (Number(emp.effective_holiday_rate) || 50000);
+            let salesBonus = emp.claim_bonus ? Number(emp.bonus_salary) : 0;
+
+            this.payForm = {
+                period: '{{ now()->translatedFormat("F Y") }}',
+                period_start: '{{ now()->subMonth()->setDay(26)->format("Y-m-d") }}',
+                period_end: '{{ now()->setDay(25)->format("Y-m-d") }}',
+                payment_method: 'Transfer',
+                total_shifts: 27,
+                late_count: 0,
+                total_present: 27,
+                discipline_present: 27,
+                holiday_shifts: 0,
+                daily_rate: dailyRate,
+                discipline_rate: discRate,
+                holiday_rate: holRate,
+                closing_points: Number(emp.current_points) || 0,
+                closing_pcs: Number(emp.current_points) || 0,
+                sales_bonus: salesBonus,
+                notes: ''
+            };
             this.showPayModal = true;
         },
         openDeleteModal(emp) {
@@ -741,11 +813,32 @@
                                                     type="button" 
                                                     @click="openPayModal({{ Js::from($emp) }})" 
                                                     class="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-xs shadow-emerald-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                                                    title="Bukukan Pembayaran Gaji Sekarang"
+                                                    title="Input Absensi & Hitung Slip Gaji"
                                                 >
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                                                     <span>Bayar</span>
                                                 </button>
+                                            @else
+                                                @if($emp->latestPayroll)
+                                                    <a 
+                                                        href="{{ route('employees.payroll.slip', $emp->latestPayroll) }}" 
+                                                        target="_blank"
+                                                        class="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 shadow-2xs hover:bg-teal-100 transition-all cursor-pointer"
+                                                        title="Lihat / Cetak Lembar Slip Gaji Excel"
+                                                    >
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                                        <span>Slip Gaji</span>
+                                                    </a>
+                                                @else
+                                                    <button 
+                                                        type="button" 
+                                                        @click="openPayModal({{ Js::from($emp) }})" 
+                                                        class="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-all cursor-pointer"
+                                                        title="Buat Lembar Slip Gaji Baru"
+                                                    >
+                                                        <span>+ Slip</span>
+                                                    </button>
+                                                @endif
                                             @endif
                                         </div>
                                     </td>
@@ -947,8 +1040,24 @@
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Gaji Pokok (Rp)</label>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Gaji Pokok Acuan (Rp)</label>
                                     <input type="number" step="any" name="base_salary" x-model="form.base_salary" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Upah per Hari / Shift (Rp)</label>
+                                    <input type="number" step="any" name="daily_rate" x-model="form.daily_rate" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="Otomatis: Gaji Pokok ÷ 27">
+                                    <span class="text-[10px] text-slate-400 mt-0.5 block">Kosongkan jika dihitung otomatis (Gaji Pokok ÷ 27)</span>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Bonus Disiplin / Hari (Rp)</label>
+                                    <input type="number" step="any" name="discipline_rate" x-model="form.discipline_rate" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="10000">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Bonus Tanggal Merah (Rp)</label>
+                                    <input type="number" step="any" name="holiday_rate" x-model="form.holiday_rate" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="50000">
                                 </div>
 
                                 <div>
@@ -1084,55 +1193,205 @@
                 </div>
             </div>
 
-            <!-- MODAL KONFIRMASI PEMBUKUAN GAJI (PAY) -->
+            <!-- MODAL HITUNG & BUKUKAN GAJI (SLIP GAJI SESUAI EXCEL) -->
             <div x-show="showPayModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
-                <div class="min-h-screen px-4 text-center flex items-center justify-center">
+                <div class="min-h-screen px-4 py-8 text-center flex items-center justify-center">
                     <div class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity" @click="showPayModal = false"></div>
-                    <div class="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl relative z-10">
-                        <div class="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                            <div class="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                    <div class="inline-block w-full max-w-2xl p-6 my-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl relative z-10">
+                        
+                        <!-- Header Modal -->
+                        <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                                        <span>Hitung & Bukukan Gaji</span>
+                                        <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-300/60" x-text="employeeToPay ? employeeToPay.name : ''"></span>
+                                    </h3>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                        Perhitungan slip gaji bulanan (Cut-off 26 - 25) & input absensi manual.
+                                    </p>
+                                </div>
                             </div>
-                            <h3 class="text-base font-extrabold text-slate-900 dark:text-white">Bukukan Gaji Karyawan</h3>
+                            <button type="button" @click="showPayModal = false" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
                         </div>
 
                         <template x-if="employeeToPay">
                             <form :action="'{{ url('employees') }}/' + employeeToPay.id + '/pay'" method="POST" class="mt-4 space-y-4">
                                 @csrf
-                                <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-slate-500">Nama:</span>
-                                        <span class="font-bold text-slate-900 dark:text-white" x-text="employeeToPay.name"></span>
-                                    </div>
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-slate-500">Gaji Pokok:</span>
-                                        <span class="font-mono text-slate-700 dark:text-slate-300" x-text="'Rp ' + Number(employeeToPay.base_salary).toLocaleString('id-ID')"></span>
-                                    </div>
-                                    <div class="flex items-center justify-between" x-show="Number(employeeToPay.total_allowance) > 0">
-                                        <span class="text-slate-500">Tunjangan:</span>
-                                        <span class="font-mono text-teal-600 dark:text-teal-400" x-text="'Rp ' + (Number(employeeToPay.total_allowance) || 0).toLocaleString('id-ID')"></span>
-                                    </div>
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-slate-500">Bonus Poin:</span>
-                                        <div class="text-right">
-                                            <span class="font-mono text-amber-600 dark:text-amber-400 font-bold" x-text="employeeToPay.claim_bonus ? ('Rp ' + Number(employeeToPay.bonus_salary).toLocaleString('id-ID')) : 'Rp 0'"></span>
-                                            <div class="text-[10px] text-slate-400" x-text="employeeToPay.claim_bonus ? ('Diproyeksi potong: ' + employeeToPay.tier_points_to_deduct + ' poin tier') : ('Poin disimpan: ' + employeeToPay.current_points + ' poin')"></div>
+
+                                <!-- Informasi Periode & Metode -->
+                                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div>
+                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Periode Slip</label>
+                                            <input type="text" name="period" x-model="payForm.period" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-emerald-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Tgl Cut-off Mulai</label>
+                                            <input type="date" name="period_start" x-model="payForm.period_start" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-emerald-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Tgl Cut-off Akhir</label>
+                                            <input type="date" name="period_end" x-model="payForm.period_end" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-emerald-500">
                                         </div>
                                     </div>
-                                    <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-sm font-extrabold">
-                                        <span class="text-slate-800 dark:text-slate-200">Total Dibukukan:</span>
-                                        <span class="font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + (Number(employeeToPay.base_salary) + (Number(employeeToPay.total_allowance) || 0) + (employeeToPay.claim_bonus ? Number(employeeToPay.bonus_salary) : 0)).toLocaleString('id-ID')"></span>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                                        <div>
+                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Metode Pembayaran</label>
+                                            <select name="payment_method" x-model="payForm.payment_method" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                                                <option value="Transfer">Transfer Bank</option>
+                                                <option value="Tunai">Tunai (Cash)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Akun Kas / Bank (Kredit)</label>
+                                            <div class="text-xs font-semibold text-slate-800 dark:text-slate-200 py-2 px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 truncate" x-text="employeeToPay.asset_account ? employeeToPay.asset_account.name : 'Kas Operasional'"></div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div class="text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
-                                    <div>📋 <strong>Debit:</strong> Akun 5002 - Beban Gaji</div>
-                                    <div>💳 <strong>Kredit:</strong> <span x-text="employeeToPay.asset_account ? employeeToPay.asset_account.name : 'Kas Operasional'"></span></div>
+                                <!-- Bagian 1: Input Absensi Bulanan (MANUAL INPUT) -->
+                                <div class="p-3.5 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 space-y-3">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                                            <span class="text-xs font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider">Rekap Absensi Bulanan (Input Manual)</span>
+                                        </div>
+                                        <span class="text-[10px] text-amber-700 dark:text-amber-400 italic">Diisi manual dari rekap absensi HRD</span>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Total Shift</label>
+                                            <input type="number" min="0" name="total_shifts" x-model.number="payForm.total_shifts" class="w-full text-xs font-mono text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 mb-1">Total Hadir</label>
+                                            <input type="number" min="0" name="total_present" x-model.number="payForm.total_present" @input="updateDisciplinePresent()" class="w-full text-xs font-mono font-bold text-center rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/40 px-2 py-2 text-emerald-900 dark:text-emerald-200 focus:ring-2 focus:ring-emerald-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-rose-700 dark:text-rose-400 mb-1">Terlambat</label>
+                                            <input type="number" min="0" name="late_count" x-model.number="payForm.late_count" @input="updateDisciplinePresent()" class="w-full text-xs font-mono text-center rounded-xl border border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-950/40 px-2 py-2 text-rose-900 dark:text-rose-200 focus:ring-2 focus:ring-rose-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-teal-700 dark:text-teal-400 mb-1">Hadir Disiplin</label>
+                                            <input type="number" min="0" name="discipline_present" x-model.number="payForm.discipline_present" class="w-full text-xs font-mono font-bold text-center rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50/50 dark:bg-teal-950/40 px-2 py-2 text-teal-900 dark:text-teal-200 focus:ring-2 focus:ring-teal-500" title="Total Hadir dikurangi Terlambat">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-indigo-700 dark:text-indigo-400 mb-1">Tgl Merah</label>
+                                            <input type="number" min="0" name="holiday_shifts" x-model.number="payForm.holiday_shifts" class="w-full text-xs font-mono text-center rounded-xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50/50 dark:bg-indigo-950/40 px-2 py-2 text-indigo-900 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500">
+                                        </div>
+                                    </div>
                                 </div>
 
+                                <!-- Bagian 2: Tarif & Komponen Honorarium -->
+                                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                                    <div class="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
+                                        <div class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Komponen & Rincian Gaji</div>
+                                        <div class="text-[10px] text-slate-500 dark:text-slate-400">Live Breakdown Sesuai Slip Excel</div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                        <!-- Upah Harian -->
+                                        <div class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                                            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                                                <span>Upah Harian (Tarif):</span>
+                                                <input type="number" name="daily_rate" x-model.number="payForm.daily_rate" class="w-28 text-right font-mono text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-slate-900 dark:text-white">
+                                            </div>
+                                            <div class="flex items-center justify-between font-semibold pt-1 border-t border-slate-100 dark:border-slate-800">
+                                                <span class="text-slate-700 dark:text-slate-300">1. Honor Utama (<span x-text="payForm.total_present"></span> Hari):</span>
+                                                <span class="font-mono text-slate-900 dark:text-white font-bold" x-text="'Rp ' + calculateMainSalary().toLocaleString('id-ID')"></span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Bonus Disiplin -->
+                                        <div class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                                            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                                                <span>Tarif Disiplin / Hari:</span>
+                                                <input type="number" name="discipline_rate" x-model.number="payForm.discipline_rate" class="w-24 text-right font-mono text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-slate-900 dark:text-white">
+                                            </div>
+                                            <div class="flex items-center justify-between font-semibold pt-1 border-t border-slate-100 dark:border-slate-800">
+                                                <span class="text-slate-700 dark:text-slate-300">2. Bonus Disiplin (<span x-text="payForm.discipline_present"></span> Hari):</span>
+                                                <span class="font-mono text-teal-600 dark:text-teal-400 font-bold" x-text="'Rp ' + calculateDisciplineBonus().toLocaleString('id-ID')"></span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Bonus Penjualan / Poin -->
+                                        <div class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                                            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                                                <span>Poin Closing:</span>
+                                                <input type="number" name="closing_points" x-model.number="payForm.closing_points" class="w-20 text-right font-mono text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-slate-900 dark:text-white">
+                                            </div>
+                                            <div class="flex items-center justify-between font-semibold pt-1 border-t border-slate-100 dark:border-slate-800">
+                                                <span class="text-slate-700 dark:text-slate-300">3. Bonus Penjualan:</span>
+                                                <div class="flex items-center gap-1">
+                                                    <span class="text-slate-400 font-mono text-[11px]">Rp</span>
+                                                    <input type="number" name="sales_bonus" x-model.number="payForm.sales_bonus" class="w-28 text-right font-mono text-xs font-bold text-amber-600 dark:text-amber-400 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Bonus Tanggal Merah -->
+                                        <div class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                                            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                                                <span>Tarif Tgl Merah / Shift:</span>
+                                                <input type="number" name="holiday_rate" x-model.number="payForm.holiday_rate" class="w-24 text-right font-mono text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-slate-900 dark:text-white">
+                                            </div>
+                                            <div class="flex items-center justify-between font-semibold pt-1 border-t border-slate-100 dark:border-slate-800">
+                                                <span class="text-slate-700 dark:text-slate-300">4. Bonus Tgl Merah (<span x-text="payForm.holiday_shifts"></span> Shift):</span>
+                                                <span class="font-mono text-indigo-600 dark:text-indigo-400 font-bold" x-text="'Rp ' + calculateHolidayBonus().toLocaleString('id-ID')"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tunjangan Aktif -->
+                                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200/80 dark:border-teal-800/40 text-xs">
+                                        <div class="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+                                            <span>5. Tunjangan Tambahan:</span>
+                                            <span class="text-[10px] text-teal-600 dark:text-teal-400 font-normal" x-show="Number(employeeToPay.total_allowance) > 0">(Sesuai daftar tunjangan aktif)</span>
+                                        </div>
+                                        <span class="font-mono font-bold text-teal-700 dark:text-teal-300" x-text="'Rp ' + (Number(employeeToPay.total_allowance) || 0).toLocaleString('id-ID')"></span>
+                                    </div>
+                                </div>
+
+                                <!-- Ringkasan THP & Jurnal Akuntansi -->
+                                <div class="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 dark:from-emerald-950/40 dark:to-teal-950/40 border-2 border-emerald-500/30 dark:border-emerald-500/40 space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <span class="text-xs uppercase font-extrabold tracking-wider text-emerald-900 dark:text-emerald-300">Total Take Home Pay (THP)</span>
+                                            <div class="text-[10px] text-slate-500 dark:text-slate-400">Total yang akan diterima karyawan & dibukukan</div>
+                                        </div>
+                                        <div class="text-right">
+                                            <span class="text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + calculatePayTHP().toLocaleString('id-ID')"></span>
+                                        </div>
+                                    </div>
+
+                                    <div class="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 gap-2">
+                                        <div class="flex items-center gap-2">
+                                            <span>📋 <strong>Debit:</strong> Akun 5002 - Beban Gaji</span>
+                                            <span>•</span>
+                                            <span>💳 <strong>Kredit:</strong> <span x-text="employeeToPay.asset_account ? employeeToPay.asset_account.name : 'Kas Operasional'"></span></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Catatan Slip -->
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Catatan Slip (Opsional)</label>
+                                    <input type="text" name="notes" x-model="payForm.notes" placeholder="Contoh: Termasuk penyesuaian lembur & bonus penjualan" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                                </div>
+
+                                <!-- Action Buttons -->
                                 <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                    <button type="button" @click="showPayModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Batal</button>
-                                    <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm">Ya, Bukukan Sekarang</button>
+                                    <button type="button" @click="showPayModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">Batal</button>
+                                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-950/20 transition-all hover:scale-105 active:scale-95 cursor-pointer">
+                                        Simpan & Bukukan Gaji
+                                    </button>
                                 </div>
                             </form>
                         </template>

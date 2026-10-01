@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\Employee;
+use App\Models\EmployeePayroll;
 use App\Models\JournalEntry;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -563,5 +564,88 @@ class EmployeePayrollTest extends TestCase
         $this->assertStringContainsString('Poin Insentif Karyawan Berhasil Dicatat', $updateResponse->json('message'));
         $this->assertStringContainsString('Tier 1', $updateResponse->json('message'));
         $this->assertStringContainsString('Selesai jahit jas custom Bpk. Handoko', $updateResponse->json('message'));
+    }
+
+    public function test_user_can_calculate_and_pay_salary_with_manual_attendance_and_view_excel_slip(): void
+    {
+        $user = User::factory()->create();
+
+        $employee = Employee::create([
+            'name' => 'Fajar Santoso',
+            'position' => 'Customer Service',
+            'base_salary' => 2700000,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'current_points' => 300,
+            'rate_per_point' => 1400,
+            'pay_day' => 25,
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
+        ]);
+
+        // Input absensi manual: 27 shift, 27 hadir, 2 terlambat -> 25 disiplin, 1 tgl merah
+        // Honor Utama: 27 * 100.000 = 2.700.000
+        // Bonus Disiplin: 25 * 10.000 = 250.000
+        // Bonus Penjualan: 420.000 (300 pt * 1400)
+        // Bonus Tgl Merah: 1 * 50.000 = 50.000
+        // Total THP = 2.700.000 + 250.000 + 420.000 + 50.000 = 3.420.000
+        $postData = [
+            'period' => 'September 2026',
+            'period_start' => '2026-08-26',
+            'period_end' => '2026-09-25',
+            'payment_method' => 'Transfer',
+            'total_shifts' => 27,
+            'total_present' => 27,
+            'late_count' => 2,
+            'discipline_present' => 25,
+            'holiday_shifts' => 1,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'closing_points' => 300,
+            'sales_bonus' => 420000,
+            'notes' => 'Slip Gaji Resmi Periode September 2026',
+        ];
+
+        $response = $this->actingAs($user)->post("/employees/{$employee->id}/pay", $postData);
+
+        $response->assertSessionHas('success');
+        $this->assertNotNull($employee->fresh()->last_paid_at);
+
+        // Verifikasi tersimpan di tabel employee_payrolls
+        $payroll = EmployeePayroll::where('employee_id', $employee->id)->first();
+        $this->assertNotNull($payroll);
+        $this->assertEquals('September 2026', $payroll->period);
+        $this->assertEquals(27, $payroll->total_present);
+        $this->assertEquals(2, $payroll->late_count);
+        $this->assertEquals(25, $payroll->discipline_present);
+        $this->assertEquals(1, $payroll->holiday_shifts);
+        $this->assertEquals(2700000, $payroll->main_salary);
+        $this->assertEquals(250000, $payroll->discipline_bonus);
+        $this->assertEquals(420000, $payroll->sales_bonus);
+        $this->assertEquals(50000, $payroll->holiday_bonus);
+        $this->assertEquals(3420000, $payroll->take_home_pay);
+
+        // Verifikasi jurnal pembukuan
+        $journal = $payroll->journalEntry;
+        $this->assertNotNull($journal);
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'journal_entry_id' => $journal->id,
+            'account_id' => $this->salaryExpenseAccount->id,
+            'debit' => 3420000,
+            'credit' => 0,
+        ]);
+
+        // Verifikasi halaman cetak slip gaji
+        $slipResponse = $this->actingAs($user)->get("/employees/payroll/{$payroll->id}/slip");
+        $slipResponse->assertOk();
+        $slipResponse->assertSee('Slip Gaji Karyawan');
+        $slipResponse->assertSee('Fajar Santoso');
+        $slipResponse->assertSee('Honor Utama');
+        $slipResponse->assertSee('Bonus Disiplin');
+        $slipResponse->assertSee('Bonus Penjualan');
+        $slipResponse->assertSee('Bonus Tgl Merah');
+        $slipResponse->assertSee('3.420.000');
     }
 }

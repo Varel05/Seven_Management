@@ -253,4 +253,45 @@ class WebhookInfoEndpointsTest extends TestCase
         $this->assertStringContainsString('🏆 *Status Tingkatan*: *Tier 1*', $message);
         $this->assertStringNotContainsString('(200 - 294 Poin)', $message);
     }
+
+    public function test_generate_payroll_slip_endpoint(): void
+    {
+        $employee = Employee::create([
+            'name' => 'Maya Sari',
+            'phone' => '081234567890',
+            'role' => EmployeeRole::Cs,
+            'position' => 'Customer Service',
+            'daily_rate' => 100000,
+            'base_salary' => 2700000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'current_points' => 300,
+            'rate_per_point' => 1400,
+            'status' => 'active',
+        ]);
+
+        $response = $this->postJson('/api/webhook/payroll/slip', [
+            'employee_query' => 'Maya',
+            'total_shifts' => 27,
+            'total_present' => 27,
+            'late_count' => 0,
+            'discipline_present' => 27,
+            'holiday_shifts' => 1,
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '081234567890',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', true);
+        $this->assertEquals('Maya Sari', $response->json('employee.name'));
+        $this->assertEquals(3440000, $response->json('payroll.take_home_pay'));
+        $message = $response->json('message');
+        $this->assertStringContainsString('SLIP GAJI KARYAWAN', $message);
+        $this->assertStringContainsString('Maya Sari', $message);
+        $this->assertStringContainsString('Honor Utama', $message);
+        $this->assertStringContainsString('Bonus Disiplin', $message);
+        $this->assertStringContainsString('Bonus Penjualan', $message);
+        $this->assertStringContainsString('Total Take Home Pay', $message);
+    }
 }

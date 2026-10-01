@@ -6,6 +6,7 @@ use App\Enums\EmployeeRole;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -40,6 +41,9 @@ class Employee extends Model
     protected $casts = [
         'role' => EmployeeRole::class,
         'base_salary' => 'decimal:2',
+        'daily_rate' => 'decimal:2',
+        'discipline_rate' => 'decimal:2',
+        'holiday_rate' => 'decimal:2',
         'rate_per_point' => 'decimal:2',
         'current_points' => 'integer',
         'claim_bonus' => 'boolean',
@@ -58,6 +62,10 @@ class Employee extends Model
         'tier_points_to_deduct',
         'role_label',
         'role_value',
+        'effective_daily_rate',
+        'formatted_daily_rate',
+        'effective_discipline_rate',
+        'effective_holiday_rate',
     ];
 
     public function assetAccount(): BelongsTo
@@ -73,6 +81,65 @@ class Employee extends Model
     public function allowances(): HasMany
     {
         return $this->hasMany(Allowance::class);
+    }
+
+    public function payrolls(): HasMany
+    {
+        return $this->hasMany(EmployeePayroll::class)->latest();
+    }
+
+    public function latestPayroll(): HasOne
+    {
+        return $this->hasOne(EmployeePayroll::class)->latestOfMany();
+    }
+
+    /**
+     * Tarif harian efektif (jika belum diset manual, estimasi dari gaji pokok / 27 shift).
+     */
+    public function getEffectiveDailyRateAttribute(): float
+    {
+        if ((float) ($this->daily_rate ?? 0) > 0) {
+            return (float) $this->daily_rate;
+        }
+
+        $base = (float) ($this->base_salary ?? 0);
+        if ($base > 0) {
+            return (float) (round(($base / 27) / 1000) * 1000);
+        }
+
+        return 100000.0;
+    }
+
+    /**
+     * Format Rupiah untuk Upah per Shift / Hari.
+     */
+    public function getFormattedDailyRateAttribute(): string
+    {
+        return 'Rp '.number_format($this->effective_daily_rate, 0, ',', '.').' / shift';
+    }
+
+    /**
+     * Tarif bonus disiplin per hari efektif (default Rp 10.000 / hari jika hadir tanpa terlambat).
+     */
+    public function getEffectiveDisciplineRateAttribute(): float
+    {
+        if ((float) ($this->discipline_rate ?? 0) > 0) {
+            return (float) $this->discipline_rate;
+        }
+
+        return 10000.0;
+    }
+
+    /**
+     * Tarif bonus tanggal merah efektif (default Rp 50.000 / hari jika masuk saat libur nasional).
+     */
+    public function getEffectiveHolidayRateAttribute(): float
+    {
+        if ((float) ($this->holiday_rate ?? 0) > 0) {
+            return (float) $this->holiday_rate;
+        }
+
+        return 50000.0;
     }
 
     public function getRoleValueAttribute(): string
@@ -462,10 +529,11 @@ class Employee extends Model
     /**
      * Eksekusi pembukuan akuntansi penggajian karyawan ke buku besar.
      * Beban dicatat ke akun kode 5002 (Beban Gaji) dan kredit ke akun Kas/Bank.
+     * Secara otomatis membuat riwayat slip gaji resmi (EmployeePayroll).
      */
-    public function executePayrollPosting(?float $customAmount = null, string $source = 'website'): JournalEntry
+    public function executePayrollPosting(?float $customAmount = null, string $source = 'website', ?array $payrollData = null): JournalEntry
     {
-        return DB::transaction(function () use ($customAmount, $source) {
+        return DB::transaction(function () use ($customAmount, $source, $payrollData) {
             $finalAmount = $customAmount !== null && $customAmount > 0
                 ? $customAmount
                 : (float) $this->total_salary;
@@ -482,7 +550,7 @@ class Employee extends Model
                 ?? Account::where('type', 'asset')->first();
 
             $reference = 'PAY-'.strtoupper(Str::random(8));
-            $period = now()->translatedFormat('F Y');
+            $period = $payrollData['period'] ?? now()->translatedFormat('F Y');
 
             $lowerSource = strtolower($source);
             if (str_starts_with($lowerSource, 'telegram')) {
@@ -514,7 +582,7 @@ class Employee extends Model
             JournalEntryLine::create([
                 'journal_entry_id' => $journalEntry->id,
                 'account_id' => $expenseAccount->id,
-                'description' => "Gaji {$this->name} (Pokok: {$this->formatted_base_salary}{$allowanceText}{$bonusText})",
+                'description' => "Gaji {$this->name} (Pokok/Honor: Rp ".number_format($payrollData['main_salary'] ?? $this->base_salary, 0, ',', '.')."{$allowanceText}{$bonusText})",
                 'debit' => $finalAmount,
                 'credit' => 0,
             ]);
@@ -528,7 +596,54 @@ class Employee extends Model
                 'credit' => $finalAmount,
             ]);
 
-            // 3. Kurangi poin terakumulasi sebesar besar poin tier jika mengambil bonus gaji
+            // 3. Simpan Riwayat Slip Gaji Lengkap (EmployeePayroll)
+            $totalPresent = (int) ($payrollData['total_present'] ?? 27);
+            $totalShifts = (int) ($payrollData['total_shifts'] ?? 27);
+            $lateCount = (int) ($payrollData['late_count'] ?? 0);
+            $disciplinePresent = (int) ($payrollData['discipline_present'] ?? max(0, $totalPresent - $lateCount));
+            $holidayShifts = (int) ($payrollData['holiday_shifts'] ?? 0);
+
+            $dailyRate = (float) ($payrollData['daily_rate'] ?? $this->effective_daily_rate);
+            $disciplineRate = (float) ($payrollData['discipline_rate'] ?? $this->effective_discipline_rate);
+            $holidayRate = (float) ($payrollData['holiday_rate'] ?? $this->effective_holiday_rate);
+
+            $mainSalary = (float) ($payrollData['main_salary'] ?? ($totalPresent * $dailyRate));
+            $disciplineBonus = (float) ($payrollData['discipline_bonus'] ?? ($disciplinePresent * $disciplineRate));
+            $salesBonus = (float) ($payrollData['sales_bonus'] ?? $this->bonus_salary);
+            $holidayBonus = (float) ($payrollData['holiday_bonus'] ?? ($holidayShifts * $holidayRate));
+            $allowanceTotal = (float) ($payrollData['allowance_total'] ?? $this->total_allowance);
+
+            EmployeePayroll::create([
+                'employee_id' => $this->id,
+                'journal_entry_id' => $journalEntry->id,
+                'period' => $period,
+                'period_start' => $payrollData['period_start'] ?? now()->subMonth()->setDay(26)->toDateString(),
+                'period_end' => $payrollData['period_end'] ?? now()->setDay(25)->toDateString(),
+                'payment_method' => $payrollData['payment_method'] ?? 'Transfer',
+                'total_shifts' => $totalShifts,
+                'total_present' => $totalPresent,
+                'late_count' => $lateCount,
+                'discipline_present' => $disciplinePresent,
+                'holiday_shifts' => $holidayShifts,
+                'daily_rate' => $dailyRate,
+                'discipline_rate' => $disciplineRate,
+                'holiday_rate' => $holidayRate,
+                'closing_points' => (int) ($payrollData['closing_points'] ?? $this->current_points),
+                'closing_pcs' => (int) ($payrollData['closing_pcs'] ?? 0),
+                'rate_per_point' => (float) ($payrollData['rate_per_point'] ?? $this->rate_per_point),
+                'closing_breakdown' => $payrollData['closing_breakdown'] ?? null,
+                'main_salary' => $mainSalary,
+                'discipline_bonus' => $disciplineBonus,
+                'sales_bonus' => $salesBonus,
+                'holiday_bonus' => $holidayBonus,
+                'allowance_total' => $allowanceTotal,
+                'take_home_pay' => $finalAmount,
+                'notes' => $payrollData['notes'] ?? null,
+                'hrd_name' => $payrollData['hrd_name'] ?? 'Ari Husbana',
+                'paid_at' => now(),
+            ]);
+
+            // 4. Kurangi poin terakumulasi sebesar besar poin tier jika mengambil bonus gaji
             $pointsToDeduct = $this->tier_points_to_deduct;
             if ($pointsToDeduct > 0) {
                 $oldPoints = (int) $this->current_points;

@@ -62,6 +62,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/employees/{employee}/points', [EmployeeController::class, 'updatePoints'])->name('employees.points');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
     Route::post('/employees/{employee}/pay', [EmployeeController::class, 'pay'])->name('employees.pay');
+    Route::get('/employees/payroll/{payroll}/slip', [EmployeeController::class, 'showSlip'])->name('employees.payroll.slip');
 
     // Manajemen Tunjangan Pegawai
     Route::post('/allowances', [AllowanceController::class, 'store'])->name('allowances.store');
