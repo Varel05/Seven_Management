@@ -61,7 +61,7 @@
                 'phone'     => $e->phone ?? '',
                 'status'    => $e->status,
                 'is_due'    => $e->isDueToday(),
-                'is_paid'   => (bool) ($e->last_paid_at && $e->last_paid_at->isCurrentMonth()),
+                'is_paid'   => (bool) $e->isPaidThisMonth(),
                 'search'    => strtolower($e->name . ' ' . $e->position . ' ' . ($e->phone ?? '') . ' ' . ($e->assetAccount->name ?? '')),
             ];
         })) }},
@@ -568,7 +568,8 @@
                             @forelse($employees as $emp)
                                 @php
                                     $isDue = $emp->isDueToday();
-                                    $isPaid = $emp->last_paid_at && $emp->last_paid_at->isCurrentMonth();
+                                    $isPaid = $emp->isPaidThisMonth();
+                                    $paidDate = $emp->last_paid_at ?? $emp->findExistingCurrentMonthPayrollJournal()?->date;
                                 @endphp
                                 <tr 
                                     x-show="isRowVisible({{ $emp->id }})"
@@ -685,7 +686,7 @@
                                             @if($isPaid)
                                                 <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-300/80 dark:border-emerald-800">
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                                                    Lunas ({{ $emp->last_paid_at->translatedFormat('d M') }})
+                                                    Lunas ({{ $paidDate ? \Carbon\Carbon::parse($paidDate)->translatedFormat('d M') : 'Bulan ini' }})
                                                 </span>
                                             @elseif($isDue)
                                                 <span class="inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-300/80 dark:border-amber-800 animate-pulse">

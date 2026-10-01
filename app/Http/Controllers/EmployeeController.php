@@ -33,10 +33,10 @@ class EmployeeController extends Controller
         $totalBonusSalary = $activeEmployees->sum('bonus_salary');
         $totalPayrollEstimate = $totalBaseSalary + $totalAllowanceEstimate + $totalBonusSalary;
 
-        $paidThisMonth = $activeEmployees->filter(fn ($e) => $e->last_paid_at && $e->last_paid_at->isCurrentMonth());
+        $paidThisMonth = $activeEmployees->filter(fn ($e) => $e->isPaidThisMonth());
         $totalPaidThisMonth = $paidThisMonth->sum('total_salary');
 
-        $dueOrUpcomingThisMonth = $activeEmployees->filter(fn ($e) => ! $e->last_paid_at || ! $e->last_paid_at->isCurrentMonth());
+        $dueOrUpcomingThisMonth = $activeEmployees->filter(fn ($e) => ! $e->isPaidThisMonth());
         $totalPendingPayroll = $dueOrUpcomingThisMonth->sum('total_salary');
 
         return view('employees.index', compact(

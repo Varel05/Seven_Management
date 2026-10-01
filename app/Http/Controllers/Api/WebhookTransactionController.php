@@ -381,6 +381,18 @@ class WebhookTransactionController extends Controller
                 }
             }
 
+            // Sinkronisasi status penggajian karyawan jika transaksi pengeluaran adalah gaji
+            $descLower = strtolower($journalEntry->description);
+            $catLower = strtolower($validated['category'] ?? '');
+            if (($validated['type'] ?? '') === 'expense' && (str_contains($descLower, 'gaji') || str_contains($catLower, 'gaji'))) {
+                $matchedEmployee = Employee::where('status', 'active')->get()->first(function ($emp) use ($descLower) {
+                    return str_contains($descLower, strtolower($emp->name));
+                });
+                if ($matchedEmployee && ! $matchedEmployee->isPaidThisMonth()) {
+                    $matchedEmployee->update(['last_paid_at' => $transactionDate]);
+                }
+            }
+
             return response()->json([
                 'status' => true,
                 'message' => 'Transaksi berhasil dicatat ke sistem akuntansi',
@@ -1920,9 +1932,11 @@ class WebhookTransactionController extends Controller
     {
         $query = Product::query();
 
+        $search = $request->input('q') ?? $request->input('query');
+
         if ($request->boolean('low_stock')) {
             $query->whereColumn('stock', '<=', 'min_stock');
-        } elseif ($search = $request->input('q')) {
+        } elseif ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('code', 'like', "%{$search}%")
@@ -1943,11 +1957,15 @@ class WebhookTransactionController extends Controller
             ]);
         }
 
-        $lines = ["📦 *Informasi Stok Pakaian Retail Seven Management:*\n"];
+        $lines = ["📦 *Informasi Stok & Harga Produk Retail Seven Management:*\n"];
         foreach ($products as $p) {
             $statusIcon = $p->stock <= 0 ? '❌' : ($p->stock <= $p->min_stock ? '⚠️' : '✅');
             $lines[] = "{$statusIcon} *{$p->name}* ({$p->code})";
-            $lines[] = "   Stok: {$p->stock} pcs | Harga: Rp ".number_format($p->selling_price, 0, ',', '.');
+            $lineDetails = "   Stok: {$p->stock} pcs | Harga Jual: Rp ".number_format($p->selling_price, 0, ',', '.');
+            if ($p->cost_price > 0) {
+                $lineDetails .= ' | HPP (Batas Min): Rp '.number_format($p->cost_price, 0, ',', '.');
+            }
+            $lines[] = $lineDetails;
         }
 
         return response()->json([
