@@ -297,6 +297,61 @@ class EmployeeController extends Controller
     }
 
     /**
+     * Preview lembar slip gaji untuk draft / kalkulasi berjalan sebelum dibukukan.
+     */
+    public function previewSlip(Request $request, Employee $employee)
+    {
+        $employee->load('assetAccount');
+        $period = $request->query('period') ?: now()->translatedFormat('F Y');
+        $periodStart = now()->subMonth()->setDay(26);
+        $periodEnd = now()->setDay(25);
+        $totalShifts = (int) ($request->query('total_shifts') ?? 27);
+        $totalPresent = (int) ($request->query('total_present') ?? 27);
+        $lateCount = (int) ($request->query('late_count') ?? 0);
+        $disciplinePresent = (int) ($request->query('discipline_present') ?? max(0, $totalPresent - $lateCount));
+        $holidayShifts = (int) ($request->query('holiday_shifts') ?? 0);
+        $dailyRate = $employee->effective_daily_rate;
+        $disciplineRate = $employee->effective_discipline_rate;
+        $holidayRate = $employee->effective_holiday_rate;
+        $mainSalary = $totalPresent * $dailyRate;
+        $disciplineBonus = $disciplinePresent * $disciplineRate;
+        $salesBonus = (float) $employee->bonus_salary;
+        $holidayBonus = $holidayShifts * $holidayRate;
+        $allowanceTotal = (float) $employee->total_allowance;
+        $takeHomePay = $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal;
+
+        $payroll = new EmployeePayroll([
+            'employee_id' => $employee->id,
+            'period' => $period,
+            'period_start' => $periodStart,
+            'period_end' => $periodEnd,
+            'payment_method' => 'Transfer',
+            'total_shifts' => $totalShifts,
+            'total_present' => $totalPresent,
+            'late_count' => $lateCount,
+            'discipline_present' => $disciplinePresent,
+            'holiday_shifts' => $holidayShifts,
+            'daily_rate' => $dailyRate,
+            'discipline_rate' => $disciplineRate,
+            'holiday_rate' => $holidayRate,
+            'closing_points' => (int) $employee->current_points,
+            'closing_pcs' => (int) $employee->current_points,
+            'rate_per_point' => (float) $employee->rate_per_point,
+            'main_salary' => $mainSalary,
+            'discipline_bonus' => $disciplineBonus,
+            'sales_bonus' => $salesBonus,
+            'holiday_bonus' => $holidayBonus,
+            'allowance_total' => $allowanceTotal,
+            'take_home_pay' => $takeHomePay,
+            'notes' => 'Draft / Estimasi Berjalan (Belum Dibayar)',
+            'hrd_name' => 'Ari Husbana',
+        ]);
+        $payroll->setRelation('employee', $employee);
+
+        return view('employees.slip', compact('payroll'));
+    }
+
+    /**
      * Remove the specified employee.
      */
     public function destroy(Employee $employee)

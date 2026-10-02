@@ -2942,7 +2942,7 @@ class WebhookTransactionController extends Controller
     public function generatePayrollSlip(Request $request)
     {
         $auth = $this->authorizeTelegramRole($request);
-        $isAboveStaff = in_array($auth['role'], EmployeeRole::aboveStaff(), true);
+        $isAboveStaff = in_array($auth['role'], EmployeeRole::aboveStaffValues(), true);
 
         $query = trim((string) ($request->input('employee_query') ?? $request->input('query') ?? $request->input('name') ?? $request->input('employee_id') ?? ''));
 
@@ -2969,17 +2969,17 @@ class WebhookTransactionController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => "❌ Karyawan tidak ditemukan.\n\n💡 Silakan sebutkan nama atau ID karyawan yang ingin dicari slip gajinya.\nContoh: `/slip Maya` atau `Buatkan slip gaji Budi`.\n\n👥 Daftar karyawan aktif: {$activeList}",
-            ], 404);
+            ], 200);
         }
 
         // Verifikasi privasi: Staf biasa/CS hanya boleh mengakses slip gaji milik dirinya sendiri
-        if (! $isAboveStaff) {
-            $senderEmployee = $this->resolveTelegramEmployee($request);
-            if (! $senderEmployee || $senderEmployee->id !== $employee->id) {
+        $senderEmployee = $this->resolveTelegramEmployee($request);
+        if ($senderEmployee && in_array($senderEmployee->role_value, [Employee::ROLE_STAFF, Employee::ROLE_CS], true)) {
+            if ($senderEmployee->id !== $employee->id) {
                 return response()->json([
                     'status' => false,
-                    'message' => "⛔ *Akses Ditolak!*\nAnda hanya diizinkan melihat slip gaji milik Anda sendiri.\n\n💡 Ketik `/slip` atau `Slip gaji saya` untuk melihat slip gaji Anda.",
-                ], 403);
+                    'message' => "⛔ *Akses Ditolak!*\nAnda terdaftar sebagai staf ({$senderEmployee->name}). Anda hanya diizinkan melihat slip gaji milik Anda sendiri.\n\n💡 Ketik `Slip gaji saya` untuk melihat slip gaji Anda.",
+                ], 200);
             }
         }
 
@@ -3019,7 +3019,7 @@ class WebhookTransactionController extends Controller
             $takeHomePay = (float) $existingPayroll->take_home_pay;
             $closingPoints = $existingPayroll->closing_points;
             $ratePerPoint = (float) $existingPayroll->rate_per_point;
-            $statusText = '🟢 Sudah Dibukukan (Final)';
+            $statusText = 'Sudah Dibayar (Lunas)';
             $refText = $existingPayroll->journalEntry?->reference ? "Ref: `{$existingPayroll->journalEntry->reference}`" : '';
             $slipUrl = url("/employees/payroll/{$existingPayroll->id}/slip");
         } else {
@@ -3043,9 +3043,9 @@ class WebhookTransactionController extends Controller
             $takeHomePay = $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal;
             $closingPoints = (int) $employee->current_points;
             $ratePerPoint = (float) $employee->rate_per_point;
-            $statusText = '⏳ Estimasi / Draft (Belum Dibukukan)';
+            $statusText = 'Belum Dibayar (Draft)';
             $refText = '';
-            $slipUrl = url('/employees');
+            $slipUrl = route('employees.slip.preview', $employee->id);
         }
 
         $cb = $existingPayroll?->closing_breakdown ?: [];
@@ -3098,12 +3098,14 @@ class WebhookTransactionController extends Controller
         $lines[] = '🟩 *Total Take Home Pay*                               : *Rp '.number_format($takeHomePay, 0, ',', '.').'*';
         $lines[] = '────────────────────────────────────────';
         $lines[] = "Yogyakarta, {$dateFooter}                               Note :";
-        $lines[] = "*{$hrdName}*                                           {$statusText}";
+        $lines[] = "*{$hrdName}*                                           [Status: {$statusText}]";
         $lines[] = 'HRD'.($refText ? "                                                 {$refText}" : '');
-        if ($existingPayroll) {
+        if (! $existingPayroll) {
             $lines[] = '';
-            $lines[] = "📄 *Cetak / PDF*: [Buka Slip Gaji Web]({$slipUrl})";
+            $lines[] = "💡 *Ketik \"Bayar gaji {$employee->name}\" jika ingin memproses pembayarannya sekarang.*";
         }
+        $lines[] = '';
+        $lines[] = "📄 *Cetak / PDF*: [Buka Slip Gaji Web]({$slipUrl})";
 
         return response()->json([
             'status' => true,
