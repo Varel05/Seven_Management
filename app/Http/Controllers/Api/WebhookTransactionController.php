@@ -198,19 +198,20 @@ class WebhookTransactionController extends Controller
         }
 
         $roleLabel = $role ? (Employee::ROLES[$role] ?? ucfirst($role)) : ($employee ? $employee->role_label : 'Pegawai');
-        $isAboveStaff = in_array($role, [Employee::ROLE_OWNER, Employee::ROLE_AKUNTAN, Employee::ROLE_MANAGER, EmployeeRole::Hrd->value, EmployeeRole::Supervisor->value], true);
-        $level = $isAboveStaff ? 'above_staff' : 'staff';
+        $isManagement = in_array($role, [Employee::ROLE_OWNER, Employee::ROLE_AKUNTAN], true);
+        $level = $isManagement ? 'above_staff' : 'staff';
 
         $greetingName = $employee ? $employee->name : $roleLabel;
-        $levelTitle = $isAboveStaff ? '👑 Manajemen (Di Atas Staff)' : '💼 Operasional (Tingkat Staff)';
+        $levelTitle = $isManagement ? '👑 Manajemen (Owner / Akuntan)' : '💼 Staf Pelaksana';
 
         return response()->json([
             'status' => true,
             'authenticated' => true,
             'role' => $role,
             'level' => $level,
-            'is_above_staff' => $isAboveStaff,
-            'is_staff' => ! $isAboveStaff,
+            'is_above_staff' => $isManagement,
+            'is_management' => $isManagement,
+            'is_staff' => ! $isManagement,
             'role_label' => $roleLabel,
             'employee' => $employee ? [
                 'id' => $employee->id,
@@ -225,9 +226,9 @@ class WebhookTransactionController extends Controller
             'message' => "👋 Halo *{$greetingName}*!\n".
                          "📱 Status: *Terautentikasi*\n".
                          "💼 Jabatan: *{$roleLabel}* ({$levelTitle})\n\n".
-                         ($isAboveStaff
-                            ? 'Anda memiliki akses manajemen untuk memantau saldo, tagihan rutin, rekapitulasi gaji, dan evaluasi poin staf.'
-                            : 'Gunakan menu di bawah untuk mencatat kasir retail (/jual), cek stok pakaian (/stok), tracking jas (/status), dan cek perolehan poin Anda (/poinsaya).'),
+                         ($isManagement
+                            ? 'Anda memiliki akses eksekutif untuk memantau saldo kas/bank, tagihan rutin, rekapitulasi gaji, persetujuan pembayaran, dan laporan laba rugi.'
+                            : 'Pemberitahuan: Akses bot Telegram saat ini dikhususkan untuk Manajemen (Owner & Akuntan). Untuk pekerjaan operasional (Kasir POS, Cek Stok Baju, Jahit Jas, dan Absensi), silakan akses langsung melalui Dashboard Web Seven Management.'),
         ]);
     }
 

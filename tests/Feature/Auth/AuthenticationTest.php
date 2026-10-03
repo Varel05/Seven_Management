@@ -51,4 +51,35 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
         $response->assertRedirect('/');
     }
+
+    public function test_users_can_authenticate_using_pin(): void
+    {
+        $user = User::factory()->create([
+            'pin' => '123456',
+        ]);
+
+        $response = $this->post('/login', [
+            'email' => $user->email,
+            'password' => '123456',
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+        $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_users_can_authenticate_using_role_and_pin(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'akuntan',
+            'pin' => '654321',
+        ]);
+
+        $response = $this->post('/login', [
+            'email' => 'akuntan',
+            'password' => '654321',
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+        $response->assertRedirect(route('dashboard', absolute: false));
+    }
 }

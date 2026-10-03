@@ -12,6 +12,7 @@ use App\Http\Controllers\ProductionOrderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
 use App\Http\Controllers\RetailController;
+use App\Http\Controllers\TailorPayrollController;
 use App\Models\JournalEntry;
 use Illuminate\Support\Facades\Route;
 
@@ -110,6 +111,9 @@ Route::middleware('auth')->group(function () {
     // Form Manual Produksi Baju (Work Order & Eksekusi Potong Bahan)
     Route::get('/production/create', ProductionOrderController::class.'@create')->name('production.create');
     Route::post('/production', ProductionOrderController::class.'@store')->name('production.store');
+
+    // Upah Penjahit (Borongan) & Cetak Slip Upah HPP
+    Route::resource('tailor-payrolls', TailorPayrollController::class);
 });
 
 require __DIR__.'/auth.php';

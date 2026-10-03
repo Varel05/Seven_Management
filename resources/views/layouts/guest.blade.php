@@ -79,7 +79,7 @@
 
         <!-- Main Content (Center) -->
         <main class="w-full flex items-center justify-center p-4 sm:p-6 relative z-10 flex-1">
-            <div class="w-full sm:max-w-md">
+            <div class="w-full sm:max-w-lg">
                 {{ $slot }}
             </div>
         </main>

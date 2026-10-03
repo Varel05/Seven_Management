@@ -18,12 +18,25 @@ class ProductionSeeder extends Seeder
     public function run(): void
     {
         DB::transaction(function () {
-            // 1. Akun Pengguna Administrator Utama
+            // 1. Akun Pengguna Manajemen Utama (Owner & Akuntan)
             User::updateOrCreate(
                 ['email' => env('ADMIN_EMAIL', 'admin@example.com')],
                 [
-                    'name' => env('ADMIN_NAME', 'Administrator Seven Management'),
+                    'name' => env('ADMIN_NAME', 'Owner Seven Management'),
+                    'role' => 'owner',
                     'password' => Hash::make(env('ADMIN_PASSWORD', 'password')),
+                    'pin' => Hash::make(env('ADMIN_PIN', '123456')),
+                    'email_verified_at' => now(),
+                ]
+            );
+
+            User::updateOrCreate(
+                ['email' => 'akuntan@seven.com'],
+                [
+                    'name' => 'Maya Anggraini (Akuntan)',
+                    'role' => 'akuntan',
+                    'password' => Hash::make('password'),
+                    'pin' => Hash::make('123456'),
                     'email_verified_at' => now(),
                 ]
             );
@@ -34,6 +47,7 @@ class ProductionSeeder extends Seeder
                 ['code' => '1002', 'name' => 'Bank BCA', 'type' => 'asset'],
                 ['code' => '1003', 'name' => 'Persediaan Barang Dagang (Retail)', 'type' => 'asset'],
                 ['code' => '1004', 'name' => 'Persediaan Bahan Baku & Pembantu', 'type' => 'asset'],
+                ['code' => '1005', 'name' => 'Piutang Kasbon Karyawan & Penjahit', 'type' => 'asset'],
                 ['code' => '4001', 'name' => 'Pendapatan Usaha', 'type' => 'revenue'],
                 ['code' => '4002', 'name' => 'Pendapatan Penjualan Retail', 'type' => 'revenue'],
                 ['code' => '4003', 'name' => 'Pendapatan Jasa Pembuatan Jas Custom', 'type' => 'revenue'],
@@ -99,6 +113,7 @@ class ProductionSeeder extends Seeder
             ['code' => 'LAB-JHT-EXC', 'name' => 'Upah Penjahit Jas Master Exclusive', 'category' => 'direct_labor', 'unit' => 'pcs', 'cost' => 250000.00, 'min' => 0.0, 'acc' => $laborAccountId],
             ['code' => 'LAB-JHT-CLN', 'name' => 'Upah Penjahit Celana Formal', 'category' => 'direct_labor', 'unit' => 'pcs', 'cost' => 30000.00, 'min' => 0.0, 'acc' => $laborAccountId],
             ['code' => 'LAB-JHT-VST', 'name' => 'Upah Penjahit Rompi / Vest', 'category' => 'direct_labor', 'unit' => 'pcs', 'cost' => 37000.00, 'min' => 0.0, 'acc' => $laborAccountId],
+            ['code' => 'LAB-JHT-REV', 'name' => 'Upah Revisi / Perbaikan Jahitan', 'category' => 'direct_labor', 'unit' => 'pcs', 'cost' => 0.00, 'min' => 0.0, 'acc' => $laborAccountId],
             ['code' => 'LAB-STR', 'name' => 'Biaya Setrika Uap & Finishing', 'category' => 'direct_labor', 'unit' => 'pcs', 'cost' => 4800.00, 'min' => 0.0, 'acc' => $laborAccountId],
 
             // --- Biaya Overhead Pabrik (Overhead) ---
