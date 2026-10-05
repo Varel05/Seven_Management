@@ -216,7 +216,6 @@ class EmployeeAllowanceTest extends TestCase
         $employee = Employee::create([
             'name' => 'Budi Akuntan',
             'phone' => '083896693316',
-            'telegram_user_id' => '12345678',
             'role' => EmployeeRole::Akuntan,
             'position' => 'Akuntan Perusahaan',
             'base_salary' => 4000000,
@@ -234,7 +233,7 @@ class EmployeeAllowanceTest extends TestCase
 
         $response = $this->getJson('/api/webhook/payroll/due', [
             'X-Webhook-Secret' => 'test_secret_key',
-            'X-Telegram-User-Id' => '12345678',
+            'X-Telegram-Phone' => $employee->phone,
         ]);
 
         $response->assertOk();

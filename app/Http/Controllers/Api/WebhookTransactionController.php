@@ -18,6 +18,7 @@ use App\Models\Product;
 use App\Models\RecurringTransaction;
 use App\Models\RetailSale;
 use App\Models\RetailSaleItem;
+use App\Models\TailorPayroll;
 use App\Services\SuitMaterialEstimatorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -48,28 +49,6 @@ class WebhookTransactionController extends Controller
 
         if (! empty($senderPhone)) {
             $emp = Employee::findByPhone($senderPhone);
-            if ($emp) {
-                return $emp;
-            }
-        }
-
-        $senderId = trim((string) (
-            $request->input('sender_telegram_id')
-            ?? $request->input('telegram_user_id')
-            ?? $request->header('X-Telegram-User-Id')
-            ?? ''
-        ));
-
-        if (! empty($senderId)) {
-            $emp = Employee::where('telegram_user_id', $senderId)->first();
-            if ($emp) {
-                return $emp;
-            }
-        }
-
-        $senderUsername = trim((string) ($request->input('sender_username') ?? ''));
-        if (! empty($senderUsername)) {
-            $emp = Employee::where('telegram_username', ltrim($senderUsername, '@'))->first();
             if ($emp) {
                 return $emp;
             }
@@ -110,7 +89,7 @@ class WebhookTransactionController extends Controller
 
         $role = null;
 
-        // 1. Cari Karyawan dari Request (HP -> ID -> Username)
+        // 1. Cari Karyawan dari Request (berdasarkan nomor HP)
         $employee = $this->resolveTelegramEmployee($request);
 
         // 2. Normalisasi nomor HP untuk pencocokan konfigurasi .env
@@ -128,11 +107,7 @@ class WebhookTransactionController extends Controller
         } elseif (! empty($senderId) && in_array($senderId, $akuntanIds, true)) {
             $role = Employee::ROLE_AKUNTAN;
         } elseif ($employee) {
-            $role = $employee->role_value ?: Employee::ROLE_CS;
-            // Jika ID telegram baru diketahui dan belum tersimpan pada profil karyawan, otomatis simpan
-            if (! empty($senderId) && empty($employee->telegram_user_id)) {
-                $employee->update(['telegram_user_id' => $senderId]);
-            }
+            $role = $employee->role_value ?: Employee::ROLE_STAFF;
         }
 
         // 4. Validasi Peran yang Diizinkan (jika ada pembatasan peran)
@@ -149,7 +124,7 @@ class WebhookTransactionController extends Controller
                 abort(response()->json([
                     'status' => false,
                     'role' => $role,
-                    'message' => "⛔ *Akses Ditolak!*\nFitur ini dibatasi khusus untuk: [{$allowedList}].\nAkun Telegram Anda ({$identityText}) teridentifikasi sebagai: *{$currentRoleName}*.\n\n💡 Pastikan nomor HP Telegram Anda sudah didaftarkan pada menu Manajemen Karyawan di sistem Seven Management.",
+                    'message' => "⛔ *Akses Ditolak!*\nFitur ini dibatasi khusus untuk: [{$allowedList}].\nAkun Telegram Anda ({$identityText}) teridentifikasi sebagai: *{$currentRoleName}*.\n\n💡 Pastikan nomor HP / ID Telegram Anda telah didaftarkan pada konfigurasi whitelist akses manajemen.",
                 ], 403));
             }
         }
@@ -172,16 +147,6 @@ class WebhookTransactionController extends Controller
         $senderId = $auth['sender_id'] ?? '';
         $role = $auth['role'];
         $employee = $auth['employee'];
-
-        // Jika data karyawan ditemukan dan ada senderId, tautkan otomatis jika belum tertaut
-        if ($employee && ! empty($senderId) && $employee->telegram_user_id !== $senderId) {
-            $employee->update(['telegram_user_id' => $senderId]);
-        }
-
-        $senderUsername = trim((string) ($request->input('sender_username') ?? ''));
-        if ($employee && ! empty($senderUsername) && empty($employee->telegram_username)) {
-            $employee->update(['telegram_username' => ltrim($senderUsername, '@')]);
-        }
 
         if (! $role && ! $employee) {
             $identity = $senderPhone ?: ($senderId ? "ID: {$senderId}" : 'Nomor HP tidak terdeteksi');
@@ -1727,22 +1692,7 @@ class WebhookTransactionController extends Controller
                 $actor
             );
 
-            // Poin bonus perusahaan jika CS yang melayani berbeda dari CS yang sedang berjaga
-            $onDutyCs = Employee::getOnDutyCs();
             $companyBonus = 0;
-            if ($onDutyCs && $onDutyCs->id !== $csEmployee->id) {
-                $companyBonus = PointSetting::get('service:cross_company', 1);
-                if ($companyBonus > 0) {
-                    $csEmployee->addPoints(
-                        $companyBonus,
-                        EmployeePointLog::CATEGORY_CROSS_COMPANY,
-                        "Bonus perusahaan: melayani saat CS berjaga adalah {$onDutyCs->name}",
-                        'custom_order',
-                        $order->id,
-                        $actor
-                    );
-                }
-            }
 
             $pointInfo = [
                 'points' => $suitPoints + $companyBonus,
@@ -2143,12 +2093,7 @@ class WebhookTransactionController extends Controller
             // 3. Poin COD: bernilai 1 setiap transaksi COD yang dilayani (kata kunci 'cod')
             $codBonus = ($paymentMethod === 'cod' || $isCod) ? PointSetting::get('service:cod', EmployeePointLog::DEFAULT_COD_POINTS) : 0;
 
-            // 4. Poin bonus perusahaan: bernilai 1 jika CS yang melayani berbeda dari CS yang sedang berjaga
-            $onDutyCs = Employee::getOnDutyCs();
             $companyBonus = 0;
-            if ($onDutyCs && $onDutyCs->id !== $csEmployee->id) {
-                $companyBonus = PointSetting::get('service:cross_company', 1);
-            }
 
             $totalPointsEarned = $itemBasePoints + $qtyBonus + $codBonus + $companyBonus;
 
@@ -2183,18 +2128,6 @@ class WebhookTransactionController extends Controller
                     $codBonus,
                     EmployeePointLog::CATEGORY_COD,
                     "Layanan Cash on Delivery (COD) {$product->name}",
-                    'retail_sale',
-                    $sale->id,
-                    $actor
-                );
-            }
-
-            // 4. Bonus Perusahaan (CS pengganti/berbeda dari CS yang berjaga)
-            if ($companyBonus > 0 && $onDutyCs) {
-                $csEmployee->addPoints(
-                    $companyBonus,
-                    EmployeePointLog::CATEGORY_CROSS_COMPANY,
-                    "Bonus perusahaan: melayani saat CS berjaga adalah {$onDutyCs->name}",
                     'retail_sale',
                     $sale->id,
                     $actor
@@ -2539,9 +2472,6 @@ class WebhookTransactionController extends Controller
         if (str_starts_with($rawText, '/klaim') || str_contains($rawText, 'klaim bonus') || str_contains($rawText, 'ambil bonus') || str_contains($rawText, 'simpan poin') || $request->has('choice') || $request->has('claim')) {
             return $this->toggleBonusPreference($request);
         }
-        if (str_starts_with($rawText, '/jaga') || str_starts_with($rawText, '/duty') || str_contains($rawText, 'cs jaga') || str_contains($rawText, 'jaga cs')) {
-            return $this->manageDuty($request);
-        }
 
         $employeeId = $request->input('employee_id');
         $employee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
@@ -2735,73 +2665,6 @@ class WebhookTransactionController extends Controller
             'tier_points_to_deduct' => $deduct,
             'remaining_points' => $remaining,
             'message' => implode("\n", $lines),
-        ]);
-    }
-
-    /**
-     * Webhook n8n: Atur / pantau CS yang sedang bertugas/berjaga (On-Duty).
-     */
-    public function manageDuty(Request $request)
-    {
-        $action = strtolower(trim((string) $request->input('action', '')));
-        $text = strtolower(trim((string) $request->input('text', '')));
-        if (empty($action) && ! empty($text)) {
-            if (str_contains($text, 'off') || str_contains($text, 'selesai') || str_contains($text, 'stop') || str_contains($text, 'keluar')) {
-                $action = 'off';
-            } elseif (str_contains($text, 'status') || str_contains($text, 'siapa') || str_contains($text, 'cek')) {
-                $action = 'status';
-            } else {
-                $action = 'set';
-            }
-        }
-        if (empty($action)) {
-            $action = 'set';
-        }
-        $employeeId = $request->input('employee_id');
-        $employee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
-
-        if ($action === 'status' || (! $employee && $action !== 'set')) {
-            $onDuty = Employee::getOnDutyCs();
-            if ($onDuty) {
-                return response()->json([
-                    'status' => true,
-                    'on_duty' => $onDuty,
-                    'message' => "👮 *Status CS Berjaga:*\nSaat ini yang sedang berjaga adalah: *{$onDuty->name}* ({$onDuty->position}).",
-                ]);
-            }
-
-            return response()->json([
-                'status' => true,
-                'on_duty' => null,
-                'message' => "ℹ️ Belum ada CS yang tercatat sedang berjaga saat ini.\nKetik `/jaga` untuk menetapkan diri Anda sebagai CS yang bertugas.",
-            ]);
-        }
-
-        if (! $employee) {
-            return response()->json([
-                'status' => false,
-                'message' => '❌ Akun Telegram / Nomor HP Anda belum terdaftar sebagai karyawan di sistem Seven Management.',
-            ], 404);
-        }
-
-        if ($action === 'clear' || $action === 'off') {
-            $employee->update(['is_on_duty' => false]);
-
-            return response()->json([
-                'status' => true,
-                'is_on_duty' => false,
-                'message' => "🚪 *Selesai Jaga*: {$employee->name} telah mengakhiri status bertugas/berjaga.",
-            ]);
-        }
-
-        // Set this employee as on duty
-        $employee->setAsOnDuty();
-
-        return response()->json([
-            'status' => true,
-            'is_on_duty' => true,
-            'employee' => $employee,
-            'message' => "👮 *CS Berjaga*: *{$employee->name}* sekarang tercatat sebagai CS yang sedang bertugas/berjaga.\n\n💡 CS lain yang melayani transaksi saat Anda berjaga akan mendapatkan bonus perusahaan (+1 poin)!",
         ]);
     }
 
@@ -3136,6 +2999,369 @@ class WebhookTransactionController extends Controller
                 'formatted_take_home_pay' => 'Rp '.number_format($takeHomePay, 0, ',', '.'),
                 'slip_url' => $slipUrl,
             ],
+            'message' => implode("\n", $lines),
+        ]);
+    }
+
+    /**
+     * Webhook n8n: Kelola, hitung, rekap, dan buat slip upah penjahit (borongan) via Telegram.
+     */
+    public function manageTailorPayroll(Request $request)
+    {
+        $auth = $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
+        $action = strtolower(trim((string) ($request->input('action') ?? '')));
+        $tailorQuery = trim((string) ($request->input('tailor_name') ?? $request->input('query') ?? $request->input('name') ?? ''));
+
+        // Action: Cek Tarif Jasa HPP (Direct Labor)
+        if ($action === 'rates' || str_contains($tailorQuery, 'tarif') || str_contains($tailorQuery, 'harga')) {
+            $laborMaterials = Material::where('category', 'direct_labor')->orderBy('code')->get();
+            $lines = ['🪡 *Daftar Tarif Upah Penjahit di HPP (Direct Labor):*', ''];
+            foreach ($laborMaterials as $lm) {
+                $lines[] = "• *{$lm->name}* (`{$lm->code}`)";
+                $lines[] = "  Tarif: *{$lm->formatted_standard_cost}* / {$lm->unit}";
+            }
+            $lines[] = '';
+            $lines[] = '💡 *Info*: Tarif di atas digunakan secara otomatis sebagai acuan perhitungan slip upah borongan penjahit.';
+
+            return response()->json([
+                'status' => true,
+                'action' => 'rates',
+                'materials' => $laborMaterials,
+                'message' => implode("\n", $lines),
+            ]);
+        }
+
+        // Action: Rekap / Daftar Riwayat Slip Penjahit
+        $hasQuantities = $request->filled('jas_reguler') || $request->filled('vest') || $request->filled('jas_premium') || $request->filled('revisi') || $request->filled('celana') || $request->filled('items');
+        $isListAction = in_array($action, ['list', 'summary', 'rekap', 'history'], true) || (! $hasQuantities && empty($action));
+
+        if ($isListAction) {
+            $query = TailorPayroll::with(['items', 'advances', 'journalEntry'])->latest('payroll_date');
+
+            if (! empty($tailorQuery)) {
+                $query->where('tailor_name', 'like', "%{$tailorQuery}%");
+            }
+
+            $payrolls = $query->limit(10)->get();
+
+            $month = now();
+            $monthlyPayrolls = TailorPayroll::whereYear('payroll_date', $month->year)
+                ->whereMonth('payroll_date', $month->month)
+                ->get();
+
+            $totalWagesMonth = (float) $monthlyPayrolls->sum('total_wage');
+            $totalPiecesMonth = (int) $monthlyPayrolls->sum('total_pieces');
+            $totalBonMonth = (float) $monthlyPayrolls->sum('total_bon');
+            $totalThpMonth = (float) $monthlyPayrolls->sum('take_home_pay');
+
+            $lines = ['🪡 *Rekap Slip Upah Penjahit Borongan:*'];
+            $lines[] = "📅 *Periode*: {$month->translatedFormat('F Y')}";
+            $lines[] = "👕 *Total Output Pakaian*: *{$totalPiecesMonth} pcs*";
+            $lines[] = '💰 *Total Upah Kotor*: Rp '.number_format($totalWagesMonth, 0, ',', '.');
+            $lines[] = '💸 *Total Kasbon Dipotong*: Rp '.number_format($totalBonMonth, 0, ',', '.');
+            $lines[] = '🟩 *Total Bersih (Take Home Pay)*: *Rp '.number_format($totalThpMonth, 0, ',', '.').'*';
+            $lines[] = '────────────────────────────────────────';
+
+            if ($payrolls->isEmpty()) {
+                $lines[] = 'ℹ️ Belum ada slip upah penjahit yang tercatat.';
+                $lines[] = '';
+                $lines[] = '💡 *Cara Buat Slip Upah*:';
+                $lines[] = 'Contoh: `Hitung upah penjahit Adriana: Jas Reguler 10 pcs, Vest 5 pcs, kasbon 150rb`';
+            } else {
+                $lines[] = '*Daftar Slip Upah Terbaru:*';
+                foreach ($payrolls as $p) {
+                    $dateStr = $p->payroll_date->format('d/m/Y');
+                    $lines[] = "• *{$p->tailor_name}* ({$dateStr})";
+                    $lines[] = "  Output: {$p->total_pieces} pcs | Gaji: {$p->formatted_total_wage}";
+                    if ($p->total_bon > 0) {
+                        $lines[] = "  Kasbon: -{$p->formatted_total_bon}";
+                    }
+                    $lines[] = "  Take Home Pay: *{$p->formatted_take_home_pay}* ({$p->payment_method})";
+                    $lines[] = '  📄 [Buka Lembar Slip Web]('.url("/tailor-payrolls/{$p->id}").')';
+                    $lines[] = '';
+                }
+            }
+
+            return response()->json([
+                'status' => true,
+                'action' => 'list',
+                'summary' => [
+                    'total_pieces' => $totalPiecesMonth,
+                    'total_wage' => $totalWagesMonth,
+                    'total_bon' => $totalBonMonth,
+                    'take_home_pay' => $totalThpMonth,
+                ],
+                'payrolls' => $payrolls,
+                'message' => implode("\n", $lines),
+            ]);
+        }
+
+        // Action: Hitung / Buat Slip Upah Penjahit Baru
+        $laborRates = Material::where('category', 'direct_labor')->pluck('standard_cost', 'code')->toArray();
+        $laborIds = Material::where('category', 'direct_labor')->pluck('id', 'code')->toArray();
+
+        $tailorName = ! empty($tailorQuery) ? $tailorQuery : 'Penjahit Adriana';
+        if (! str_starts_with(strtolower($tailorName), 'penjahit')) {
+            $tailorName = 'Penjahit '.$tailorName;
+        }
+
+        $payrollDate = $request->input('payroll_date') ? Carbon::parse($request->input('payroll_date')) : now();
+        $periodLabel = $request->input('period_label') ?: $payrollDate->translatedFormat('l, j F Y');
+        $paymentMethod = $request->input('payment_method') ?: 'Tunai';
+
+        // Item-item jahitan
+        $itemsData = [];
+        $totalPieces = 0;
+        $totalWage = 0.0;
+
+        // Standard mapping
+        $standardItems = [
+            'jas_reguler' => ['code' => 'LAB-JHT-REG', 'name' => 'Jas Reguler', 'default_cost' => 50000],
+            'vest' => ['code' => 'LAB-JHT-VST', 'name' => 'Vest', 'default_cost' => 37000],
+            'jas_premium' => ['code' => 'LAB-JHT-PRM', 'name' => 'Jas Premium', 'default_cost' => 150000],
+            'revisi' => ['code' => 'LAB-JHT-REV', 'name' => 'Revisi', 'default_cost' => 0],
+            'celana' => ['code' => 'LAB-JHT-CLN', 'name' => 'Celana Formal', 'default_cost' => 30000],
+            'jas_exclusive' => ['code' => 'LAB-JHT-EXC', 'name' => 'Jas Master Exclusive', 'default_cost' => 250000],
+        ];
+
+        $orderIndex = 1;
+        foreach ($standardItems as $key => $config) {
+            $qty = (int) ($request->input($key) ?? 0);
+            $code = $config['code'];
+            $rate = isset($laborRates[$code]) && $laborRates[$code] > 0
+                ? (float) $laborRates[$code]
+                : (float) $config['default_cost'];
+
+            if ($request->has($key.'_rate')) {
+                $rate = (float) $request->input($key.'_rate');
+            }
+
+            $isCoreItem = in_array($key, ['jas_reguler', 'vest', 'jas_premium', 'revisi'], true);
+            if ($qty > 0 || $isCoreItem) {
+                $subtotal = $qty * $rate;
+                $totalPieces += $qty;
+                $totalWage += $subtotal;
+
+                $itemsData[] = [
+                    'material_id' => $laborIds[$code] ?? null,
+                    'item_name' => $config['name'],
+                    'quantity' => $qty,
+                    'rate_per_piece' => $rate,
+                    'subtotal' => $subtotal,
+                    'order' => $orderIndex++,
+                ];
+            }
+        }
+
+        // Custom items array jika ada
+        if (is_array($request->input('custom_items'))) {
+            foreach ($request->input('custom_items') as $cItem) {
+                $cQty = (int) ($cItem['quantity'] ?? $cItem['qty'] ?? 1);
+                $cRate = (float) ($cItem['rate_per_piece'] ?? $cItem['rate'] ?? $cItem['cost'] ?? 0);
+                $cSubtotal = $cQty * $cRate;
+                $totalPieces += $cQty;
+                $totalWage += $cSubtotal;
+
+                $itemsData[] = [
+                    'material_id' => $cItem['material_id'] ?? null,
+                    'item_name' => trim((string) ($cItem['name'] ?? $cItem['item_name'] ?? 'Item Jahit Lainnya')),
+                    'quantity' => $cQty,
+                    'rate_per_piece' => $cRate,
+                    'subtotal' => $cSubtotal,
+                    'order' => $orderIndex++,
+                ];
+            }
+        }
+
+        // Kasbon / Bon
+        $advancesData = [];
+        $totalBon = 0.0;
+        $bonInput = $request->input('bon') ?? $request->input('total_bon') ?? $request->input('kasbon');
+
+        if (is_array($request->input('advances'))) {
+            foreach ($request->input('advances') as $adv) {
+                $amt = (float) ($adv['amount'] ?? 0);
+                if ($amt > 0) {
+                    $totalBon += $amt;
+                    $advancesData[] = [
+                        'advance_date' => $adv['advance_date'] ?? $payrollDate->format('Y-m-d'),
+                        'description' => trim((string) ($adv['description'] ?? 'Kasbon penjahit')),
+                        'amount' => $amt,
+                    ];
+                }
+            }
+        } elseif ($bonInput !== null && (float) $bonInput > 0) {
+            $amt = (float) $bonInput;
+            $totalBon += $amt;
+            $advancesData[] = [
+                'advance_date' => $payrollDate->format('Y-m-d'),
+                'description' => trim((string) ($request->input('bon_description') ?? 'Kasbon penjahit')),
+                'amount' => $amt,
+            ];
+        }
+
+        $takeHomePay = max(0.0, $totalWage - $totalBon);
+
+        $shouldSave = $request->boolean('save', true);
+        $payroll = null;
+        $refText = '';
+
+        if ($shouldSave) {
+            $payroll = DB::transaction(function () use (
+                $tailorName,
+                $payrollDate,
+                $periodLabel,
+                $paymentMethod,
+                $totalPieces,
+                $totalWage,
+                $totalBon,
+                $takeHomePay,
+                $itemsData,
+                $advancesData,
+                $request
+            ) {
+                $tailorPayroll = TailorPayroll::create([
+                    'tailor_name' => $tailorName,
+                    'payroll_date' => $payrollDate->format('Y-m-d'),
+                    'period_label' => $periodLabel,
+                    'payment_method' => $paymentMethod,
+                    'total_pieces' => $totalPieces,
+                    'total_wage' => $totalWage,
+                    'total_bon' => $totalBon,
+                    'take_home_pay' => $takeHomePay,
+                    'notes' => $request->input('notes') ?? 'Dibuat via Telegram AI Agent',
+                    'paid_at' => now(),
+                ]);
+
+                foreach ($itemsData as $item) {
+                    $tailorPayroll->items()->create($item);
+                }
+
+                foreach ($advancesData as $adv) {
+                    $tailorPayroll->advances()->create($adv);
+                }
+
+                // Jurnal Akuntansi Seimbang
+                $reference = 'UPH-JHT-'.strtoupper(Str::random(6));
+
+                $expenseAccount = Account::firstOrCreate(
+                    ['code' => '5002'],
+                    ['name' => 'Beban Gaji', 'type' => 'expense']
+                );
+
+                $assetAccount = str_contains(strtolower($paymentMethod), 'transfer')
+                    ? Account::where('code', '1002')->first()
+                    : Account::where('code', '1001')->first();
+                if (! $assetAccount) {
+                    $assetAccount = Account::where('type', 'asset')->first();
+                }
+
+                $advanceAccount = Account::firstOrCreate(
+                    ['code' => '1005'],
+                    ['name' => 'Piutang Kasbon Karyawan & Penjahit', 'type' => 'asset']
+                );
+
+                $journal = JournalEntry::create([
+                    'reference' => $reference,
+                    'description' => "Upah Jahit Borongan: {$tailorPayroll->tailor_name} ({$totalPieces} pcs, {$periodLabel})",
+                    'date' => $payrollDate,
+                    'source' => 'telegram',
+                    'status' => 'verified',
+                ]);
+
+                // 1. DEBIT: Beban Gaji & Upah (Total Kotor)
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journal->id,
+                    'account_id' => $expenseAccount->id,
+                    'debit' => $totalWage,
+                    'credit' => 0,
+                    'description' => "Upah Borongan {$tailorPayroll->tailor_name} ({$totalPieces} pcs)",
+                ]);
+
+                // 2. KREDIT: Kas / Bank (Take Home Pay)
+                if ($takeHomePay > 0 && $assetAccount) {
+                    JournalEntryLine::create([
+                        'journal_entry_id' => $journal->id,
+                        'account_id' => $assetAccount->id,
+                        'debit' => 0,
+                        'credit' => $takeHomePay,
+                        'description' => "Pembayaran Bersih ({$paymentMethod})",
+                    ]);
+                }
+
+                // 3. KREDIT: Potongan Kasbon
+                if ($totalBon > 0 && $advanceAccount) {
+                    JournalEntryLine::create([
+                        'journal_entry_id' => $journal->id,
+                        'account_id' => $advanceAccount->id,
+                        'debit' => 0,
+                        'credit' => $totalBon,
+                        'description' => "Pemotongan Kasbon {$tailorPayroll->tailor_name}",
+                    ]);
+                }
+
+                $tailorPayroll->update(['journal_entry_id' => $journal->id]);
+
+                return $tailorPayroll;
+            });
+
+            $refText = $payroll->journalEntry?->reference ? "Ref Jurnal: `{$payroll->journalEntry->reference}`" : '';
+        }
+
+        $slipUrl = $payroll ? url("/tailor-payrolls/{$payroll->id}") : url('/tailor-payrolls');
+
+        // Format pesan telegram menyerupai format gambar slip excel
+        $lines = [];
+        $lines[] = '🪡 *SLIP UPAH PENJAHIT (BORONGAN)*';
+        $lines[] = "Tanggal           : *{$periodLabel}*";
+        $lines[] = "Nama Penjahit     : *{$tailorName}*";
+        $lines[] = "Metode Pembayaran : *{$paymentMethod}*";
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '*RINCIAN OUTPUT JAHITAN (TARIF HPP):*';
+
+        foreach ($itemsData as $it) {
+            $formattedRate = number_format($it['rate_per_piece'], 0, ',', '.');
+            $formattedSub = number_format($it['subtotal'], 0, ',', '.');
+            $lines[] = "• {$it['item_name']} : {$it['quantity']} pcs x Rp {$formattedRate} = *Rp {$formattedSub}*";
+        }
+
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = "Total Output Pcs  : *{$totalPieces} pcs*";
+        $lines[] = '*TOTAL GAJI (KOTOR)*: *Rp '.number_format($totalWage, 0, ',', '.').'*';
+        $lines[] = '────────────────────────────────────────';
+
+        if ($totalBon > 0) {
+            $lines[] = '*POTONGAN KASBON (BON):*';
+            foreach ($advancesData as $ad) {
+                $lines[] = "• {$ad['description']} : *-Rp ".number_format($ad['amount'], 0, ',', '.').'*';
+            }
+            $lines[] = '*Jumlah Bon*       : *-Rp '.number_format($totalBon, 0, ',', '.').'*';
+            $lines[] = '────────────────────────────────────────';
+        } else {
+            $lines[] = 'Jumlah Bon         : *Rp 0* (Tanpa kasbon)';
+            $lines[] = '────────────────────────────────────────';
+        }
+
+        $lines[] = '🟩 *TAKE HOME PAY*    : *Rp '.number_format($takeHomePay, 0, ',', '.').'*';
+        $lines[] = '────────────────────────────────────────';
+
+        if ($refText) {
+            $lines[] = "🧾 {$refText} [Status: Verified]";
+        }
+
+        $lines[] = "📄 *Cetak / PDF*: [Buka Slip Resmi Web]({$slipUrl})";
+
+        return response()->json([
+            'status' => true,
+            'action' => 'create',
+            'payroll' => $payroll,
+            'total_pieces' => $totalPieces,
+            'total_wage' => $totalWage,
+            'total_bon' => $totalBon,
+            'take_home_pay' => $takeHomePay,
+            'formatted_take_home_pay' => 'Rp '.number_format($takeHomePay, 0, ',', '.'),
+            'slip_url' => $slipUrl,
             'message' => implode("\n", $lines),
         ]);
     }

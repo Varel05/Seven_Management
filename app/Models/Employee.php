@@ -47,7 +47,6 @@ class Employee extends Model
         'rate_per_point' => 'decimal:2',
         'current_points' => 'integer',
         'claim_bonus' => 'boolean',
-        'is_on_duty' => 'boolean',
         'pay_day' => 'integer',
         'last_paid_at' => 'datetime',
     ];
@@ -373,17 +372,6 @@ class Employee extends Model
         }
 
         return (float) ($value ?? 0);
-    }
-
-    public static function getOnDutyCs(): ?self
-    {
-        return static::where('is_on_duty', true)->first();
-    }
-
-    public function setAsOnDuty(): void
-    {
-        static::query()->update(['is_on_duty' => false]);
-        $this->update(['is_on_duty' => true]);
     }
 
     /**

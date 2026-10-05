@@ -536,23 +536,6 @@ class RetailController extends Controller
                     }
                 }
 
-                // 4. Poin bonus perusahaan: bernilai 1 jika CS yang melayani berbeda dari CS yang sedang berjaga
-                $onDutyCs = Employee::getOnDutyCs();
-                if ($onDutyCs && $onDutyCs->id !== $csEmployee->id) {
-                    $crossBonus = PointSetting::get('service:cross_company', 1);
-                    if ($crossBonus > 0) {
-                        $totalPts += $crossBonus;
-                        $csEmployee->addPoints(
-                            $crossBonus,
-                            EmployeePointLog::CATEGORY_CROSS_COMPANY,
-                            "Bonus perusahaan: melayani saat CS berjaga adalah {$onDutyCs->name}",
-                            'retail_sale',
-                            $sale->id,
-                            'Kasir Web'
-                        );
-                    }
-                }
-
                 $pointEarnedMsg = " (⭐ +{$totalPts} poin insentif diberikan kepada {$csEmployee->name})";
             }
         }

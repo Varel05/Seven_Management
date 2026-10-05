@@ -64,8 +64,6 @@ class EmployeeController extends Controller
             'role' => ['nullable', Rule::enum(EmployeeRole::class)],
             'position' => 'required|string|max:100',
             'phone' => 'nullable|string|max:50',
-            'telegram_user_id' => 'nullable|string|max:50|unique:employees,telegram_user_id',
-            'telegram_username' => 'nullable|string|max:50',
             'base_salary' => 'required|numeric|min:0',
             'daily_rate' => 'nullable|numeric|min:0',
             'discipline_rate' => 'nullable|numeric|min:0',
@@ -76,7 +74,6 @@ class EmployeeController extends Controller
             'asset_account_id' => 'nullable|exists:accounts,id',
             'status' => 'required|in:active,inactive',
             'claim_bonus' => 'nullable|boolean',
-            'is_on_duty' => 'nullable|boolean',
         ]);
 
         $validated['role'] = $validated['role'] ?? EmployeeRole::Staff->value;
@@ -87,9 +84,6 @@ class EmployeeController extends Controller
             : (float) ($validated['rate_per_point'] ?? 0);
         if ($request->has('claim_bonus')) {
             $validated['claim_bonus'] = $request->boolean('claim_bonus');
-        }
-        if ($request->has('is_on_duty')) {
-            $validated['is_on_duty'] = $request->boolean('is_on_duty');
         }
 
         Employee::create($validated);
@@ -107,8 +101,6 @@ class EmployeeController extends Controller
             'role' => ['nullable', Rule::enum(EmployeeRole::class)],
             'position' => 'required|string|max:100',
             'phone' => 'nullable|string|max:50',
-            'telegram_user_id' => ['nullable', 'string', 'max:50', Rule::unique('employees')->ignore($employee->id)],
-            'telegram_username' => 'nullable|string|max:50',
             'base_salary' => 'required|numeric|min:0',
             'daily_rate' => 'nullable|numeric|min:0',
             'discipline_rate' => 'nullable|numeric|min:0',
@@ -119,7 +111,6 @@ class EmployeeController extends Controller
             'asset_account_id' => 'nullable|exists:accounts,id',
             'status' => 'required|in:active,inactive',
             'claim_bonus' => 'nullable|boolean',
-            'is_on_duty' => 'nullable|boolean',
         ]);
 
         $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
@@ -129,9 +120,6 @@ class EmployeeController extends Controller
             : (float) ($validated['rate_per_point'] ?? 0);
         if ($request->has('claim_bonus')) {
             $validated['claim_bonus'] = $request->boolean('claim_bonus');
-        }
-        if ($request->has('is_on_duty')) {
-            $validated['is_on_duty'] = $request->boolean('is_on_duty');
         }
 
         $employee->update($validated);

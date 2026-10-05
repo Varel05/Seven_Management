@@ -53,7 +53,6 @@ class PointRulesAndBonusClaimTest extends TestCase
             'position' => 'Customer Service',
             'role' => Employee::ROLE_CS,
             'phone' => '081211112222',
-            'telegram_user_id' => '11112222',
             'base_salary' => 3000000,
             'current_points' => 0,
             'rate_per_point' => 0,
@@ -68,7 +67,6 @@ class PointRulesAndBonusClaimTest extends TestCase
             'position' => 'Customer Service',
             'role' => Employee::ROLE_CS,
             'phone' => '081233334444',
-            'telegram_user_id' => '33334444',
             'base_salary' => 3000000,
             'current_points' => 0,
             'rate_per_point' => 0,
@@ -112,7 +110,7 @@ class PointRulesAndBonusClaimTest extends TestCase
                 'product_code' => $this->tuxedoProduct->code,
                 'quantity' => 2,
                 'payment_method' => 'cash',
-                'sender_telegram_id' => $this->cs1->telegram_user_id,
+                'sender_phone' => $this->cs1->phone,
             ]);
 
         $responseSale->assertOk();
@@ -137,7 +135,7 @@ class PointRulesAndBonusClaimTest extends TestCase
                 'quantity' => 1,
                 'is_rental' => true,
                 'payment_method' => 'cash',
-                'sender_telegram_id' => $this->cs1->telegram_user_id,
+                'sender_phone' => $this->cs1->phone,
             ]);
 
         $responseRent->assertOk();
@@ -163,7 +161,7 @@ class PointRulesAndBonusClaimTest extends TestCase
                 'quantity' => 1,
                 'payment_method' => 'transfer',
                 'notes' => 'Pesanan COD kurir AnterAja',
-                'sender_telegram_id' => $this->cs1->telegram_user_id,
+                'sender_phone' => $this->cs1->phone,
             ]);
 
         $response->assertOk();
@@ -175,39 +173,6 @@ class PointRulesAndBonusClaimTest extends TestCase
             'category' => EmployeePointLog::CATEGORY_COD,
             'points' => 1,
         ]);
-    }
-
-    /**
-     * Syarat 3: Poin bonus perusahaan bernilai 1 jika CS yang melayani berbeda dari CS yang sedang berjaga.
-     */
-    public function test_company_bonus_awards_1_point_when_serving_cs_differs_from_on_duty_cs(): void
-    {
-        // Tetapkan CS 1 sebagai CS yang sedang berjaga
-        $this->cs1->setAsOnDuty();
-        $this->assertTrue($this->cs1->fresh()->is_on_duty);
-        $this->assertFalse($this->cs2->fresh()->is_on_duty);
-
-        // CS 2 melayani transaksi penjualan
-        $response = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
-            ->postJson('/api/webhook/retail/sale', [
-                'product_code' => $this->shirtProduct->code,
-                'quantity' => 1,
-                'payment_method' => 'cash',
-                'sender_telegram_id' => $this->cs2->telegram_user_id,
-            ]);
-
-        $response->assertOk();
-
-        // CS 2 mendapatkan: 5 pt (item) + 1 pt (qty) + 1 pt (bonus perusahaan karena CS 1 berjaga) = 7 pt
-        $this->assertEquals(7, $this->cs2->fresh()->current_points);
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->cs2->id,
-            'category' => EmployeePointLog::CATEGORY_CROSS_COMPANY,
-            'points' => 1,
-        ]);
-
-        // CS 1 yang sedang berjaga poinnya tidak berubah
-        $this->assertEquals(0, $this->cs1->fresh()->current_points);
     }
 
     /**
@@ -304,7 +269,7 @@ class PointRulesAndBonusClaimTest extends TestCase
         // CS 1 mengirim permintaan untuk menyimpan poin (tidak ambil)
         $responseSave = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
             ->postJson('/api/webhook/payroll/bonus-preference', [
-                'sender_telegram_id' => $this->cs1->telegram_user_id,
+                'sender_phone' => $this->cs1->phone,
                 'choice' => 'simpan',
             ]);
 
@@ -315,7 +280,7 @@ class PointRulesAndBonusClaimTest extends TestCase
 
         // CS 1 mengecek /poinsaya dan melihat status preferensinya
         $responseMyPoints = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
-            ->getJson('/api/webhook/payroll/my-points?sender_telegram_id='.$this->cs1->telegram_user_id);
+            ->getJson('/api/webhook/payroll/my-points?sender_phone='.$this->cs1->phone);
 
         $responseMyPoints->assertOk();
         $this->assertStringContainsString('Simpan Poin', $responseMyPoints->json('message'));
@@ -323,7 +288,7 @@ class PointRulesAndBonusClaimTest extends TestCase
         // CS 1 berubah pikiran dan ingin mencairkan bonus bulan ini
         $responseClaim = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
             ->postJson('/api/webhook/payroll/bonus-preference', [
-                'sender_telegram_id' => $this->cs1->telegram_user_id,
+                'sender_phone' => $this->cs1->phone,
                 'choice' => 'ambil',
             ]);
 
@@ -335,7 +300,7 @@ class PointRulesAndBonusClaimTest extends TestCase
         // Test sending raw text "/klaimbonus simpan" to my-points (delegation)
         $responseRaw = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
             ->postJson('/api/webhook/payroll/my-points', [
-                'sender_telegram_id' => $this->cs1->telegram_user_id,
+                'sender_phone' => $this->cs1->phone,
                 'text' => '/klaimbonus simpan',
             ]);
 
@@ -344,33 +309,4 @@ class PointRulesAndBonusClaimTest extends TestCase
         $this->assertFalse($this->cs1->fresh()->claim_bonus);
         $this->assertStringContainsString('MENYIMPAN POIN', $responseRaw->json('message'));
     }
-
-    /**
-     * CS dapat mengatur status piket/jaga via Webhook Telegram (/jaga).
-     */
-    public function test_cs_can_toggle_duty_status_via_webhook(): void
-    {
-        // CS 1 mengaktifkan jaga via text "/jaga"
-        $responseOn = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
-            ->postJson('/api/webhook/payroll/duty', [
-                'sender_telegram_id' => $this->cs1->telegram_user_id,
-                'text' => '/jaga on',
-            ]);
-
-        $responseOn->assertOk();
-        $responseOn->assertJsonPath('is_on_duty', true);
-        $this->assertTrue($this->cs1->fresh()->is_on_duty);
-
-        // CS 1 mengakhiri jaga via text "/jaga off"
-        $responseOff = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
-            ->postJson('/api/webhook/payroll/duty', [
-                'sender_telegram_id' => $this->cs1->telegram_user_id,
-                'text' => '/jaga off',
-            ]);
-
-        $responseOff->assertOk();
-        $responseOff->assertJsonPath('is_on_duty', false);
-        $this->assertFalse($this->cs1->fresh()->is_on_duty);
-    }
 }
-

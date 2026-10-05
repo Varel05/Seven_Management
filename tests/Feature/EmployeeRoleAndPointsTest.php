@@ -27,7 +27,13 @@ class EmployeeRoleAndPointsTest extends TestCase
     {
         parent::setUp();
 
-        config(['services.webhook.secret' => 'test_secret_key']);
+        config([
+            'services.webhook.secret' => 'test_secret_key',
+            'services.telegram.owner_phones' => ['081211111111'],
+            'services.telegram.akuntan_phones' => ['081222222222'],
+            'services.telegram.owner_ids' => ['11111111'],
+            'services.telegram.akuntan_ids' => ['22222222'],
+        ]);
 
         $this->assetAccount = Account::create([
             'code' => '1001',
@@ -52,8 +58,6 @@ class EmployeeRoleAndPointsTest extends TestCase
             'position' => 'Owner',
             'role' => Employee::ROLE_OWNER,
             'phone' => '081211111111',
-            'telegram_user_id' => '11111111',
-            'telegram_username' => 'owner_boss',
             'base_salary' => 15000000,
             'current_points' => 0,
             'rate_per_point' => 50000,
@@ -67,8 +71,6 @@ class EmployeeRoleAndPointsTest extends TestCase
             'position' => 'Akuntan Keuangan',
             'role' => Employee::ROLE_AKUNTAN,
             'phone' => '081222222222',
-            'telegram_user_id' => '22222222',
-            'telegram_username' => 'siti_akuntan',
             'base_salary' => 7000000,
             'current_points' => 0,
             'rate_per_point' => 50000,
@@ -82,8 +84,6 @@ class EmployeeRoleAndPointsTest extends TestCase
             'position' => 'Customer Service',
             'role' => Employee::ROLE_CS,
             'phone' => '081233333333',
-            'telegram_user_id' => '33333333',
-            'telegram_username' => 'rina_cs',
             'base_salary' => 4000000,
             'current_points' => 0,
             'rate_per_point' => 25000,
@@ -97,7 +97,7 @@ class EmployeeRoleAndPointsTest extends TestCase
     {
         $headers = [
             'X-Webhook-Secret' => 'test_secret_key',
-            'X-Telegram-User-Id' => $this->csEmployee->telegram_user_id,
+            'X-Telegram-Phone' => $this->csEmployee->phone,
         ];
 
         // 1. Balance endpoint
@@ -129,12 +129,12 @@ class EmployeeRoleAndPointsTest extends TestCase
     {
         $ownerHeaders = [
             'X-Webhook-Secret' => 'test_secret_key',
-            'X-Telegram-User-Id' => $this->ownerEmployee->telegram_user_id,
+            'X-Telegram-Phone' => $this->ownerEmployee->phone,
         ];
 
         $akuntanHeaders = [
             'X-Webhook-Secret' => 'test_secret_key',
-            'X-Telegram-User-Id' => $this->akuntanEmployee->telegram_user_id,
+            'X-Telegram-Phone' => $this->akuntanEmployee->phone,
         ];
 
         $this->getJson('/api/webhook/balance', $ownerHeaders)->assertStatus(200);
@@ -150,7 +150,7 @@ class EmployeeRoleAndPointsTest extends TestCase
             'employee_id' => $this->csEmployee->id,
             'points' => 20,
             'operation' => 'add',
-            'sender_telegram_id' => $this->csEmployee->telegram_user_id,
+            'sender_phone' => $this->csEmployee->phone,
         ];
 
         $response = $this->postJson('/api/webhook/payroll/points', $payload, [
@@ -169,7 +169,7 @@ class EmployeeRoleAndPointsTest extends TestCase
             'operation' => 'add',
             'category' => EmployeePointLog::CATEGORY_REVIEW,
             'notes' => 'Review bintang 5 dari pelanggan di Google Maps',
-            'sender_telegram_id' => $this->ownerEmployee->telegram_user_id,
+            'sender_phone' => $this->ownerEmployee->phone,
         ];
 
         $response = $this->postJson('/api/webhook/payroll/points', $payload, [
@@ -209,7 +209,7 @@ class EmployeeRoleAndPointsTest extends TestCase
             'quantity' => 3,
             'customer_name' => 'Pelanggan Budi',
             'payment_method' => 'cod',
-            'sender_telegram_id' => $this->csEmployee->telegram_user_id,
+            'sender_phone' => $this->csEmployee->phone,
         ];
 
         $response = $this->postJson('/api/webhook/retail/sale', $payload, [
@@ -259,7 +259,7 @@ class EmployeeRoleAndPointsTest extends TestCase
             'fabric_type' => 'Wool Premium',
             'total_price' => 3500000,
             'down_payment' => 1500000,
-            'sender_telegram_id' => $this->csEmployee->telegram_user_id,
+            'sender_phone' => $this->csEmployee->phone,
         ];
 
         $response = $this->postJson('/api/webhook/custom-suit/order', $payload, [
@@ -292,7 +292,7 @@ class EmployeeRoleAndPointsTest extends TestCase
 
         $response = $this->getJson('/api/webhook/payroll/my-points', [
             'X-Webhook-Secret' => 'test_secret_key',
-            'X-Telegram-User-Id' => $this->csEmployee->telegram_user_id,
+            'X-Telegram-Phone' => $this->csEmployee->phone,
         ]);
 
         $response->assertStatus(200)
@@ -314,7 +314,7 @@ class EmployeeRoleAndPointsTest extends TestCase
     {
         $response = $this->getJson('/api/webhook/payroll/points', [
             'X-Webhook-Secret' => 'test_secret_key',
-            'X-Telegram-User-Id' => $this->csEmployee->telegram_user_id,
+            'X-Telegram-Phone' => $this->csEmployee->phone,
         ]);
 
         $response->assertStatus(200);
@@ -329,7 +329,7 @@ class EmployeeRoleAndPointsTest extends TestCase
         }
     }
 
-    public function test_web_ui_can_store_and_update_employee_with_role_and_telegram(): void
+    public function test_web_ui_can_store_and_update_employee_with_role(): void
     {
         $user = User::factory()->create();
 
@@ -338,8 +338,6 @@ class EmployeeRoleAndPointsTest extends TestCase
             'role' => Employee::ROLE_CS,
             'position' => 'Customer Care',
             'phone' => '08987654321',
-            'telegram_user_id' => '99887766',
-            'telegram_username' => 'dimas_care',
             'base_salary' => 4500000,
             'current_points' => 0,
             'pay_day' => 25,
@@ -351,11 +349,10 @@ class EmployeeRoleAndPointsTest extends TestCase
         $this->assertDatabaseHas('employees', [
             'name' => 'Dimas CS Baru',
             'role' => Employee::ROLE_CS,
-            'telegram_user_id' => '99887766',
-            'telegram_username' => 'dimas_care',
+            'phone' => '08987654321',
         ]);
 
-        $emp = Employee::where('telegram_user_id', '99887766')->first();
+        $emp = Employee::where('phone', '08987654321')->first();
 
         // Update
         $updateResponse = $this->actingAs($user)->put("/employees/{$emp->id}", [
@@ -363,8 +360,6 @@ class EmployeeRoleAndPointsTest extends TestCase
             'role' => Employee::ROLE_CS,
             'position' => 'Senior Customer Care',
             'phone' => '08987654321',
-            'telegram_user_id' => '99887766',
-            'telegram_username' => 'dimas_senior',
             'base_salary' => 5000000,
             'current_points' => 10,
             'pay_day' => 25,
@@ -376,7 +371,8 @@ class EmployeeRoleAndPointsTest extends TestCase
         $this->assertDatabaseHas('employees', [
             'id' => $emp->id,
             'name' => 'Dimas CS Senior',
-            'telegram_username' => 'dimas_senior',
+            'position' => 'Senior Customer Care',
+            'base_salary' => 5000000,
         ]);
     }
 

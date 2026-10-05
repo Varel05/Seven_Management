@@ -155,8 +155,6 @@
             role: 'cs',
             position: '',
             phone: '',
-            telegram_user_id: '',
-            telegram_username: '',
             base_salary: 0,
             daily_rate: 0,
             discipline_rate: 10000,
@@ -165,7 +163,6 @@
             rate_per_point: 0,
             pay_day: 25,
             claim_bonus: true,
-            is_on_duty: false,
             asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
             status: 'active'
         },
@@ -332,8 +329,6 @@
                 role: 'staff',
                 position: '',
                 phone: '',
-                telegram_user_id: '',
-                telegram_username: '',
                 base_salary: 3000000,
                 daily_rate: 0,
                 discipline_rate: 10000,
@@ -342,7 +337,6 @@
                 rate_per_point: 0,
                 pay_day: 25,
                 claim_bonus: true,
-                is_on_duty: false,
                 asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
                 status: 'active'
             };
@@ -356,8 +350,6 @@
                 role: emp.role_value || (emp.role && emp.role.value ? emp.role.value : (emp.role || 'staff')),
                 position: emp.position,
                 phone: emp.phone || '',
-                telegram_user_id: emp.telegram_user_id || '',
-                telegram_username: emp.telegram_username || '',
                 base_salary: Number(emp.base_salary),
                 daily_rate: Number(emp.daily_rate) || 0,
                 discipline_rate: Number(emp.discipline_rate) || 0,
@@ -366,7 +358,6 @@
                 rate_per_point: Number(emp.rate_per_point),
                 pay_day: emp.pay_day,
                 claim_bonus: emp.claim_bonus !== undefined ? Boolean(emp.claim_bonus) : true,
-                is_on_duty: Boolean(emp.is_on_duty),
                 asset_account_id: emp.asset_account_id,
                 status: emp.status
             };
@@ -409,7 +400,7 @@
             this.showDeleteModal = true;
         }
     }" @open-add-employee.window="openAddModal()" @open-allowance-modal.window="openAddAllowanceModal()" class="py-8">
-        <div class="max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 space-y-8">
+        <div class="max-w-[1800px] w-full mx-auto px-2 sm:px-4 lg:px-6 space-y-8">
 
             <!-- Flash Notifications -->
             @if(session('success'))
@@ -624,19 +615,19 @@
                 <div class="w-full overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800/80 dark:to-slate-800/60 border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                                <th class="px-4 py-3 min-w-[170px]">Karyawan</th>
-                                <th class="px-3.5 py-3 whitespace-nowrap">Gaji Pokok</th>
-                                <th class="px-3.5 py-3 whitespace-nowrap">Tunjangan</th>
-                                <th class="px-3.5 py-3 whitespace-nowrap">Poin Kinerja</th>
-                                <th class="px-3.5 py-3 whitespace-nowrap">Bonus Poin</th>
-                                <th class="px-3.5 py-3 whitespace-nowrap text-right">Total Gaji</th>
-                                <th class="px-3.5 py-3 whitespace-nowrap text-center">Jatuh Tempo</th>
-                                <th class="px-3.5 py-3 whitespace-nowrap">Akun Pembayaran</th>
-                                <th class="px-3 py-3 whitespace-nowrap text-center">Aksi</th>
+                            <tr class="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800/80 dark:to-slate-800/60 border-b border-slate-200/90 dark:border-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                                <th class="px-2.5 py-2.5 min-w-[140px]">Karyawan</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap">Gaji Pokok</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap">Tunjangan</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap">Poin Kinerja</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap">Bonus Poin</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap text-right">Total Gaji</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap text-center">Jatuh Tempo</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap">Akun Bayar</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap text-center">Aksi</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-200/60 dark:divide-slate-800/80 text-sm">
+                        <tbody class="divide-y divide-slate-200/60 dark:divide-slate-800/80 text-xs">
                             @forelse($employees as $emp)
                                 @php
                                     $isDue = $emp->isDueToday();
@@ -648,59 +639,49 @@
                                     class="hover:bg-emerald-50/40 dark:hover:bg-slate-800/40 transition-colors group {{ $isDue ? 'bg-amber-50/30 dark:bg-amber-950/20' : '' }}"
                                 >
                                     <!-- Karyawan (3 Baris: Nama+#ID, Posisi, No HP) -->
-                                    <td class="px-4 py-3 whitespace-nowrap">
-                                        <div class="flex items-start gap-2.5">
-                                            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 text-slate-800 dark:text-slate-200 font-extrabold flex items-center justify-center text-xs shadow-2xs border border-slate-200 dark:border-slate-700 shrink-0 mt-0.5">
+                                    <td class="px-2.5 py-2 whitespace-nowrap">
+                                        <div class="flex items-start gap-2">
+                                            <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 text-slate-800 dark:text-slate-200 font-extrabold flex items-center justify-center text-[10px] shadow-2xs border border-slate-200 dark:border-slate-700 shrink-0 mt-0.5">
                                                 {{ strtoupper(substr($emp->name, 0, 2)) }}
                                             </div>
                                             <div class="space-y-0.5">
                                                 <!-- Baris 1: Nama, ID & Role Badge -->
                                                 <div class="font-bold text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5 flex-wrap leading-tight">
                                                     <span>{{ $emp->name }}</span>
-                                                    <span class="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded {{ $emp->status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700' }}">
+                                                    <span class="font-mono text-[9px] font-bold px-1 py-0.2 rounded {{ $emp->status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700' }}">
                                                         #{{ $emp->id }}
                                                     </span>
                                                     <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border {{ $emp->role_badge_class }}">
                                                         {{ $emp->role_label }}
                                                     </span>
-                                                    @if($emp->is_on_duty)
-                                                        <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shadow-2xs" title="Sedang bertugas sebagai CS jaga / piket">
-                                                            🟢 Jaga CS
-                                                        </span>
-                                                    @endif
                                                 </div>
                                                 <!-- Baris 2: Jabatan / Posisi -->
-                                                <div class="text-[11px] font-medium text-slate-600 dark:text-slate-400 leading-tight">
+                                                <div class="text-[10px] font-medium text-slate-600 dark:text-slate-400 leading-tight">
                                                     {{ $emp->position }}
                                                 </div>
-                                                <!-- Baris 3: No. Telepon & Telegram -->
-                                                <div class="flex items-center gap-2 text-[10px] text-slate-400 dark:text-slate-500 font-mono leading-tight flex-wrap">
-                                                    @if($emp->phone)
-                                                        <span>{{ $emp->phone }}</span>
-                                                    @endif
-                                                    @if($emp->telegram_username || $emp->telegram_user_id)
-                                                        <span class="text-sky-600 dark:text-sky-400 font-semibold" title="Telegram User ID: {{ $emp->telegram_user_id }}">
-                                                            ✈️ {{ $emp->telegram_username ? '@'.$emp->telegram_username : 'ID: '.$emp->telegram_user_id }}
-                                                        </span>
-                                                    @endif
-                                                </div>
+                                                <!-- Baris 3: No. Telepon -->
+                                                @if($emp->phone)
+                                                    <div class="text-[9px] text-slate-400 dark:text-slate-500 font-mono leading-tight">
+                                                        {{ $emp->phone }}
+                                                    </div>
+                                                @endif
                                             </div>
                                         </div>
                                     </td>
 
                                     <!-- Gaji Pokok -->
-                                    <td class="px-3.5 py-3 whitespace-nowrap font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
+                                    <td class="px-2 py-2 whitespace-nowrap font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
                                         {{ $emp->formatted_base_salary }}
                                     </td>
 
                                     <!-- Tunjangan -->
-                                    <td class="px-3.5 py-3 whitespace-nowrap text-xs">
+                                    <td class="px-2 py-2 whitespace-nowrap text-xs">
                                         @if($emp->total_allowance > 0)
                                             <div class="space-y-0.5">
                                                 <span class="font-mono font-bold text-teal-700 dark:text-teal-300">
                                                     {{ $emp->formatted_total_allowance }}
                                                 </span>
-                                                <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[130px]" title="{{ $emp->applicable_allowances->pluck('name')->implode(', ') }}">
+                                                <div class="text-[9px] text-slate-500 dark:text-slate-400 truncate max-w-[95px]" title="{{ $emp->applicable_allowances->pluck('name')->implode(', ') }}">
                                                     {{ $emp->applicable_allowances->pluck('name')->implode(', ') }}
                                                 </div>
                                             </div>
@@ -710,63 +691,63 @@
                                     </td>
 
                                     <!-- Poin Kinerja -->
-                                    <td class="px-3.5 py-3 whitespace-nowrap text-xs">
-                                        <div class="inline-flex items-center gap-1.5">
-                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800 text-[11px] shadow-2xs">
+                                    <td class="px-2 py-2 whitespace-nowrap text-xs">
+                                        <div class="inline-flex items-center gap-1">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800 text-[10px] shadow-2xs">
                                                 ⭐ {{ $emp->current_points }} Poin
                                             </span>
                                             <button 
                                                 type="button" 
                                                 @click="openPointsModal({{ Js::from($emp) }})" 
-                                                class="p-1 rounded-lg text-amber-600 hover:text-amber-700 dark:text-amber-400 hover:bg-amber-100/70 dark:hover:bg-amber-900/50 transition-colors cursor-pointer" 
+                                                class="p-0.5 rounded text-amber-600 hover:text-amber-700 dark:text-amber-400 hover:bg-amber-100/70 dark:hover:bg-amber-900/50 transition-colors cursor-pointer" 
                                                 title="Kelola Poin Bonus"
                                             >
                                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
                                             </button>
                                         </div>
-                                        <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono flex items-center gap-1.5 flex-wrap">
-                                            <span>@ Rp {{ number_format($emp->rate_per_point, 0, ',', '.') }}/poin</span>
+                                        <div class="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono flex items-center gap-1 flex-wrap">
+                                            <span>@ Rp {{ number_format($emp->rate_per_point, 0, ',', '.') }}/pt</span>
                                             @if($emp->current_points >= 200)
-                                                <span class="inline-block px-1.5 py-0.2 rounded-md bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-bold text-[9px]">{{ $emp->tier_label }}</span>
+                                                <span class="inline-block px-1 py-0.2 rounded bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-bold text-[9px]" title="{{ $emp->tier_label }}">{{ $emp->tier_name }}</span>
                                             @endif
                                             @if(!$emp->claim_bonus)
-                                                <span class="inline-block px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold text-[9px]" title="Poin disimpan (tidak diklaim bulan ini)">💤 Simpan</span>
+                                                <span class="inline-block px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold text-[9px]" title="Poin disimpan (tidak diklaim bulan ini)">💤 Simpan</span>
                                             @else
-                                                <span class="inline-block px-1.5 py-0.2 rounded-md bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[9px]" title="Poin akan dicairkan saat gajian">⚡ Klaim</span>
+                                                <span class="inline-block px-1 py-0.2 rounded bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[9px]" title="Poin akan dicairkan saat gajian">⚡ Klaim</span>
                                             @endif
                                         </div>
                                     </td>
 
                                     <!-- Bonus Poin -->
-                                    <td class="px-3.5 py-3 whitespace-nowrap font-mono font-bold text-amber-600 dark:text-amber-400 text-xs">
+                                    <td class="px-2 py-2 whitespace-nowrap font-mono font-bold text-amber-600 dark:text-amber-400 text-xs">
                                         {{ $emp->formatted_bonus_salary }}
                                     </td>
 
                                     <!-- Total Gaji -->
-                                    <td class="px-3.5 py-3 whitespace-nowrap text-right font-mono font-extrabold text-xs">
-                                        <span class="inline-block px-2 py-0.5 rounded-lg text-emerald-700 dark:text-emerald-400 bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 shadow-2xs">
+                                    <td class="px-2 py-2 whitespace-nowrap text-right font-mono font-extrabold text-xs">
+                                        <span class="inline-block px-1.5 py-0.5 rounded-md text-emerald-700 dark:text-emerald-400 bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 shadow-2xs text-[11px]">
                                             {{ $emp->formatted_total_salary }}
                                         </span>
                                     </td>
 
                                     <!-- Jatuh Tempo -->
-                                    <td class="px-3.5 py-3 whitespace-nowrap text-center text-xs">
-                                        <div class="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                                    <td class="px-2 py-2 whitespace-nowrap text-center text-xs">
+                                        <div class="font-bold text-slate-800 dark:text-slate-200 text-[11px]">
                                             Tgl {{ $emp->pay_day }} {{ now()->translatedFormat('M') }}
                                         </div>
                                         <div class="mt-0.5">
                                             @if($isPaid)
-                                                <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-300/80 dark:border-emerald-800">
-                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                                <span class="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-full border border-emerald-300/80 dark:border-emerald-800">
+                                                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
                                                     Lunas ({{ $paidDate ? \Carbon\Carbon::parse($paidDate)->translatedFormat('d M') : 'Bulan ini' }})
                                                 </span>
                                             @elseif($isDue)
-                                                <span class="inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-300/80 dark:border-amber-800 animate-pulse">
+                                                <span class="inline-flex items-center gap-1 text-[9px] font-bold text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.2 rounded-full border border-amber-300/80 dark:border-amber-800 animate-pulse">
                                                     <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                                     Jatuh Tempo!
                                                 </span>
                                             @else
-                                                <span class="inline-flex items-center text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                                <span class="inline-flex items-center text-[9px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded-full border border-slate-200 dark:border-slate-700">
                                                     Belum dibayar
                                                 </span>
                                             @endif
@@ -774,37 +755,37 @@
                                     </td>
 
                                     <!-- Akun Pembayaran -->
-                                    <td class="px-3.5 py-3 whitespace-nowrap text-xs">
-                                        <div class="inline-flex items-center gap-1.5 max-w-full">
-                                            <span class="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
+                                    <td class="px-2 py-2 whitespace-nowrap text-xs">
+                                        <div class="inline-flex items-center gap-1 max-w-[110px]">
+                                            <span class="font-mono text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
                                                 {{ $emp->assetAccount->code ?? '1001' }}
                                             </span>
-                                            <span class="truncate text-slate-700 dark:text-slate-300 font-medium text-xs" title="{{ $emp->assetAccount->name ?? 'Kas Operasional' }}">
+                                            <span class="truncate text-slate-700 dark:text-slate-300 font-medium text-[11px]" title="{{ $emp->assetAccount->name ?? 'Kas Operasional' }}">
                                                 {{ $emp->assetAccount->name ?? 'Kas Operasional' }}
                                             </span>
                                         </div>
                                     </td>
 
                                     <!-- Aksi (Tombol Edit & Hapus di atas, Tombol Bayar di bawah) -->
-                                    <td class="px-3 py-3 whitespace-nowrap text-center text-xs">
+                                    <td class="px-2 py-2 whitespace-nowrap text-center text-xs">
                                         <div class="inline-flex flex-col items-center justify-center gap-1">
                                             <div class="flex items-center justify-center gap-1">
                                                 <button 
                                                     type="button" 
                                                     @click="openEditModal({{ Js::from($emp) }})" 
-                                                    class="inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border border-slate-200 hover:border-blue-300 dark:border-slate-700 transition-all shadow-2xs cursor-pointer"
+                                                    class="inline-flex items-center justify-center w-6 h-6 rounded-md text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border border-slate-200 hover:border-blue-300 dark:border-slate-700 transition-all shadow-2xs cursor-pointer"
                                                     title="Edit Data Karyawan"
                                                 >
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                                                 </button>
 
                                                 <button 
                                                     type="button" 
                                                     @click="openDeleteModal({{ Js::from($emp) }})" 
-                                                    class="inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border border-slate-200 hover:border-rose-300 dark:border-slate-700 transition-all shadow-2xs cursor-pointer"
+                                                    class="inline-flex items-center justify-center w-6 h-6 rounded-md text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border border-slate-200 hover:border-rose-300 dark:border-slate-700 transition-all shadow-2xs cursor-pointer"
                                                     title="Hapus Karyawan"
                                                 >
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                                 </button>
                                             </div>
 
@@ -812,10 +793,10 @@
                                                 <button 
                                                     type="button" 
                                                     @click="openPayModal({{ Js::from($emp) }})" 
-                                                    class="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-xs shadow-emerald-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                                                    class="w-full inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-xs shadow-emerald-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                                                     title="Input Absensi & Hitung Slip Gaji"
                                                 >
-                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                                                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                                                     <span>Bayar</span>
                                                 </button>
                                             @else
@@ -823,17 +804,17 @@
                                                     <a 
                                                         href="{{ route('employees.payroll.slip', $emp->latestPayroll) }}" 
                                                         target="_blank"
-                                                        class="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 shadow-2xs hover:bg-teal-100 transition-all cursor-pointer"
+                                                        class="w-full inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 shadow-2xs hover:bg-teal-100 transition-all cursor-pointer"
                                                         title="Lihat / Cetak Lembar Slip Gaji Excel"
                                                     >
-                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                                        <span>Slip Gaji</span>
+                                                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                                        <span>Slip</span>
                                                     </a>
                                                 @else
                                                     <button 
                                                         type="button" 
                                                         @click="openPayModal({{ Js::from($emp) }})" 
-                                                        class="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-all cursor-pointer"
+                                                        class="w-full inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-all cursor-pointer"
                                                         title="Buat Lembar Slip Gaji Baru"
                                                     >
                                                         <span>+ Slip</span>
@@ -846,7 +827,7 @@
                             @empty
                                 <!-- Kasus 1: Database Kosong -->
                                 <tr>
-                                    <td colspan="8" class="px-6 py-14 text-center">
+                                    <td colspan="9" class="px-6 py-14 text-center">
                                         <div class="max-w-md mx-auto flex flex-col items-center">
                                             <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3.5 border border-amber-200/80 dark:border-amber-800/60 shadow-xs">
                                                 <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
@@ -871,7 +852,7 @@
                             <!-- Kasus 2: Data Ada di Database, tetapi Tidak Ditemukan pada Filter / Pencarian Tertentu -->
                             @if($employees->isNotEmpty())
                                 <tr x-show="visibleCount === 0" x-cloak>
-                                    <td colspan="8" class="px-6 py-12 text-center">
+                                    <td colspan="9" class="px-6 py-12 text-center">
                                         <div class="max-w-md mx-auto flex flex-col items-center">
                                             <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-700 shadow-xs">
                                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1021,22 +1002,9 @@
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">No. Kontak / HP Telegram (Autentikasi)</label>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">No. Kontak / HP</label>
                                     <input type="text" name="phone" x-model="form.phone" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="08123456789">
-                                    <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">📱 Nomor HP aktif untuk autentikasi bot Telegram / n8n</span>
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Telegram User ID (Opsional)</label>
-                                    <input type="text" name="telegram_user_id" x-model="form.telegram_user_id" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="Opsional (otomatis terisi)">
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Username Telegram</label>
-                                    <div class="relative">
-                                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-slate-400">@</span>
-                                        <input type="text" name="telegram_username" x-model="form.telegram_username" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white pl-7 pr-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="username_tg">
-                                    </div>
+                                    <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">📱 Nomor HP aktif karyawan</span>
                                 </div>
 
                                 <div>
@@ -1099,17 +1067,6 @@
                                         <label class="relative inline-flex items-center cursor-pointer">
                                             <input type="hidden" name="claim_bonus" value="0">
                                             <input type="checkbox" name="claim_bonus" value="1" x-model="form.claim_bonus" class="sr-only peer">
-                                            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
-                                        </label>
-                                    </div>
-                                    <div class="flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                                        <div>
-                                            <span class="text-xs font-bold text-slate-800 dark:text-slate-200 block">CS Jaga / Piket Hari Ini</span>
-                                            <span class="text-[10px] text-slate-500 dark:text-slate-400">Penanda CS yang sedang berjaga (menentukan trigger bonus perusahaan)</span>
-                                        </div>
-                                        <label class="relative inline-flex items-center cursor-pointer">
-                                            <input type="hidden" name="is_on_duty" value="0">
-                                            <input type="checkbox" name="is_on_duty" value="1" x-model="form.is_on_duty" class="sr-only peer">
                                             <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
                                         </label>
                                     </div>

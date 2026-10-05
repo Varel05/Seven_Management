@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Material;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -161,12 +162,6 @@ class WebhookInfoEndpointsTest extends TestCase
             ->assertJsonPath('is_staff', true)
             ->assertJsonPath('is_above_staff', false)
             ->assertJsonPath('employee.id', $employee->id);
-
-        $this->assertDatabaseHas('employees', [
-            'id' => $employee->id,
-            'telegram_user_id' => '99887766',
-            'telegram_username' => 'budi_cs',
-        ]);
     }
 
     public function test_identify_endpoint_authenticates_owner_from_config_or_role(): void
@@ -293,5 +288,60 @@ class WebhookInfoEndpointsTest extends TestCase
         $this->assertStringContainsString('Bonus Disiplin', $message);
         $this->assertStringContainsString('Bonus Penjualan', $message);
         $this->assertStringContainsString('Total Take Home Pay', $message);
+    }
+
+    public function test_webhook_tailor_payroll_rates(): void
+    {
+        config(['services.telegram.owner_phones' => ['08111111111']]);
+
+        Material::firstOrCreate(
+            ['code' => 'LAB-JHT-REG'],
+            ['name' => 'Upah Penjahit Jas Reguler', 'category' => 'direct_labor', 'unit' => 'pcs', 'standard_cost' => 50000, 'stock' => 0, 'min_stock' => 0]
+        );
+
+        $response = $this->postJson('/api/webhook/tailor-payroll', [
+            'action' => 'rates',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', true);
+        $response->assertJsonPath('action', 'rates');
+        $this->assertStringContainsString('Tarif Upah Penjahit di HPP', $response->json('message'));
+        $this->assertStringContainsString('LAB-JHT-REG', $response->json('message'));
+    }
+
+    public function test_webhook_tailor_payroll_create_and_calculate(): void
+    {
+        config(['services.telegram.owner_phones' => ['08111111111']]);
+
+        $response = $this->postJson('/api/webhook/tailor-payroll', [
+            'tailor_name' => 'Adriana',
+            'jas_reguler' => 10,
+            'vest' => 5,
+            'bon' => 150000,
+            'bon_description' => 'Kasbon jajan',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', true);
+        $this->assertEquals(15, $response->json('total_pieces'));
+        $this->assertEquals(685000, $response->json('total_wage'));
+        $this->assertEquals(150000, $response->json('total_bon'));
+        $this->assertEquals(535000, $response->json('take_home_pay'));
+
+        $message = $response->json('message');
+        $this->assertStringContainsString('SLIP UPAH PENJAHIT (BORONGAN)', $message);
+        $this->assertStringContainsString('Penjahit Adriana', $message);
+        $this->assertStringContainsString('10 pcs x Rp 50.000', $message);
+        $this->assertStringContainsString('5 pcs x Rp 37.000', $message);
+        $this->assertStringContainsString('Jumlah Bon', $message);
+        $this->assertStringContainsString('TAKE HOME PAY', $message);
+        $this->assertStringContainsString('535.000', $message);
     }
 }
