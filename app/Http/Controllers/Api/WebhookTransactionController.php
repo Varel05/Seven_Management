@@ -2254,6 +2254,14 @@ class WebhookTransactionController extends Controller
      */
     public function recordMaterialRestock(Request $request)
     {
+        // Normalisasi alias parameter dari webhook / n8n
+        if (! $request->filled('material_code') && $request->filled('code')) {
+            $request->merge(['material_code' => $request->input('code')]);
+        }
+        if (! $request->filled('account_code') && $request->filled('payment_account')) {
+            $request->merge(['account_code' => $request->input('payment_account')]);
+        }
+
         $validated = $request->validate([
             'material_code' => 'required_without:material_id|string',
             'material_id' => 'nullable|exists:materials,id',
@@ -2303,7 +2311,7 @@ class WebhookTransactionController extends Controller
 
         // Akun Kas / Bank pembayaran
         $accountSearch = strtolower(trim($validated['account_code'] ?? '1001'));
-        if (str_contains($accountSearch, 'bank') || $accountSearch === '1002') {
+        if (str_contains($accountSearch, 'bank') || str_contains($accountSearch, 'bca') || $accountSearch === '1002') {
             $targetCode = '1002';
         } else {
             $targetCode = '1001';
