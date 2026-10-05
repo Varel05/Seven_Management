@@ -94,11 +94,12 @@
     <!-- SIDEBAR NAVIGASI (Fixed di Samping Bawah Top Header) -->
     <!-- Mode Lebar: w-64 (Icon + Teks) | Mode Ciut: w-16 (Hanya Icon) -->
     <!-- ========================================================================= -->
-    <aside :class="[
+    <aside id="app-sidebar"
+           :class="[
                mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
                sidebarOpen ? 'md:w-64' : 'md:w-16'
            ]"
-           class="fixed top-16 bottom-0 left-0 z-40 w-64 bg-gradient-to-b from-emerald-950 via-emerald-950 to-slate-950 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 border-r border-emerald-800/50 dark:border-slate-800 shadow-2xl flex flex-col justify-between transition-all duration-300 ease-in-out">
+           class="fixed top-16 bottom-0 left-0 z-40 w-64 md:w-16 bg-gradient-to-b from-emerald-950 via-emerald-950 to-slate-950 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 border-r border-emerald-800/50 dark:border-slate-800 shadow-2xl flex flex-col justify-between transition-all duration-300 ease-in-out">
         
         <!-- Bagian Navigasi Menu Terkategori -->
         <div class="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar py-3">
@@ -118,13 +119,13 @@
                 <!-- ============================================================= -->
                 <div class="space-y-1">
                     <!-- Heading Kategori Manajemen -->
-                    <div class="px-2 py-1 flex items-center" :class="sidebarOpen ? 'justify-between' : 'md:justify-center justify-between'">
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block text-[10px] font-black uppercase tracking-wider text-emerald-400 dark:text-emerald-500 truncate">
+                    <div class="px-2 py-1 flex items-center justify-between md:justify-center sidebar-category-header" :class="sidebarOpen ? 'justify-between' : 'md:justify-center justify-between'">
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label text-[10px] font-black uppercase tracking-wider text-emerald-400 dark:text-emerald-500 truncate">
                             Manajemen
                         </span>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                         <!-- Mini Divider ketika sidebar ciut -->
-                        <div :class="sidebarOpen ? 'md:hidden' : 'md:block'" class="hidden w-6 h-0.5 bg-emerald-700/50 rounded-full my-1.5" title="Manajemen"></div>
+                        <div :class="sidebarOpen ? 'md:hidden' : 'md:block'" class="hidden md:block sidebar-mini-divider w-6 h-0.5 bg-emerald-700/50 rounded-full my-1.5" title="Manajemen"></div>
                     </div>
 
                     <!-- 1. Ikhtisar Keuangan -->
@@ -132,7 +133,7 @@
                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                         </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block truncate">Ikhtisar Keuangan</span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Ikhtisar Keuangan</span>
                     </x-sidebar-link>
 
                     <!-- 2. Retail & Stok Baju -->
@@ -140,7 +141,7 @@
                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                         </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block truncate">Retail & Stok Baju</span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Retail & Stok Baju</span>
                     </x-sidebar-link>
 
                     <!-- 3. Karyawan & Payroll -->
@@ -148,7 +149,7 @@
                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block truncate">Karyawan & Payroll</span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Karyawan & Payroll</span>
                     </x-sidebar-link>
                 </div>
 
@@ -157,13 +158,13 @@
                 <!-- ============================================================= -->
                 <div class="space-y-1">
                     <!-- Heading Kategori Produksi -->
-                    <div class="px-2 py-1 flex items-center" :class="sidebarOpen ? 'justify-between' : 'md:justify-center justify-between'">
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block text-[10px] font-black uppercase tracking-wider text-amber-400 dark:text-amber-500 truncate">
+                    <div class="px-2 py-1 flex items-center justify-between md:justify-center sidebar-category-header" :class="sidebarOpen ? 'justify-between' : 'md:justify-center justify-between'">
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label text-[10px] font-black uppercase tracking-wider text-amber-400 dark:text-amber-500 truncate">
                             Produksi & HPP
                         </span>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
                         <!-- Mini Divider ketika sidebar ciut -->
-                        <div :class="sidebarOpen ? 'md:hidden' : 'md:block'" class="hidden w-6 h-0.5 bg-amber-500/50 rounded-full my-1.5" title="Produksi & HPP"></div>
+                        <div :class="sidebarOpen ? 'md:hidden' : 'md:block'" class="hidden md:block sidebar-mini-divider w-6 h-0.5 bg-amber-500/50 rounded-full my-1.5" title="Produksi & HPP"></div>
                     </div>
 
                     <!-- 4. Jas Custom & AI -->
@@ -171,7 +172,7 @@
                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
                         </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block truncate">Jas Custom & AI</span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Jas Custom & AI</span>
                     </x-sidebar-link>
 
                     <!-- 5. Stok Bahan Baku -->
@@ -179,7 +180,7 @@
                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block truncate">Stok Bahan Baku</span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Stok Bahan Baku</span>
                     </x-sidebar-link>
 
                     <!-- 6. Kartu HPP & BOM -->
@@ -187,7 +188,7 @@
                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                         </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block truncate">Kartu HPP (BOM)</span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Kartu HPP (BOM)</span>
                     </x-sidebar-link>
 
                     <!-- 7. Produksi Pakaian (Batch & Potong Bahan) -->
@@ -195,7 +196,7 @@
                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block truncate">Produksi Baju</span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Produksi Baju</span>
                     </x-sidebar-link>
 
                     <!-- 8. Upah Penjahit (Borongan & Kasbon) -->
@@ -203,7 +204,7 @@
                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                         </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block truncate">Upah Penjahit</span>
+                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Upah Penjahit</span>
                     </x-sidebar-link>
                 </div>
 
@@ -214,13 +215,13 @@
         <div class="p-2 border-t border-emerald-800/40 dark:border-slate-800/60 bg-emerald-950/40 dark:bg-slate-950/40 hidden md:block">
             <button @click="toggleSidebar()" 
                     type="button" 
-                    class="w-full flex items-center rounded-xl text-xs font-semibold text-emerald-200 hover:text-white hover:bg-emerald-800/40 dark:hover:bg-slate-800 transition-colors p-2.5 cursor-pointer"
+                    class="w-full flex items-center rounded-xl text-xs font-semibold text-emerald-200 hover:text-white hover:bg-emerald-800/40 dark:hover:bg-slate-800 transition-colors p-2.5 cursor-pointer justify-center sidebar-toggle-btn"
                     :class="sidebarOpen ? 'justify-start gap-2.5' : 'justify-center'"
                     :title="sidebarOpen ? 'Ciutkan Sidebar' : 'Perluas Sidebar'">
-                <svg :class="sidebarOpen ? '' : 'rotate-180'" class="w-4 h-4 transition-transform duration-300 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg :class="sidebarOpen ? '' : 'rotate-180'" class="w-4 h-4 transition-transform duration-300 text-emerald-400 shrink-0 rotate-180 sidebar-toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                 </svg>
-                <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block text-[11px] font-bold tracking-tight truncate">Ciutkan Menu</span>
+                <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label text-[11px] font-bold tracking-tight truncate">Ciutkan Menu</span>
             </button>
         </div>
 
