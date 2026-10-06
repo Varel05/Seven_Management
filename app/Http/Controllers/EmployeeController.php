@@ -64,27 +64,32 @@ class EmployeeController extends Controller
             'role' => ['nullable', Rule::enum(EmployeeRole::class)],
             'position' => 'required|string|max:100',
             'phone' => 'nullable|string|max:50',
-            'base_salary' => 'required|numeric|min:0',
+            'base_salary' => 'nullable|numeric|min:0',
             'daily_rate' => 'nullable|numeric|min:0',
             'discipline_rate' => 'nullable|numeric|min:0',
             'holiday_rate' => 'nullable|numeric|min:0',
             'current_points' => 'nullable|integer|min:0',
             'rate_per_point' => 'nullable|numeric|min:0',
-            'pay_day' => 'required|integer|min:1|max:31',
+            'pay_day' => 'nullable|integer|min:1|max:31',
             'asset_account_id' => 'nullable|exists:accounts,id',
             'status' => 'required|in:active,inactive',
             'claim_bonus' => 'nullable|boolean',
         ]);
 
         $validated['role'] = $validated['role'] ?? EmployeeRole::Staff->value;
+        $validated['pay_day'] = (int) ($validated['pay_day'] ?? 25);
+        $validated['base_salary'] = (float) ($validated['base_salary'] ?? 0);
+        $validated['daily_rate'] = (float) ($validated['daily_rate'] ?? 0);
+        $validated['discipline_rate'] = (float) ($validated['discipline_rate'] ?? 0);
+        $validated['holiday_rate'] = (float) ($validated['holiday_rate'] ?? 0);
         $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
         $tierRate = Employee::getRateForPoints($validated['current_points']);
         $validated['rate_per_point'] = $tierRate > 0
             ? $tierRate
             : (float) ($validated['rate_per_point'] ?? 0);
-        if ($request->has('claim_bonus')) {
-            $validated['claim_bonus'] = $request->boolean('claim_bonus');
-        }
+        $validated['claim_bonus'] = $request->has('claim_bonus')
+            ? $request->boolean('claim_bonus')
+            : true;
 
         Employee::create($validated);
 
@@ -101,28 +106,67 @@ class EmployeeController extends Controller
             'role' => ['nullable', Rule::enum(EmployeeRole::class)],
             'position' => 'required|string|max:100',
             'phone' => 'nullable|string|max:50',
-            'base_salary' => 'required|numeric|min:0',
+            'status' => 'required|in:active,inactive',
+            'pay_day' => 'nullable|integer|min:1|max:31',
+            'asset_account_id' => 'nullable|exists:accounts,id',
+            'base_salary' => 'nullable|numeric|min:0',
             'daily_rate' => 'nullable|numeric|min:0',
             'discipline_rate' => 'nullable|numeric|min:0',
             'holiday_rate' => 'nullable|numeric|min:0',
             'current_points' => 'nullable|integer|min:0',
             'rate_per_point' => 'nullable|numeric|min:0',
-            'pay_day' => 'required|integer|min:1|max:31',
-            'asset_account_id' => 'nullable|exists:accounts,id',
-            'status' => 'required|in:active,inactive',
             'claim_bonus' => 'nullable|boolean',
         ]);
 
-        $validated['current_points'] = (int) ($validated['current_points'] ?? 0);
-        $tierRate = Employee::getRateForPoints($validated['current_points']);
-        $validated['rate_per_point'] = $tierRate > 0
-            ? $tierRate
-            : (float) ($validated['rate_per_point'] ?? 0);
-        if ($request->has('claim_bonus')) {
-            $validated['claim_bonus'] = $request->boolean('claim_bonus');
+        $updateData = [
+            'name' => $validated['name'],
+            'position' => $validated['position'],
+            'phone' => $validated['phone'] ?? null,
+            'status' => $validated['status'],
+        ];
+
+        if (array_key_exists('role', $validated) && $validated['role'] !== null) {
+            $updateData['role'] = $validated['role'];
         }
 
-        $employee->update($validated);
+        if (array_key_exists('pay_day', $validated) && $validated['pay_day'] !== null) {
+            $updateData['pay_day'] = $validated['pay_day'];
+        }
+
+        if (array_key_exists('asset_account_id', $validated)) {
+            $updateData['asset_account_id'] = $validated['asset_account_id'];
+        }
+
+        // Field gaji hanya diupdate jika memang dikirimkan dalam request
+        if (array_key_exists('base_salary', $validated) && $validated['base_salary'] !== null) {
+            $updateData['base_salary'] = $validated['base_salary'];
+        }
+
+        if (array_key_exists('daily_rate', $validated)) {
+            $updateData['daily_rate'] = $validated['daily_rate'];
+        }
+
+        if (array_key_exists('discipline_rate', $validated)) {
+            $updateData['discipline_rate'] = $validated['discipline_rate'];
+        }
+
+        if (array_key_exists('holiday_rate', $validated)) {
+            $updateData['holiday_rate'] = $validated['holiday_rate'];
+        }
+
+        if (array_key_exists('current_points', $validated) && $validated['current_points'] !== null) {
+            $updateData['current_points'] = (int) $validated['current_points'];
+            $tierRate = Employee::getRateForPoints($updateData['current_points']);
+            $updateData['rate_per_point'] = $tierRate > 0
+                ? $tierRate
+                : (float) ($validated['rate_per_point'] ?? $employee->rate_per_point);
+        }
+
+        if ($request->has('claim_bonus')) {
+            $updateData['claim_bonus'] = $request->boolean('claim_bonus');
+        }
+
+        $employee->update($updateData);
 
         return redirect()->route('employees.index')->with('success', "Data karyawan '{$employee->name}' berhasil diperbarui.");
     }
@@ -269,9 +313,18 @@ class EmployeeController extends Controller
 
         $journalEntry = $employee->executePayrollPosting($finalAmount, 'website', $payrollData);
 
+        $payroll = EmployeePayroll::where('journal_entry_id', $journalEntry->id)->first()
+            ?? $employee->latestPayroll;
+
         $formattedAmount = 'Rp '.number_format($finalAmount, 0, ',', '.');
 
-        return back()->with('success', "Gaji {$employee->name} periode {$periodLabel} sebesar {$formattedAmount} berhasil dibukukan ke akun Beban Gaji (5002). Ref: {$journalEntry->reference}");
+        if ($payroll) {
+            return redirect()->route('employees.payroll.slip', ['payroll' => $payroll, 'auto_pdf' => 1])
+                ->with('success', "Slip gaji {$employee->name} periode {$periodLabel} sebesar {$formattedAmount} berhasil dibukukan (Ref: {$journalEntry->reference}) dan slip PDF otomatis dibuat.");
+        }
+
+        return redirect()->route('employees.index')
+            ->with('success', "Gaji {$employee->name} periode {$periodLabel} sebesar {$formattedAmount} berhasil dibukukan ke akun Beban Gaji (5002). Ref: {$journalEntry->reference}");
     }
 
     /**
@@ -282,6 +335,14 @@ class EmployeeController extends Controller
         $payroll->load(['employee.assetAccount', 'journalEntry']);
 
         return view('employees.slip', compact('payroll'));
+    }
+
+    /**
+     * Redirect langsung untuk memicu pembuatan dan pengunduhan file PDF slip gaji.
+     */
+    public function downloadPdf(EmployeePayroll $payroll)
+    {
+        return redirect()->route('employees.payroll.slip', ['payroll' => $payroll, 'auto_pdf' => 1]);
     }
 
     /**

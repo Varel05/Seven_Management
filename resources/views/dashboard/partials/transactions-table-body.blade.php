@@ -38,10 +38,10 @@
     @endphp
     <tr 
         x-show="isRowVisible({{ $trx->id }})"
-        class="hover:bg-emerald-50/40 dark:hover:bg-slate-800/40 transition-colors group"
+        class="{{ $trx->status === 'rejected' ? 'bg-slate-50/60 dark:bg-slate-900/30 opacity-75' : '' }} hover:bg-emerald-50/40 dark:hover:bg-slate-800/40 transition-colors group"
     >
         <!-- Tanggal -->
-        <td class="px-4 py-3.5 whitespace-nowrap text-xs text-slate-600 dark:text-slate-400">
+        <td class="px-3 py-2.5 whitespace-nowrap text-xs text-slate-600 dark:text-slate-400">
             <div class="font-semibold text-slate-900 dark:text-slate-200">
                 {{ $trx->date ? \Carbon\Carbon::parse($trx->date)->translatedFormat('d M Y') : '-' }}
             </div>
@@ -51,7 +51,7 @@
         </td>
 
         <!-- Referensi -->
-        <td class="px-4 py-3.5 whitespace-nowrap overflow-hidden max-w-[150px] lg:max-w-[180px]">
+        <td class="px-3 py-2.5 whitespace-nowrap overflow-hidden max-w-[130px] lg:max-w-[160px]">
             <span 
                 class="inline-block max-w-full truncate font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 align-middle"
                 title="{{ $trx->reference ?? '-' }}"
@@ -61,14 +61,14 @@
         </td>
 
         <!-- Keterangan Transaksi -->
-        <td class="px-4 py-3.5 text-slate-900 dark:text-slate-100 font-medium min-w-0">
+        <td class="px-3 py-2.5 text-slate-900 dark:text-slate-100 font-medium min-w-0">
             <div class="text-sm font-semibold truncate" title="{{ $trx->description }}">
                 {{ $trx->description }}
             </div>
         </td>
 
         <!-- Akun Terkait -->
-        <td class="px-4 py-3.5 whitespace-nowrap text-xs">
+        <td class="px-3 py-2.5 whitespace-nowrap text-xs">
             <div class="inline-flex items-center gap-1.5 max-w-full">
                 <span class="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
                     {{ $primaryAccountCode }}
@@ -80,7 +80,7 @@
         </td>
 
         <!-- Sumber -->
-        <td class="px-4 py-3.5 whitespace-nowrap text-xs">
+        <td class="px-2.5 py-2.5 whitespace-nowrap text-center text-xs">
             @if(str_starts_with(strtolower($trx->source ?? ''), 'telegram'))
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/15 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-300/80 dark:border-sky-800 shadow-2xs">
                     <svg class="w-3.5 h-3.5 text-sky-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
@@ -101,8 +101,12 @@
         </td>
 
         <!-- Nominal -->
-        <td class="px-4 py-3.5 whitespace-nowrap text-right font-mono font-extrabold text-sm">
-            @if($isExpense)
+        <td class="px-3 py-2.5 whitespace-nowrap text-right font-mono font-extrabold text-sm">
+            @if($trx->status === 'rejected')
+                <span class="inline-block px-2 py-0.5 rounded-lg text-slate-400 dark:text-slate-500 line-through bg-slate-100/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs" title="Transaksi dibatalkan (dikeluarkan dari buku besar aktif)">
+                    Rp {{ number_format($amount, 0, ',', '.') }}
+                </span>
+            @elseif($isExpense)
                 <span class="inline-block px-2 py-0.5 rounded-lg text-rose-700 dark:text-rose-400 bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/50 shadow-2xs">
                     - Rp {{ number_format($amount, 0, ',', '.') }}
                 </span>
@@ -114,14 +118,14 @@
         </td>
 
         <!-- Status -->
-        <td class="px-4 py-3.5 whitespace-nowrap text-center text-xs">
+        <td class="px-2.5 py-2.5 whitespace-nowrap text-center text-xs">
             @if($trx->status === 'verified')
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800">
                     ✓ Verified
                 </span>
             @elseif($trx->status === 'rejected')
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300/80 dark:border-rose-800">
-                    ✗ Rejected
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300/80 dark:border-rose-800" title="Transaksi dibatalkan / ditolak">
+                    ✗ Dibatalkan
                 </span>
             @else
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/80 dark:border-amber-800 animate-pulse">
@@ -130,17 +134,28 @@
             @endif
         </td>
 
-        <!-- Aksi / Audit Button -->
-        <td class="px-4 py-3.5 whitespace-nowrap text-center text-xs">
-            <button 
-                @click='openModal({!! $trxJson !!})' 
-                type="button" 
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border border-slate-200 hover:border-emerald-300 dark:border-slate-700 shadow-xs transition-all"
-                title="Buka rincian debit-kredit jurnal"
-            >
-                <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                Audit
-            </button>
+        <!-- Aksi / Audit & Batal Button -->
+        <td class="px-2 py-2.5 whitespace-nowrap text-center text-xs">
+            <div class="inline-flex items-center justify-center gap-1">
+                <button 
+                    @click='openModal({!! $trxJson !!})' 
+                    type="button" 
+                    class="inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-slate-300 dark:hover:text-emerald-400 dark:hover:bg-slate-700/80 border border-slate-200/90 hover:border-emerald-300 dark:border-slate-700 transition-all shadow-2xs"
+                    title="Audit / Rincian Jurnal"
+                >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                </button>
+                @if($trx->status !== 'rejected')
+                    <button 
+                        @click='openCancelModal({!! $trxJson !!})' 
+                        type="button" 
+                        class="inline-flex items-center justify-center w-7 h-7 rounded-lg text-rose-600 hover:text-white hover:bg-rose-600 dark:text-rose-400 dark:hover:bg-rose-600 dark:hover:text-white border border-rose-200/80 hover:border-rose-600 dark:border-rose-900/60 transition-all shadow-2xs"
+                        title="Batalkan Transaksi"
+                    >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                @endif
+            </div>
         </td>
     </tr>
 @empty

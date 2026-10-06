@@ -12,6 +12,8 @@ Route::get('/user', function (Request $request) {
 Route::middleware('webhook.secret')->group(function () {
     Route::get('/webhook/transactions', [WebhookTransactionController::class, 'index']);
     Route::post('/webhook/transaction', [WebhookTransactionController::class, 'store']);
+    Route::match(['get', 'post'], '/webhook/transaction/cancel', [WebhookTransactionController::class, 'cancelTransaction']);
+    Route::match(['get', 'post'], '/webhook/transactions/cancel', [WebhookTransactionController::class, 'cancelTransaction']);
 
     // Recurring & Subscription Endpoints
     Route::match(['get', 'post'], '/webhook/recurring/due', [WebhookTransactionController::class, 'dueRecurring']);

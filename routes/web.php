@@ -14,6 +14,8 @@ use App\Http\Controllers\RecurringTransactionController;
 use App\Http\Controllers\RetailController;
 use App\Http\Controllers\TailorPayrollController;
 use App\Models\JournalEntry;
+use App\Services\TransactionCancellationService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -28,18 +30,28 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Tindakan Verifikasi / Tolak Jurnal Akuntansi dari Dashboard
+    // Tindakan Verifikasi / Tolak / Batalkan Jurnal Akuntansi dari Dashboard
     Route::patch('/journal-entries/{journalEntry}/verify', function (JournalEntry $journalEntry) {
         $journalEntry->update(['status' => 'verified']);
 
         return back()->with('success', 'Transaksi '.$journalEntry->reference.' berhasil diverifikasi ke buku besar.');
     })->name('journal-entries.verify');
 
-    Route::patch('/journal-entries/{journalEntry}/reject', function (JournalEntry $journalEntry) {
-        $journalEntry->update(['status' => 'rejected']);
+    Route::patch('/journal-entries/{journalEntry}/reject', function (JournalEntry $journalEntry, Request $request, TransactionCancellationService $cancellationService) {
+        $reason = $request->input('reason', 'Ditolak via Dashboard Web');
+        $actor = auth()->user()?->name ?? 'Admin Web';
+        $result = $cancellationService->cancel($journalEntry, $reason, $actor);
 
-        return back()->with('warning', 'Transaksi '.$journalEntry->reference.' ditandai ditolak (rejected).');
+        return back()->with('warning', $result['message']);
     })->name('journal-entries.reject');
+
+    Route::post('/journal-entries/{journalEntry}/cancel', function (JournalEntry $journalEntry, Request $request, TransactionCancellationService $cancellationService) {
+        $reason = $request->input('reason', 'Dibatalkan via Dashboard Web');
+        $actor = auth()->user()?->name ?? 'Admin Web';
+        $result = $cancellationService->cancel($journalEntry, $reason, $actor);
+
+        return back()->with('warning', $result['message']);
+    })->name('journal-entries.cancel');
 
     // Ekspor Buku Jurnal Transaksi Bulanan ke Excel (.xls)
     Route::get('/journal-entries/export-monthly', [JournalExportController::class, 'exportMonthly'])
@@ -64,6 +76,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
     Route::post('/employees/{employee}/pay', [EmployeeController::class, 'pay'])->name('employees.pay');
     Route::get('/employees/payroll/{payroll}/slip', [EmployeeController::class, 'showSlip'])->name('employees.payroll.slip');
+    Route::get('/employees/payroll/{payroll}/pdf', [EmployeeController::class, 'downloadPdf'])->name('employees.payroll.pdf');
     Route::get('/employees/{employee}/slip-preview', [EmployeeController::class, 'previewSlip'])->name('employees.slip.preview');
 
     // Manajemen Tunjangan Pegawai

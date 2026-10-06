@@ -251,8 +251,10 @@ class JournalExportController extends Controller
             foreach ($sortedLines as $idx => $line) {
                 $debit = (float) $line->debit;
                 $credit = (float) $line->credit;
-                $totalDebit += $debit;
-                $totalCredit += $credit;
+                if ($trx->status !== 'rejected') {
+                    $totalDebit += $debit;
+                    $totalCredit += $credit;
+                }
 
                 $accCode = $line->account->code ?? '-';
                 $rawAccName = $line->account->name ?? '-';
@@ -296,7 +298,7 @@ class JournalExportController extends Controller
         $balanceStyleId = $isBalanced ? 13 : 14;
 
         $sheetData .= '    <row r="'.$rowIdx.'" ht="24" customHeight="1">'."\n"
-            .'      <c r="A'.$rowIdx.'" s="11" t="inlineStr"><is><t>TOTAL MUTASI JURNAL :</t></is></c>'."\n"
+            .'      <c r="A'.$rowIdx.'" s="11" t="inlineStr"><is><t>TOTAL MUTASI JURNAL (AKTIF) :</t></is></c>'."\n"
             .'      <c r="B'.$rowIdx.'" s="11"/>'."\n"
             .'      <c r="C'.$rowIdx.'" s="11"/>'."\n"
             .'      <c r="D'.$rowIdx.'" s="11"/>'."\n"

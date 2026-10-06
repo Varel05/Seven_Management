@@ -89,6 +89,36 @@ class EmployeePayrollTest extends TestCase
         ]);
     }
 
+    public function test_user_can_create_employee_with_non_salary_info_only(): void
+    {
+        $user = User::factory()->create();
+
+        // Form tambah baru hanya mengirim data non-gaji (nama, role, posisi, phone, status, pay_day, asset_account_id)
+        $response = $this->actingAs($user)->post('/employees', [
+            'name' => 'Rina Wijaya',
+            'role' => 'cs',
+            'position' => 'Customer Service',
+            'phone' => '087711223344',
+            'status' => 'active',
+            'pay_day' => 25,
+            'asset_account_id' => $this->assetAccount->id,
+        ]);
+
+        $response->assertRedirect('/employees');
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseHas('employees', [
+            'name' => 'Rina Wijaya',
+            'role' => 'cs',
+            'position' => 'Customer Service',
+            'phone' => '087711223344',
+            'base_salary' => 0,
+            'daily_rate' => 0,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+    }
+
     public function test_user_can_update_employee_details(): void
     {
         $user = User::factory()->create();
@@ -122,6 +152,57 @@ class EmployeePayrollTest extends TestCase
             'position' => 'Kepala Gudang',
             'base_salary' => 5500000,
         ]);
+    }
+
+    public function test_user_can_update_employee_non_salary_info_without_sending_salary_fields(): void
+    {
+        $user = User::factory()->create();
+
+        $employee = Employee::create([
+            'name' => 'Dewi Anggraini',
+            'role' => 'staff',
+            'position' => 'Staff Administrasi',
+            'phone' => '08111222333',
+            'base_salary' => 4500000,
+            'daily_rate' => 150000,
+            'discipline_rate' => 15000,
+            'holiday_rate' => 60000,
+            'current_points' => 250,
+            'rate_per_point' => 1000,
+            'pay_day' => 25,
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
+        ]);
+
+        // Form edit hanya mengirim informasi non-gaji (nama, role, posisi, phone, status, pay_day, asset_account_id)
+        $response = $this->actingAs($user)->put("/employees/{$employee->id}", [
+            'name' => 'Dewi Anggraini S.E.',
+            'role' => 'supervisor',
+            'position' => 'Supervisor Administrasi & Keuangan',
+            'phone' => '08999888777',
+            'status' => 'active',
+            'pay_day' => 26,
+            'asset_account_id' => $this->assetAccount->id,
+        ]);
+
+        $response->assertRedirect('/employees');
+        $response->assertSessionHas('success');
+
+        // Pastikan informasi non-gaji terupdate
+        $fresh = $employee->fresh();
+        $this->assertEquals('Dewi Anggraini S.E.', $fresh->name);
+        $this->assertEquals('supervisor', $fresh->role->value ?? $fresh->role);
+        $this->assertEquals('Supervisor Administrasi & Keuangan', $fresh->position);
+        $this->assertEquals('08999888777', $fresh->phone);
+        $this->assertEquals(26, $fresh->pay_day);
+
+        // Pastikan data gaji lama tetap aman dan tidak terhapus
+        $this->assertEquals(4500000, (float) $fresh->base_salary);
+        $this->assertEquals(150000, (float) $fresh->daily_rate);
+        $this->assertEquals(15000, (float) $fresh->discipline_rate);
+        $this->assertEquals(60000, (float) $fresh->holiday_rate);
+        $this->assertEquals(250, (int) $fresh->current_points);
+        $this->assertEquals(1000, (float) $fresh->rate_per_point);
     }
 
     public function test_user_can_update_employee_points(): void
@@ -610,12 +691,13 @@ class EmployeePayrollTest extends TestCase
 
         $response = $this->actingAs($user)->post("/employees/{$employee->id}/pay", $postData);
 
-        $response->assertSessionHas('success');
-        $this->assertNotNull($employee->fresh()->last_paid_at);
-
         // Verifikasi tersimpan di tabel employee_payrolls
         $payroll = EmployeePayroll::where('employee_id', $employee->id)->first();
         $this->assertNotNull($payroll);
+
+        $response->assertRedirect(route('employees.payroll.slip', ['payroll' => $payroll, 'auto_pdf' => 1]));
+        $response->assertSessionHas('success');
+        $this->assertNotNull($employee->fresh()->last_paid_at);
         $this->assertEquals('September 2026', $payroll->period);
         $this->assertEquals(27, $payroll->total_present);
         $this->assertEquals(2, $payroll->late_count);
@@ -647,5 +729,9 @@ class EmployeePayrollTest extends TestCase
         $slipResponse->assertSee('Bonus Penjualan');
         $slipResponse->assertSee('Bonus Tgl Merah');
         $slipResponse->assertSee('3.420.000');
+
+        // Verifikasi route download/generate PDF otomatis
+        $pdfResponse = $this->actingAs($user)->get("/employees/payroll/{$payroll->id}/pdf");
+        $pdfResponse->assertRedirect(route('employees.payroll.slip', ['payroll' => $payroll, 'auto_pdf' => 1]));
     }
 }

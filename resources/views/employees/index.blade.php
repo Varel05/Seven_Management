@@ -152,17 +152,10 @@
         form: {
             id: null,
             name: '',
-            role: 'cs',
+            role: 'staff',
             position: '',
             phone: '',
-            base_salary: 0,
-            daily_rate: 0,
-            discipline_rate: 10000,
-            holiday_rate: 50000,
-            current_points: 0,
-            rate_per_point: 0,
             pay_day: 25,
-            claim_bonus: true,
             asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
             status: 'active'
         },
@@ -329,16 +322,9 @@
                 role: 'staff',
                 position: '',
                 phone: '',
-                base_salary: 3000000,
-                daily_rate: 0,
-                discipline_rate: 10000,
-                holiday_rate: 50000,
-                current_points: 0,
-                rate_per_point: 0,
+                status: 'active',
                 pay_day: 25,
-                claim_bonus: true,
-                asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
-                status: 'active'
+                asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}'
             };
             this.showModal = true;
         },
@@ -350,16 +336,9 @@
                 role: emp.role_value || (emp.role && emp.role.value ? emp.role.value : (emp.role || 'staff')),
                 position: emp.position,
                 phone: emp.phone || '',
-                base_salary: Number(emp.base_salary),
-                daily_rate: Number(emp.daily_rate) || 0,
-                discipline_rate: Number(emp.discipline_rate) || 0,
-                holiday_rate: Number(emp.holiday_rate) || 0,
-                current_points: emp.current_points,
-                rate_per_point: Number(emp.rate_per_point),
+                status: emp.status,
                 pay_day: emp.pay_day,
-                claim_bonus: emp.claim_bonus !== undefined ? Boolean(emp.claim_bonus) : true,
-                asset_account_id: emp.asset_account_id,
-                status: emp.status
+                asset_account_id: emp.asset_account_id || '{{ $assetAccounts->first()->id ?? '' }}'
             };
             this.showModal = true;
         },
@@ -793,23 +772,33 @@
                                                 <button 
                                                     type="button" 
                                                     @click="openPayModal({{ Js::from($emp) }})" 
-                                                    class="w-full inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-xs shadow-emerald-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                                                    title="Input Absensi & Hitung Slip Gaji"
+                                                    class="w-full inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-xs shadow-emerald-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                                                    title="Hitung Slip Gaji, Bayar & Buat PDF Otomatis"
                                                 >
-                                                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                                                    <span>Bayar</span>
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                                    <span>Slip Gaji</span>
                                                 </button>
                                             @else
                                                 @if($emp->latestPayroll)
-                                                    <a 
-                                                        href="{{ route('employees.payroll.slip', $emp->latestPayroll) }}" 
-                                                        target="_blank"
-                                                        class="w-full inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 shadow-2xs hover:bg-teal-100 transition-all cursor-pointer"
-                                                        title="Lihat / Cetak Lembar Slip Gaji Excel"
-                                                    >
-                                                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                                        <span>Slip</span>
-                                                    </a>
+                                                    <div class="flex items-center gap-1 w-full">
+                                                        <a 
+                                                            href="{{ route('employees.payroll.slip', $emp->latestPayroll) }}" 
+                                                            target="_blank"
+                                                            class="flex-1 inline-flex items-center justify-center gap-0.5 px-1 py-0.5 rounded-md text-[9px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 shadow-2xs hover:bg-teal-100 transition-all cursor-pointer"
+                                                            title="Lihat Lembar Slip Gaji Excel"
+                                                        >
+                                                            <span>Slip</span>
+                                                        </a>
+                                                        <a 
+                                                            href="{{ route('employees.payroll.pdf', $emp->latestPayroll) }}" 
+                                                            target="_blank"
+                                                            class="inline-flex items-center justify-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700 shadow-2xs hover:bg-emerald-200 transition-all cursor-pointer"
+                                                            title="Unduh Berkas PDF Slip Gaji"
+                                                        >
+                                                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                                            <span>PDF</span>
+                                                        </a>
+                                                    </div>
                                                 @else
                                                     <button 
                                                         type="button" 
@@ -817,7 +806,7 @@
                                                         class="w-full inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-all cursor-pointer"
                                                         title="Buat Lembar Slip Gaji Baru"
                                                     >
-                                                        <span>+ Slip</span>
+                                                        <span>+ Slip Gaji</span>
                                                     </button>
                                                 @endif
                                             @endif
@@ -961,7 +950,10 @@
                     <div class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity" @click="showModal = false"></div>
                     <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl relative z-10">
                         <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-                            <h3 class="text-base font-extrabold text-slate-900 dark:text-white" x-text="isEdit ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'"></h3>
+                            <div>
+                                <h3 class="text-base font-extrabold text-slate-900 dark:text-white" x-text="isEdit ? 'Edit Data Karyawan (Profil & Penugasan)' : 'Tambah Karyawan Baru (Profil & Penugasan)'"></h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" x-text="isEdit ? 'Perbarui identitas, kontak, peran, dan status kepegawaian.' : 'Daftarkan identitas, peran, kontak, dan penugasan karyawan non-gaji.'"></p>
+                            </div>
                             <button @click="showModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
@@ -1002,52 +994,9 @@
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">No. Kontak / HP</label>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">No. Kontak / WhatsApp</label>
                                     <input type="text" name="phone" x-model="form.phone" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="08123456789">
                                     <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">📱 Nomor HP aktif karyawan</span>
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Gaji Pokok Acuan (Rp)</label>
-                                    <input type="number" step="any" name="base_salary" x-model="form.base_salary" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono">
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Upah per Hari / Shift (Rp)</label>
-                                    <input type="number" step="any" name="daily_rate" x-model="form.daily_rate" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="Otomatis: Gaji Pokok ÷ 27">
-                                    <span class="text-[10px] text-slate-400 mt-0.5 block">Kosongkan jika dihitung otomatis (Gaji Pokok ÷ 27)</span>
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Bonus Disiplin / Hari (Rp)</label>
-                                    <input type="number" step="any" name="discipline_rate" x-model="form.discipline_rate" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="10000">
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Bonus Tanggal Merah (Rp)</label>
-                                    <input type="number" step="any" name="holiday_rate" x-model="form.holiday_rate" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="50000">
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Poin Saat Ini</label>
-                                    <input type="number" min="0" name="current_points" x-model="form.current_points" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" placeholder="0">
-                                </div>
-
-                                <!-- Hidden rate_per_point (otomatis diatur oleh backend) -->
-                                <input type="hidden" name="rate_per_point" :value="form.rate_per_point">
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Tgl Gajian (Jatuh Tempo)</label>
-                                    <input type="number" min="1" max="31" name="pay_day" x-model="form.pay_day" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="25">
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Akun Kas/Bank Pembayaran</label>
-                                    <select name="asset_account_id" x-model="form.asset_account_id" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                                        @foreach($assetAccounts as $acc)
-                                            <option value="{{ $acc->id }}">{{ $acc->name }} ({{ $acc->code }})</option>
-                                        @endforeach
-                                    </select>
                                 </div>
 
                                 <div>
@@ -1058,24 +1007,30 @@
                                     </select>
                                 </div>
 
-                                <div class="sm:col-span-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 space-y-2.5">
-                                    <div class="flex items-center justify-between">
-                                        <div>
-                                            <span class="text-xs font-bold text-slate-800 dark:text-slate-200 block">Klaim Bonus Poin Bulan Ini</span>
-                                            <span class="text-[10px] text-slate-500 dark:text-slate-400">Jika dinonaktifkan, poin disimpan dan tidak dipotong saat gajian</span>
-                                        </div>
-                                        <label class="relative inline-flex items-center cursor-pointer">
-                                            <input type="hidden" name="claim_bonus" value="0">
-                                            <input type="checkbox" name="claim_bonus" value="1" x-model="form.claim_bonus" class="sr-only peer">
-                                            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
-                                        </label>
-                                    </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Tgl Gajian (Jatuh Tempo)</label>
+                                    <input type="number" min="1" max="31" name="pay_day" x-model="form.pay_day" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="25">
                                 </div>
-                            </div>
 
-                            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
-                                <div class="text-slate-500 dark:text-slate-400">Akun Beban Akuntansi:</div>
-                                <div class="font-bold text-emerald-600 dark:text-emerald-400">5002 - Beban Gaji</div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Akun Kas/Bank Transfer</label>
+                                    <select name="asset_account_id" x-model="form.asset_account_id" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                                        @foreach($assetAccounts as $acc)
+                                            <option value="{{ $acc->id }}">{{ $acc->name }} ({{ $acc->code }})</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <!-- Banner Penjelasan Fokus Non-Gaji & Integrasi Penuh Slip Gaji -->
+                                <div class="sm:col-span-2 p-3.5 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 text-xs space-y-1.5">
+                                    <div class="flex items-center gap-2 font-bold text-emerald-900 dark:text-emerald-300">
+                                        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <span x-text="isEdit ? 'Fokus Data Profil & Integrasi Slip Gaji' : 'Mekanisme Gaji Ditangani Penuh Oleh Slip Gaji'"></span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                                        Form ini khusus menangani data non-gaji (identitas, peran, penugasan, kontak, tanggal gajian, dan akun transfer). Seluruh mekanisme penggajian (gaji pokok, upah harian, bonus disiplin, bonus tanggal merah, bonus poin, pembukuan beban, hingga penerbitan slip & ekspor PDF otomatis) sepenuhnya dikelola melalui tombol <strong>Slip Gaji</strong> saat pembayaran payroll.
+                                    </p>
+                                </div>
                             </div>
 
                             <div class="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -1164,11 +1119,11 @@
                                 </div>
                                 <div>
                                     <h3 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                                        <span>Hitung & Bukukan Gaji</span>
+                                        <span>Penerbitan Slip Gaji & Pembayaran</span>
                                         <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-300/60" x-text="employeeToPay ? employeeToPay.name : ''"></span>
                                     </h3>
                                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                        Perhitungan slip gaji bulanan (Cut-off 26 - 25) & input absensi manual.
+                                        Perhitungan slip gaji bulanan resmi (Cut-off 26 - 25). Sistem akan otomatis membukukan beban gaji dan membuat file slip PDF.
                                     </p>
                                 </div>
                             </div>
@@ -1343,11 +1298,22 @@
                                     <input type="text" name="notes" x-model="payForm.notes" placeholder="Contoh: Termasuk penyesuaian lembur & bonus penjualan" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
                                 </div>
 
+                                <!-- Info Pembuatan Slip PDF Otomatis -->
+                                <div class="p-3 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 text-emerald-900 dark:text-emerald-300 text-xs flex items-center gap-2.5">
+                                    <div class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    </div>
+                                    <span class="leading-relaxed">
+                                        <strong>Slip PDF Otomatis:</strong> Setelah disimpan, sistem akan langsung membuka lembar slip gaji dan mengunduh berkas PDF slip gaji secara otomatis.
+                                    </span>
+                                </div>
+
                                 <!-- Action Buttons -->
                                 <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
                                     <button type="button" @click="showPayModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">Batal</button>
-                                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-950/20 transition-all hover:scale-105 active:scale-95 cursor-pointer">
-                                        Simpan & Bukukan Gaji
+                                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-950/20 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                        <span>Bayar & Buat Slip PDF Otomatis</span>
                                     </button>
                                 </div>
                             </form>

@@ -22,4 +22,14 @@ class JournalEntryLine extends Model
     {
         return $this->belongsTo(Account::class);
     }
+
+    /**
+     * Scope query to only include lines belonging to active (non-rejected) journal entries.
+     */
+    public function scopeActive($query)
+    {
+        return $query->whereHas('journalEntry', function ($q) {
+            $q->where('status', '!=', 'rejected');
+        });
+    }
 }

@@ -354,6 +354,18 @@
             this.showDetailModal = false;
             this.selectedTrx = null;
         },
+        showCancelModal: false,
+        trxToCancel: null,
+        cancelReason: 'Kesalahan input transaksi',
+        openCancelModal(trx) {
+            this.trxToCancel = trx;
+            this.cancelReason = 'Kesalahan input transaksi';
+            this.showCancelModal = true;
+        },
+        closeCancelModal() {
+            this.showCancelModal = false;
+            this.trxToCancel = null;
+        },
         showAccountModal: false,
         isEditAccount: false,
         accountForm: {
@@ -1253,14 +1265,14 @@
                     <table class="w-full text-left border-collapse table-auto lg:table-fixed">
                         <thead>
                             <tr class="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800/80 dark:to-slate-800/60 border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                                <th class="px-4 py-3.5 w-32 lg:w-36">Tanggal</th>
-                                <th class="px-4 py-3.5 w-36 lg:w-44">No. Referensi</th>
-                                <th class="px-4 py-3.5 min-w-[200px] w-auto">Keterangan / Transaksi</th>
-                                <th class="px-4 py-3.5 w-44 lg:w-48">Akun Terkait</th>
-                                <th class="px-4 py-3.5 w-28 lg:w-32">Sumber</th>
-                                <th class="px-4 py-3.5 text-right w-36 lg:w-44">Nominal</th>
-                                <th class="px-4 py-3.5 text-center w-28 lg:w-32">Status</th>
-                                <th class="px-4 py-3.5 text-center w-28">Aksi</th>
+                                <th class="px-3 py-3 w-28 lg:w-32">Tanggal</th>
+                                <th class="px-3 py-3 w-32 lg:w-36">No. Referensi</th>
+                                <th class="px-3 py-3 min-w-0 w-auto">Keterangan / Transaksi</th>
+                                <th class="px-3 py-3 w-36 lg:w-44">Akun Terkait</th>
+                                <th class="px-2.5 py-3 text-center w-24 lg:w-28">Sumber</th>
+                                <th class="px-3 py-3 text-right w-32 lg:w-36">Nominal</th>
+                                <th class="px-2.5 py-3 text-center w-24 lg:w-28">Status</th>
+                                <th class="px-2 py-3 text-center w-20">Aksi</th>
                             </tr>
                         </thead>
                         <tbody id="transactionsTableBody" class="divide-y divide-slate-200/60 dark:divide-slate-800/80 text-sm">
@@ -1476,21 +1488,44 @@
                             <!-- Tombol Verifikasi/Tolak jika status pending -->
                             <template x-if="selectedTrx && selectedTrx.status === 'pending'">
                                 <div class="flex items-center gap-2">
-                                    <form :action="'/journal-entries/' + selectedTrx.id + '/reject'" method="POST">
-                                        @csrf
-                                        @method('PATCH')
-                                        <button type="submit" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shadow-xs transition-colors">
-                                            Tolak (Reject)
-                                        </button>
-                                    </form>
+                                    <button 
+                                        @click="openCancelModal(selectedTrx)" 
+                                        type="button" 
+                                        class="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shadow-xs transition-colors flex items-center gap-1.5"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                        Tolak / Batalkan
+                                    </button>
                                     <form :action="'/journal-entries/' + selectedTrx.id + '/verify'" method="POST">
                                         @csrf
                                         @method('PATCH')
-                                        <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/20 transition-all">
+                                        <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
                                             Verifikasi Jurnal
                                         </button>
                                     </form>
                                 </div>
+                            </template>
+
+                            <!-- Tombol Batalkan jika status verified -->
+                            <template x-if="selectedTrx && selectedTrx.status === 'verified'">
+                                <button 
+                                    @click="openCancelModal(selectedTrx)" 
+                                    type="button" 
+                                    class="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shadow-xs transition-colors flex items-center gap-1.5"
+                                    title="Batalkan transaksi ini untuk mengoreksi kesalahan input"
+                                >
+                                    <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    Batalkan Transaksi
+                                </button>
+                            </template>
+
+                            <!-- Keterangan jika sudah dibatalkan/rejected -->
+                            <template x-if="selectedTrx && selectedTrx.status === 'rejected'">
+                                <span class="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    Transaksi Dibatalkan
+                                </span>
                             </template>
 
                             <button @click="closeModal()" type="button" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors">
@@ -1498,6 +1533,127 @@
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4.1 MODAL KONFIRMASI PEMBATALAN TRANSAKSI (VOID / CANCEL) -->
+        <div 
+            x-show="showCancelModal" 
+            x-cloak 
+            class="fixed inset-0 z-50 overflow-y-auto" 
+            style="display: none;"
+        >
+            <!-- Backdrop -->
+            <div 
+                x-show="showCancelModal" 
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                @click="closeCancelModal()" 
+                class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            ></div>
+
+            <!-- Modal Panel -->
+            <div class="min-h-full flex items-center justify-center p-4">
+                <div 
+                    x-show="showCancelModal" 
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="relative bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-rose-200 dark:border-rose-900/60 transition-all text-slate-800 dark:text-slate-100"
+                >
+                    <!-- Header -->
+                    <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-md shadow-rose-600/20">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-base font-extrabold text-slate-900 dark:text-white">
+                                    Konfirmasi Pembatalan Transaksi
+                                </h3>
+                                <p class="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                                    Mencegah & Memperbaiki Kesalahan Input
+                                </p>
+                            </div>
+                        </div>
+
+                        <button @click="closeCancelModal()" type="button" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    <!-- Information Box -->
+                    <div class="my-4 p-4 rounded-2xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/40 text-xs">
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between">
+                                <span class="text-slate-500 dark:text-slate-400">Kode Referensi:</span>
+                                <span class="font-mono font-bold text-slate-900 dark:text-white" x-text="trxToCancel?.reference"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500 dark:text-slate-400">Deskripsi:</span>
+                                <span class="font-bold text-slate-900 dark:text-slate-200 text-right truncate max-w-[200px]" x-text="trxToCancel?.description"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500 dark:text-slate-400">Nominal:</span>
+                                <span class="font-mono font-extrabold text-rose-700 dark:text-rose-400" x-text="'Rp ' + (trxToCancel ? new Intl.NumberFormat('id-ID').format(trxToCancel.amount) : '0')"></span>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 pt-3 border-t border-rose-200/60 dark:border-rose-900/40 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                            ⚠️ <strong>Dampak Pembatalan:</strong> Status transaksi akan diubah menjadi <span class="text-rose-600 font-bold">Dibatalkan (Rejected)</span>. Seluruh saldo kas/bank, stok produk/bahan, serta status slip gaji akan dipulihkan secara otomatis.
+                        </div>
+                    </div>
+
+                    <!-- Cancellation Form -->
+                    <form :action="'/journal-entries/' + (trxToCancel ? trxToCancel.id : '') + '/cancel'" method="POST" class="space-y-4">
+                        @csrf
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                Alasan Pembatalan Transaksi
+                            </label>
+                            <input 
+                                type="text" 
+                                name="reason" 
+                                x-model="cancelReason" 
+                                required 
+                                placeholder="Contoh: Salah ketik nominal, duplikat transaksi, dll." 
+                                class="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+                            />
+                            <!-- Quick Chips -->
+                            <div class="flex flex-wrap gap-1.5 mt-2">
+                                <button type="button" @click="cancelReason = 'Salah input nominal'" class="px-2 py-0.5 rounded-lg text-[10px] font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Salah nominal</button>
+                                <button type="button" @click="cancelReason = 'Duplikat input transaksi'" class="px-2 py-0.5 rounded-lg text-[10px] font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Duplikat input</button>
+                                <button type="button" @click="cancelReason = 'Salah pilih akun pembayaran'" class="px-2 py-0.5 rounded-lg text-[10px] font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Salah akun</button>
+                                <button type="button" @click="cancelReason = 'Transaksi dibatalkan pelanggan'" class="px-2 py-0.5 rounded-lg text-[10px] font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Batal pelanggan</button>
+                            </div>
+                        </div>
+
+                        <!-- Footer Actions -->
+                        <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <button 
+                                @click="closeCancelModal()" 
+                                type="button" 
+                                class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors"
+                            >
+                                Kembali
+                            </button>
+                            <button 
+                                type="submit" 
+                                class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 transition-all flex items-center gap-1.5"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                Ya, Batalkan Transaksi
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

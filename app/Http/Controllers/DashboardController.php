@@ -35,9 +35,10 @@ class DashboardController extends Controller
         $maxAccountUpdate = Account::max('updated_at') ?? '';
         $pendingCount = JournalEntry::where('status', 'pending')->count();
         $verifiedCount = JournalEntry::where('status', 'verified')->count();
+        $rejectedCount = JournalEntry::where('status', 'rejected')->count();
 
         // Sidik jari untuk mendeteksi perubahan data sekecil apapun
-        $currentHash = md5("{$latestEntryId}-{$entriesCount}-{$pendingCount}-{$verifiedCount}-{$maxJournalUpdate}-{$maxAccountUpdate}");
+        $currentHash = md5("{$latestEntryId}-{$entriesCount}-{$pendingCount}-{$verifiedCount}-{$rejectedCount}-{$maxJournalUpdate}-{$maxAccountUpdate}");
 
         $clientHash = $request->query('hash');
         $force = $request->boolean('force');
@@ -116,6 +117,7 @@ class DashboardController extends Controller
                 'isProfit' => $metrics['labaBersihBulanIni'] >= 0,
                 'pendingCount' => $metrics['pendingCount'],
                 'verifiedCount' => $metrics['verifiedCount'],
+                'rejectedCount' => $metrics['rejectedCount'],
             ],
             'accounts' => $metrics['accounts'],
             'chartData' => $metrics['chartData'],
@@ -136,23 +138,23 @@ class DashboardController extends Controller
             ->get();
 
         // Saldo Kas & Bank (Semua Akun bertipe Asset, normal balance: Debit - Credit)
-        $assetDebit = JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('debit');
-        $assetCredit = JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('credit');
+        $assetDebit = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('debit');
+        $assetCredit = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('credit');
         $totalKasDanBank = (float) ($assetDebit - $assetCredit);
 
         // Khusus Kas Operasional (1001)
-        $cashDebit = JournalEntryLine::whereHas('account', fn ($q) => $q->where('code', '1001'))->sum('debit');
-        $cashCredit = JournalEntryLine::whereHas('account', fn ($q) => $q->where('code', '1001'))->sum('credit');
+        $cashDebit = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('code', '1001'))->sum('debit');
+        $cashCredit = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('code', '1001'))->sum('credit');
         $totalKas = (float) ($cashDebit - $cashCredit);
 
         // Pemasukan bulan ini (Akun Pendapatan/Revenue)
-        $pemasukanBulanIni = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'revenue'))
+        $pemasukanBulanIni = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('type', 'revenue'))
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->sum('credit');
 
         // Pengeluaran bulan ini (Akun Beban/Expense)
-        $pengeluaranBulanIni = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'expense'))
+        $pengeluaranBulanIni = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('type', 'expense'))
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->sum('debit');
@@ -160,14 +162,15 @@ class DashboardController extends Controller
         // Laba / Rugi Bersih bulan berjalan
         $labaBersihBulanIni = $pemasukanBulanIni - $pengeluaranBulanIni;
 
-        // Transaksi Pending verifikasi (misal dari bot Telegram)
+        // Transaksi Pending verifikasi & Ditolak/Dibatalkan
         $pendingCount = JournalEntry::where('status', 'pending')->count();
         $verifiedCount = JournalEntry::where('status', 'verified')->count();
+        $rejectedCount = JournalEntry::where('status', 'rejected')->count();
 
         // Ringkasan Akun Utama (Chart of Accounts)
-        $accounts = Account::with('lines')->get()->map(function ($acc) {
-            $debit = $acc->lines->sum('debit');
-            $credit = $acc->lines->sum('credit');
+        $accounts = Account::with('activeLines')->get()->map(function ($acc) {
+            $debit = (float) $acc->activeLines->sum('debit');
+            $credit = (float) $acc->activeLines->sum('credit');
             $balance = in_array($acc->type, ['asset', 'expense']) ? ($debit - $credit) : ($credit - $debit);
 
             return [
@@ -176,7 +179,7 @@ class DashboardController extends Controller
                 'name' => $acc->name,
                 'type' => $acc->type,
                 'balance' => (float) $balance,
-                'trx_count' => $acc->lines->count(),
+                'trx_count' => $acc->activeLines->count(),
             ];
         });
 
@@ -193,7 +196,7 @@ class DashboardController extends Controller
         $currentMonth = (int) now()->format('n');
         $daysInMonth = (int) now()->daysInMonth;
 
-        $chartLines = JournalEntryLine::whereHas('account', function ($q) {
+        $chartLines = JournalEntryLine::active()->whereHas('account', function ($q) {
             $q->whereIn('type', ['revenue', 'expense']);
         })
             ->with(['account:id,type', 'journalEntry:id,date'])
@@ -272,6 +275,7 @@ class DashboardController extends Controller
             'labaBersihBulanIni' => $labaBersihBulanIni,
             'pendingCount' => $pendingCount,
             'verifiedCount' => $verifiedCount,
+            'rejectedCount' => $rejectedCount,
             'accounts' => $accounts,
             'recurringTransactions' => $recurringTransactions,
             'expenseAccounts' => $expenseAccounts,

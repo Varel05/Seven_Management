@@ -20,6 +20,7 @@ use App\Models\RetailSale;
 use App\Models\RetailSaleItem;
 use App\Models\TailorPayroll;
 use App\Services\SuitMaterialEstimatorService;
+use App\Services\TransactionCancellationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -366,6 +367,129 @@ class WebhookTransactionController extends Controller
                 'data' => $journalEntry->load('lines.account'),
             ], 201);
         });
+    }
+
+    /**
+     * Membatalkan transaksi yang sudah tercatat untuk memperbaiki kesalahan input.
+     * Mendukung pembatalan via reference, id, atau otomatis transaksi terakhir yang dicatat.
+     */
+    public function cancelTransaction(Request $request, TransactionCancellationService $cancellationService)
+    {
+        $ref = trim((string) (
+            $request->input('reference')
+            ?? $request->input('reference_number')
+            ?? $request->input('invoice_number')
+            ?? $request->input('ref')
+            ?? ''
+        ));
+
+        $id = $request->input('id') ?? $request->input('transaction_id');
+        $reason = $request->input('reason') ?? $request->input('alasan') ?? $request->input('notes') ?? 'Kesalahan input transaksi';
+
+        $journalEntry = null;
+
+        if (! empty($ref)) {
+            $journalEntry = JournalEntry::where('reference', $ref)
+                ->orWhere('reference', 'LIKE', "%{$ref}%")
+                ->latest('id')
+                ->first();
+        } elseif (! empty($id)) {
+            $journalEntry = JournalEntry::find($id);
+        } else {
+            // Jika tidak ada ID/ref spesifik, cari transaksi aktif terakhir (status != rejected)
+            $senderId = trim((string) (
+                $request->input('sender_telegram_id')
+                ?? $request->input('telegram_user_id')
+                ?? ''
+            ));
+
+            $query = JournalEntry::where('status', '!=', 'rejected');
+
+            if (! empty($senderId)) {
+                $telegramEntry = (clone $query)
+                    ->where('source', 'telegram')
+                    ->latest('id')
+                    ->first();
+                $journalEntry = $telegramEntry ?? $query->latest('id')->first();
+            } else {
+                $journalEntry = $query->latest('id')->first();
+            }
+        }
+
+        if (! $journalEntry) {
+            return response()->json([
+                'status' => false,
+                'message' => '❌ Tidak ditemukan transaksi aktif yang dapat dibatalkan.',
+            ], 404);
+        }
+
+        if ($journalEntry->status === 'rejected') {
+            return response()->json([
+                'status' => false,
+                'message' => "⚠️ Transaksi {$journalEntry->reference} sudah dalam status dibatalkan (rejected) sebelumnya.",
+            ], 422);
+        }
+
+        // Ambil nominal & rincian sebelum dibatalkan untuk informasi balasan
+        $firstLine = $journalEntry->lines->first();
+        $expenseLine = $journalEntry->lines->first(fn ($l) => $l->account && $l->account->type === 'expense');
+        $revenueLine = $journalEntry->lines->first(fn ($l) => $l->account && $l->account->type === 'revenue');
+        $amount = $expenseLine
+            ? ($expenseLine->debit ?? 0)
+            : ($revenueLine->credit ?? $journalEntry->lines->sum('debit'));
+        $formattedAmount = 'Rp '.number_format((float) $amount, 0, ',', '.');
+        $refCode = $journalEntry->reference;
+        $originalDesc = $journalEntry->description;
+
+        $result = $cancellationService->cancel($journalEntry, $reason, 'Telegram Bot');
+
+        if (! $result['success']) {
+            return response()->json([
+                'status' => false,
+                'message' => $result['message'],
+            ], 400);
+        }
+
+        $messageLines = [
+            '🚫 *Transaksi Berhasil Dibatalkan!*',
+            "• *Nomor Ref*: `{$refCode}`",
+            "• *Keterangan*: {$originalDesc}",
+            "• *Nominal*: {$formattedAmount}",
+            "• *Alasan*: {$reason}",
+            '• *Status*: ✗ *Dibatalkan (Rejected)*',
+            '',
+            'ℹ️ *Informasi Pembukuan:*',
+            'Saldo kas/bank dan buku besar telah disesuaikan kembali secara otomatis.',
+        ];
+
+        if (! empty($result['rolled_back']['retail_stock'])) {
+            $items = array_map(fn ($s) => "{$s['product']} (+{$s['quantity']})", $result['rolled_back']['retail_stock']);
+            $messageLines[] = '• Stok retail dikembalikan: '.implode(', ', $items);
+        }
+
+        if (! empty($result['rolled_back']['material_stock'])) {
+            $ms = $result['rolled_back']['material_stock'];
+            $messageLines[] = "• Stok bahan dikembalikan: {$ms['material']} (-{$ms['deducted_quantity']})";
+        }
+
+        if (! empty($result['rolled_back']['payroll'])) {
+            $pr = $result['rolled_back']['payroll'];
+            $messageLines[] = "• Status penggajian {$pr['employee']} ({$pr['period']}) dibatalkan.";
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => implode("\n", $messageLines),
+            'data' => [
+                'reference' => $refCode,
+                'amount' => (float) $amount,
+                'formatted_amount' => $formattedAmount,
+                'description' => $originalDesc,
+                'reason' => $reason,
+                'status' => 'rejected',
+                'rolled_back' => $result['rolled_back'],
+            ],
+        ]);
     }
 
     /**
@@ -1032,6 +1156,11 @@ class WebhookTransactionController extends Controller
             $formattedAmount = 'Rp '.number_format($employee->total_salary, 0, ',', '.');
             $periodName = now()->translatedFormat('F Y');
 
+            $existingPayroll = EmployeePayroll::where('employee_id', $employee->id)->latest()->first();
+            $slipUrl = $existingPayroll ? url("/employees/payroll/{$existingPayroll->id}/slip") : null;
+            $pdfUrl = $existingPayroll ? url("/employees/payroll/{$existingPayroll->id}/pdf") : null;
+            $slipText = $slipUrl ? "\n\n📄 *Akses Slip Gaji & Download PDF:*\n• Buka Slip Web: {$slipUrl}\n• Unduh File PDF: {$pdfUrl}\n" : '';
+
             return response()->json([
                 'status' => false,
                 'already_paid' => true,
@@ -1040,13 +1169,16 @@ class WebhookTransactionController extends Controller
                              "💰 *{$formattedAmount}*\n".
                              "📅 Periode: {$periodName}\n".
                              "⏰ Waktu Bayar: {$paidAt}\n".
-                             "🔖 Ref: `{$reference}`\n\n".
-                             '💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar. Pembayaran tidak diproses ulang untuk mencegah duplikasi.',
+                             "🔖 Ref: `{$reference}`".
+                             $slipText.
+                             "\n💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar. Pembayaran tidak diproses ulang untuk mencegah duplikasi.",
                 'data' => [
                     'already_paid' => true,
                     'reference' => $reference,
                     'name' => $employee->name,
                     'amount' => (float) $employee->total_salary,
+                    'slip_url' => $slipUrl,
+                    'pdf_url' => $pdfUrl,
                 ],
             ], 200);
         }
@@ -1056,13 +1188,20 @@ class WebhookTransactionController extends Controller
         $source = str_starts_with(strtolower($rawSource), 'telegram') ? 'telegram' : $rawSource;
 
         $journalEntry = $employee->executePayrollPosting($customAmount, $source);
+        $payroll = EmployeePayroll::where('journal_entry_id', $journalEntry->id)->first();
+        $slipUrl = $payroll ? url("/employees/payroll/{$payroll->id}/slip") : null;
+        $pdfUrl = $payroll ? url("/employees/payroll/{$payroll->id}/pdf") : null;
+        $slipText = $slipUrl ? "\n\n📄 *Akses Slip Gaji & Download PDF:*\n• Buka Slip Web: {$slipUrl}\n• Unduh File PDF: {$pdfUrl}" : '';
 
         return response()->json([
             'status' => true,
             'message' => "✅ *Penggajian Karyawan Berhasil Dibukukan!*\n\n".
                          "👤 *{$employee->name}*\n".
                          '💰 *Rp '.number_format($customAmount ?: (float) $employee->total_salary, 0, ',', '.')."*\n".
-                         "🔖 Ref: `{$journalEntry->reference}`",
+                         "📂 Beban: Beban Gaji (5002)\n".
+                         '💳 Bayar dari: '.($employee->assetAccount->name ?? 'Kas Operasional')."\n".
+                         "🔖 Ref: `{$journalEntry->reference}`".
+                         $slipText,
             'data' => [
                 'reference' => $journalEntry->reference,
                 'name' => $employee->name,
@@ -1071,6 +1210,9 @@ class WebhookTransactionController extends Controller
                 'expense_name' => 'Beban Gaji',
                 'asset_account' => $employee->assetAccount->name ?? 'Kas Operasional',
                 'journal_entry' => $journalEntry,
+                'payroll_id' => $payroll?->id,
+                'slip_url' => $slipUrl,
+                'pdf_url' => $pdfUrl,
             ],
         ], 201);
     }
@@ -1311,6 +1453,11 @@ class WebhookTransactionController extends Controller
             $formattedAmount = 'Rp '.number_format($employee->total_salary, 0, ',', '.');
             $periodName = now()->translatedFormat('F Y');
 
+            $existingPayroll = EmployeePayroll::where('employee_id', $employee->id)->latest()->first();
+            $slipUrl = $existingPayroll ? url("/employees/payroll/{$existingPayroll->id}/slip") : null;
+            $pdfUrl = $existingPayroll ? url("/employees/payroll/{$existingPayroll->id}/pdf") : null;
+            $slipText = $slipUrl ? "\n\n📄 *Akses Slip Gaji & Download PDF:*\n• Buka Slip Web: {$slipUrl}\n• Unduh File PDF: {$pdfUrl}\n" : '';
+
             return response()->json([
                 'status' => false,
                 'already_paid' => true,
@@ -1319,13 +1466,16 @@ class WebhookTransactionController extends Controller
                              "💰 *{$formattedAmount}*\n".
                              "📅 Periode: {$periodName}\n".
                              "⏰ Waktu Bayar: {$paidAt}\n".
-                             "🔖 Ref: `{$reference}`\n\n".
-                             '💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar database.',
+                             "🔖 Ref: `{$reference}`".
+                             $slipText.
+                             "\n💡 *Info:* Gaji karyawan ini sudah tercatat sebelumnya di buku besar database.",
                 'data' => [
                     'already_paid' => true,
                     'reference' => $reference,
                     'name' => $employee->name,
                     'amount' => (float) $employee->total_salary,
+                    'slip_url' => $slipUrl,
+                    'pdf_url' => $pdfUrl,
                 ],
             ], 200);
         }
@@ -1343,6 +1493,11 @@ class WebhookTransactionController extends Controller
             $bonusInfo = "⭐ Bonus Poin: {$employee->formatted_bonus_salary} ({$employee->current_points} poin @ Rp ".number_format($employee->rate_per_point, 0, ',', '.').")\n";
         }
 
+        $payroll = EmployeePayroll::where('journal_entry_id', $journalEntry->id)->first();
+        $slipUrl = $payroll ? url("/employees/payroll/{$payroll->id}/slip") : null;
+        $pdfUrl = $payroll ? url("/employees/payroll/{$payroll->id}/pdf") : null;
+        $slipText = $slipUrl ? "\n\n📄 *Akses Slip Gaji & Download PDF:*\n• Buka Slip Web: {$slipUrl}\n• Unduh File PDF: {$pdfUrl}" : '';
+
         return response()->json([
             'status' => true,
             'message' => "✅ *Gaji Karyawan Berhasil Dibukukan!*\n\n".
@@ -1352,11 +1507,15 @@ class WebhookTransactionController extends Controller
                          "💰 *Total Dibayar: {$formattedAmount}*\n".
                          "📂 Beban: Beban Gaji (5002)\n".
                          "💳 Bayar dari: {$assetName}\n".
-                         "🔖 Ref: `{$journalEntry->reference}`",
+                         "🔖 Ref: `{$journalEntry->reference}`".
+                         $slipText,
             'data' => [
                 'reference' => $journalEntry->reference,
                 'name' => $employee->name,
                 'amount' => $finalAmount,
+                'payroll_id' => $payroll?->id,
+                'slip_url' => $slipUrl,
+                'pdf_url' => $pdfUrl,
             ],
         ], 201);
     }
@@ -1369,12 +1528,12 @@ class WebhookTransactionController extends Controller
         $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
 
         $accounts = Account::where('type', 'asset')
-            ->with('lines')
+            ->with('activeLines')
             ->orderBy('code')
             ->get()
             ->map(function ($acc) {
-                $debit = (float) $acc->lines->sum('debit');
-                $credit = (float) $acc->lines->sum('credit');
+                $debit = (float) $acc->activeLines->sum('debit');
+                $credit = (float) $acc->activeLines->sum('credit');
                 $balance = $debit - $credit;
 
                 return [
@@ -1386,8 +1545,8 @@ class WebhookTransactionController extends Controller
                 ];
             });
 
-        $totalDebit = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('debit');
-        $totalCredit = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('credit');
+        $totalDebit = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('debit');
+        $totalCredit = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('type', 'asset'))->sum('credit');
         $totalLiquidity = $totalDebit - $totalCredit;
 
         $messageLines = ["💳 *Saldo Kas & Bank Terkini:*\n"];
@@ -1416,12 +1575,12 @@ class WebhookTransactionController extends Controller
         $now = Carbon::now();
         $monthName = $now->translatedFormat('F Y');
 
-        $revenue = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'revenue'))
+        $revenue = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('type', 'revenue'))
             ->whereMonth('created_at', $now->month)
             ->whereYear('created_at', $now->year)
             ->sum('credit');
 
-        $expense = (float) JournalEntryLine::whereHas('account', fn ($q) => $q->where('type', 'expense'))
+        $expense = (float) JournalEntryLine::active()->whereHas('account', fn ($q) => $q->where('type', 'expense'))
             ->whereMonth('created_at', $now->month)
             ->whereYear('created_at', $now->year)
             ->sum('debit');
@@ -2977,7 +3136,15 @@ class WebhookTransactionController extends Controller
             $lines[] = "💡 *Ketik \"Bayar gaji {$employee->name}\" jika ingin memproses pembayarannya sekarang.*";
         }
         $lines[] = '';
-        $lines[] = "📄 *Cetak / PDF*: [Buka Slip Gaji Web]({$slipUrl})";
+        $pdfUrl = $existingPayroll ? url("/employees/payroll/{$existingPayroll->id}/pdf") : null;
+        if ($pdfUrl) {
+            $lines[] = '📄 *Akses Slip Gaji & Download PDF:*';
+            $lines[] = "• Buka Slip Web: {$slipUrl}";
+            $lines[] = "• Unduh File PDF: {$pdfUrl}";
+        } else {
+            $lines[] = '📄 *Preview Slip Web:*';
+            $lines[] = "• {$slipUrl}";
+        }
 
         return response()->json([
             'status' => true,
@@ -3006,6 +3173,7 @@ class WebhookTransactionController extends Controller
                 'take_home_pay' => $takeHomePay,
                 'formatted_take_home_pay' => 'Rp '.number_format($takeHomePay, 0, ',', '.'),
                 'slip_url' => $slipUrl,
+                'pdf_url' => $pdfUrl,
             ],
             'message' => implode("\n", $lines),
         ]);
@@ -3358,7 +3526,7 @@ class WebhookTransactionController extends Controller
             $lines[] = "🧾 {$refText} [Status: Verified]";
         }
 
-        $lines[] = "📄 *Cetak / PDF*: [Buka Slip Resmi Web]({$slipUrl})";
+        $lines[] = "📄 *Akses Slip Upah Web:*\n• {$slipUrl}";
 
         return response()->json([
             'status' => true,
