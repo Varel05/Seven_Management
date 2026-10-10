@@ -3,16 +3,23 @@
         $firstLine = $trx->lines->first();
         $expenseLine = $trx->lines->first(fn($l) => $l->account && $l->account->type === 'expense');
         $revenueLine = $trx->lines->first(fn($l) => $l->account && $l->account->type === 'revenue');
-        $isExpense = (bool)$expenseLine;
-        $amount = $isExpense 
-            ? ($expenseLine->debit ?? 0) 
-            : ($revenueLine->credit ?? $trx->lines->sum('debit'));
-        $primaryAccount = $isExpense 
-            ? ($expenseLine->account->name ?? 'Beban Operasional') 
-            : ($revenueLine->account->name ?? ($firstLine->account->name ?? '-'));
-        $primaryAccountCode = $isExpense 
-            ? ($expenseLine->account->code ?? '5001') 
-            : ($revenueLine->account->code ?? ($firstLine->account->code ?? '1001'));
+        
+        $isRevenue = (bool)$revenueLine;
+        $isExpense = $expenseLine && !$isRevenue; // Only treat as pure expense if there's no revenue
+
+        if ($isRevenue) {
+            $amount = $revenueLine->credit ?? $trx->lines->sum('debit');
+            $primaryAccount = $revenueLine->account->name ?? ($firstLine->account->name ?? '-');
+            $primaryAccountCode = $revenueLine->account->code ?? ($firstLine->account->code ?? '4001');
+        } elseif ($isExpense) {
+            $amount = $expenseLine->debit ?? 0;
+            $primaryAccount = $expenseLine->account->name ?? 'Beban Operasional';
+            $primaryAccountCode = $expenseLine->account->code ?? '5001';
+        } else {
+            $amount = $trx->lines->sum('debit');
+            $primaryAccount = $firstLine->account->name ?? '-';
+            $primaryAccountCode = $firstLine->account->code ?? '1001';
+        }
         
         // Json data for modal
         $trxJson = json_encode([

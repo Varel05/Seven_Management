@@ -325,13 +325,20 @@ class RetailController extends Controller
 
                 $unitCost = (float) $product->cost_price;
                 $unitSellingPrice = (float) $product->selling_price;
-                $unitRentalPrice = (float) $product->effective_rental_price;
-
+                
                 if ($isRental) {
+                    $startDate = isset($validated['rental_start_date']) ? \Carbon\Carbon::parse($validated['rental_start_date']) : now();
+                    $endDate = isset($validated['rental_end_date']) ? \Carbon\Carbon::parse($validated['rental_end_date']) : now()->addDays(3);
+                    $rentalDays = max(1, (int) $startDate->diffInDays($endDate));
+                    $rentalMultiplier = (int) ceil($rentalDays / 3);
+                    
+                    $unitRentalPrice = (float) $product->effective_rental_price * $rentalMultiplier;
+                    
                     $unitPrice = $unitRentalPrice;
                     $subtotal = $unitRentalPrice * $itemData['quantity'];
                     $itemCost = 0; // Pada sewa, pakaian tetap aset perusahaan yang dipinjamkan
                 } else {
+                    $unitRentalPrice = (float) $product->effective_rental_price;
                     $unitPrice = $unitSellingPrice;
                     $subtotal = $unitSellingPrice * $itemData['quantity'];
                     $itemCost = $unitCost * $itemData['quantity'];

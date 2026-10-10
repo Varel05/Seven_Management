@@ -20,6 +20,7 @@ Route::middleware('webhook.secret')->group(function () {
     Route::post('/webhook/recurring/manual-action', [WebhookTransactionController::class, 'manualRecurringAction']);
     Route::post('/webhook/recurring/{recurringTransaction}/approve', [WebhookTransactionController::class, 'approveRecurring']);
     Route::post('/webhook/recurring/{recurringTransaction}/skip', [WebhookTransactionController::class, 'skipRecurring']);
+    Route::post('/webhook/recurring/create', [WebhookTransactionController::class, 'createRecurringTransaction']);
 
     // Employee Payroll Webhook Endpoints
     Route::match(['get', 'post'], '/webhook/payroll/due', [WebhookTransactionController::class, 'duePayroll']);

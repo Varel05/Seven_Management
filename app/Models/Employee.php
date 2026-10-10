@@ -522,9 +522,21 @@ class Employee extends Model
     public function executePayrollPosting(?float $customAmount = null, string $source = 'website', ?array $payrollData = null): JournalEntry
     {
         return DB::transaction(function () use ($customAmount, $source, $payrollData) {
+            $period = $payrollData['period'] ?? now()->translatedFormat('F Y');
+            
+            // Cari draft terbaru yang belum dibayar, abaikan perbedaan penulisan periode dari AI
+            $draftPayroll = EmployeePayroll::where('employee_id', $this->id)
+                ->whereNull('journal_entry_id')
+                ->latest()
+                ->first();
+
             $finalAmount = $customAmount !== null && $customAmount > 0
                 ? $customAmount
-                : (float) $this->total_salary;
+                : ($draftPayroll ? (float) $draftPayroll->take_home_pay : (float) $this->total_salary);
+
+            if ($draftPayroll) {
+                $period = $draftPayroll->period;
+            }
 
             // Pastikan akun 5002 (Beban Gaji) ada
             $expenseAccount = Account::firstOrCreate(
@@ -538,7 +550,6 @@ class Employee extends Model
                 ?? Account::where('type', 'asset')->first();
 
             $reference = 'PAY-'.strtoupper(Str::random(8));
-            $period = $payrollData['period'] ?? now()->translatedFormat('F Y');
 
             $lowerSource = strtolower($source);
             if (str_starts_with($lowerSource, 'telegram')) {
@@ -565,12 +576,14 @@ class Employee extends Model
             $bonusText = $this->bonus_salary > 0
                 ? ', Bonus: '.$this->formatted_bonus_salary." ({$this->tier_points_to_deduct} poin)"
                 : '';
+                
+            $mainSalaryBase = $draftPayroll ? $draftPayroll->main_salary : ($payrollData['main_salary'] ?? $this->base_salary);
 
             // 1. Debit Akun Beban Gaji (5002)
             JournalEntryLine::create([
                 'journal_entry_id' => $journalEntry->id,
                 'account_id' => $expenseAccount->id,
-                'description' => "Gaji {$this->name} (Pokok/Honor: Rp ".number_format($payrollData['main_salary'] ?? $this->base_salary, 0, ',', '.')."{$allowanceText}{$bonusText})",
+                'description' => "Gaji {$this->name} (Pokok/Honor: Rp ".number_format($mainSalaryBase, 0, ',', '.')."{$allowanceText}{$bonusText})",
                 'debit' => $finalAmount,
                 'credit' => 0,
             ]);
@@ -584,24 +597,48 @@ class Employee extends Model
                 'credit' => $finalAmount,
             ]);
 
-            // 3. Simpan Riwayat Slip Gaji Lengkap (EmployeePayroll)
-            $totalPresent = (int) ($payrollData['total_present'] ?? 27);
-            $totalShifts = (int) ($payrollData['total_shifts'] ?? 27);
-            $lateCount = (int) ($payrollData['late_count'] ?? 0);
-            $disciplinePresent = (int) ($payrollData['discipline_present'] ?? max(0, $totalPresent - $lateCount));
-            $holidayShifts = (int) ($payrollData['holiday_shifts'] ?? 0);
 
-            $dailyRate = (float) ($payrollData['daily_rate'] ?? $this->effective_daily_rate);
-            $disciplineRate = (float) ($payrollData['discipline_rate'] ?? $this->effective_discipline_rate);
-            $holidayRate = (float) ($payrollData['holiday_rate'] ?? $this->effective_holiday_rate);
 
-            $mainSalary = (float) ($payrollData['main_salary'] ?? ($totalPresent * $dailyRate));
-            $disciplineBonus = (float) ($payrollData['discipline_bonus'] ?? ($disciplinePresent * $disciplineRate));
-            $salesBonus = (float) ($payrollData['sales_bonus'] ?? $this->bonus_salary);
-            $holidayBonus = (float) ($payrollData['holiday_bonus'] ?? ($holidayShifts * $holidayRate));
-            $allowanceTotal = (float) ($payrollData['allowance_total'] ?? $this->total_allowance);
+            if ($draftPayroll) {
+                // Gunakan data dari draft yang sudah diisi oleh webhook generatePayrollSlip
+                $totalPresent = $draftPayroll->total_present;
+                $totalShifts = $draftPayroll->total_shifts;
+                $lateCount = $draftPayroll->late_count;
+                $disciplinePresent = $draftPayroll->discipline_present;
+                $holidayShifts = $draftPayroll->holiday_shifts;
+                $dailyRate = $draftPayroll->daily_rate;
+                $disciplineRate = $draftPayroll->discipline_rate;
+                $holidayRate = $draftPayroll->holiday_rate;
+                $mainSalary = $draftPayroll->main_salary;
+                $disciplineBonus = $draftPayroll->discipline_bonus;
+                $salesBonus = $draftPayroll->sales_bonus;
+                $holidayBonus = $draftPayroll->holiday_bonus;
+                $allowanceTotal = $draftPayroll->allowance_total;
 
-            EmployeePayroll::create([
+                $draftPayroll->update([
+                    'journal_entry_id' => $journalEntry->id,
+                    'take_home_pay' => $finalAmount,
+                    'notes' => 'Telah Dibayar',
+                    'paid_at' => now(), // Assume this column exists or will just be ignored if not in fillable
+                ]);
+            } else {
+                $totalPresent = (int) ($payrollData['total_present'] ?? 27);
+                $totalShifts = (int) ($payrollData['total_shifts'] ?? 27);
+                $lateCount = (int) ($payrollData['late_count'] ?? 0);
+                $disciplinePresent = (int) ($payrollData['discipline_present'] ?? max(0, $totalPresent - $lateCount));
+                $holidayShifts = (int) ($payrollData['holiday_shifts'] ?? 0);
+    
+                $dailyRate = (float) ($payrollData['daily_rate'] ?? $this->effective_daily_rate);
+                $disciplineRate = (float) ($payrollData['discipline_rate'] ?? $this->effective_discipline_rate);
+                $holidayRate = (float) ($payrollData['holiday_rate'] ?? $this->effective_holiday_rate);
+    
+                $mainSalary = (float) ($payrollData['main_salary'] ?? ($totalPresent * $dailyRate));
+                $disciplineBonus = (float) ($payrollData['discipline_bonus'] ?? ($disciplinePresent * $disciplineRate));
+                $salesBonus = (float) ($payrollData['sales_bonus'] ?? $this->bonus_salary);
+                $holidayBonus = (float) ($payrollData['holiday_bonus'] ?? ($holidayShifts * $holidayRate));
+                $allowanceTotal = (float) ($payrollData['allowance_total'] ?? $this->total_allowance);
+
+                EmployeePayroll::create([
                 'employee_id' => $this->id,
                 'journal_entry_id' => $journalEntry->id,
                 'period' => $period,
@@ -630,6 +667,7 @@ class Employee extends Model
                 'hrd_name' => $payrollData['hrd_name'] ?? 'Ari Husbana',
                 'paid_at' => now(),
             ]);
+            }
 
             // 4. Kurangi poin terakumulasi sebesar besar poin tier jika mengambil bonus gaji
             $pointsToDeduct = $this->tier_points_to_deduct;

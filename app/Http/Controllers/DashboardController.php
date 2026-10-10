@@ -63,9 +63,14 @@ class DashboardController extends Controller
             $firstLine = $latestEntry->lines->first();
             $expenseLine = $latestEntry->lines->first(fn ($l) => $l->account && $l->account->type === 'expense');
             $revenueLine = $latestEntry->lines->first(fn ($l) => $l->account && $l->account->type === 'revenue');
-            $amount = $expenseLine
-                ? ($expenseLine->debit ?? 0)
-                : ($revenueLine->credit ?? $latestEntry->lines->sum('debit'));
+            
+            if ($revenueLine) {
+                $amount = $revenueLine->credit ?? $latestEntry->lines->sum('debit');
+            } elseif ($expenseLine) {
+                $amount = $expenseLine->debit ?? 0;
+            } else {
+                $amount = $latestEntry->lines->sum('debit');
+            }
 
             $newTransactionInfo = [
                 'id' => $latestEntry->id,
@@ -83,7 +88,7 @@ class DashboardController extends Controller
             $firstLine = $t->lines->first();
             $expenseLine = $t->lines->first(fn ($l) => $l->account && $l->account->type === 'expense');
             $revenueLine = $t->lines->first(fn ($l) => $l->account && $l->account->type === 'revenue');
-            $accountName = $expenseLine ? ($expenseLine->account->name ?? '') : ($revenueLine ? ($revenueLine->account->name ?? '') : ($firstLine->account->name ?? ''));
+            $accountName = $revenueLine ? ($revenueLine->account->name ?? '') : ($expenseLine ? ($expenseLine->account->name ?? '') : ($firstLine->account->name ?? ''));
 
             return [
                 'id' => $t->id,

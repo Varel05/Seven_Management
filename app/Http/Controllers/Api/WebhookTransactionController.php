@@ -201,12 +201,40 @@ class WebhookTransactionController extends Controller
     /**
      * Display a listing of recent journal transactions.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $transactions = JournalEntry::with('lines.account')
-            ->latest('date')
-            ->limit(20)
-            ->get();
+        $query = JournalEntry::with('lines.account')->latest('date');
+
+        // Filter berdasarkan bulan (angka 1-12)
+        if ($request->filled('month')) {
+            $query->whereMonth('date', $request->month);
+        }
+
+        // Filter berdasarkan tahun
+        if ($request->filled('year')) {
+            $query->whereYear('date', $request->year);
+        }
+
+        // Filter tipe transaksi (expense / income)
+        if ($request->filled('type')) {
+            $type = strtolower($request->type);
+            $mappedType = in_array($type, ['pengeluaran', 'keluar']) ? 'expense' : (in_array($type, ['pemasukan', 'masuk']) ? 'income' : $type);
+            
+            $query->whereHas('lines.account', function ($q) use ($mappedType) {
+                $q->where('type', $mappedType);
+            });
+        }
+
+        // Pencarian teks deskripsi / referensi
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('description', 'like', "%{$search}%")
+                  ->orWhere('reference', 'like', "%{$search}%");
+            });
+        }
+
+        $transactions = $query->limit(50)->get();
 
         return response()->json([
             'status' => true,
@@ -1481,10 +1509,10 @@ class WebhookTransactionController extends Controller
         }
 
         $journalEntry = $employee->executePayrollPosting($customAmount, 'telegram');
+        
+        $newPayroll = EmployeePayroll::where('journal_entry_id', $journalEntry->id)->first();
+        $finalAmount = $newPayroll ? (float) $newPayroll->take_home_pay : (float) $employee->total_salary;
 
-        $finalAmount = $customAmount !== null && $customAmount > 0
-            ? $customAmount
-            : (float) $employee->total_salary;
         $formattedAmount = 'Rp '.number_format($finalAmount, 0, ',', '.');
         $assetName = $employee->assetAccount->name ?? 'Kas Operasional';
 
@@ -1520,6 +1548,57 @@ class WebhookTransactionController extends Controller
         ], 201);
     }
 
+    /**
+     * Membuat jadwal pengeluaran rutin baru.
+     */
+    public function createRecurringTransaction(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'amount' => 'required|numeric|min:0',
+            'frequency' => 'required|in:monthly,weekly,yearly',
+            'day_of_month' => 'required|integer|min:1|max:31',
+            'description' => 'nullable|string',
+        ]);
+
+        // Secara default menggunakan Beban Operasional (5000) dan Kas Operasional (1001)
+        $expenseAccount = Account::firstOrCreate(
+            ['code' => '5000'],
+            ['name' => 'Beban Operasional', 'type' => 'expense']
+        );
+        $assetAccount = Account::firstOrCreate(
+            ['code' => '1001'],
+            ['name' => 'Kas Operasional', 'type' => 'asset']
+        );
+
+        $recurring = RecurringTransaction::create([
+            'name' => $validated['name'],
+            'amount' => $validated['amount'],
+            'frequency' => $validated['frequency'],
+            'day_of_month' => $validated['day_of_month'],
+            'expense_account_id' => $expenseAccount->id,
+            'asset_account_id' => $assetAccount->id,
+            'status' => 'active'
+        ]);
+
+        $formattedAmount = 'Rp ' . number_format($recurring->amount, 0, ',', '.');
+        $freqText = match($recurring->frequency) {
+            'monthly' => 'Setiap Bulan',
+            'weekly' => 'Setiap Minggu',
+            'yearly' => 'Setiap Tahun',
+            default => 'Rutin'
+        };
+
+        return response()->json([
+            'status' => true,
+            'message' => "✅ *Berhasil Membuat Jadwal Rutin Baru!*\n\n" .
+                         "Nama Tagihan: *{$recurring->name}*\n" .
+                         "Nominal: *{$formattedAmount}*\n" .
+                         "Periode: {$freqText} (Tiap tgl/hari ke-{$recurring->day_of_month})\n\n" .
+                         "💡 Anda kini bisa menanyakan 'Cek tagihan rutin bulan ini' untuk mengecek statusnya.",
+            'data' => $recurring
+        ], 201);
+    }
     /**
      * Get real-time balance of all asset (cash & bank) accounts.
      */
@@ -2096,12 +2175,17 @@ class WebhookTransactionController extends Controller
             'product_code' => 'required_without:product_id|string',
             'product_id' => 'nullable|exists:products,id',
             'quantity' => 'nullable|integer|min:1',
+            'price' => 'nullable|numeric|min:0',
             'customer_name' => 'nullable|string|max:255',
             'account_code' => 'nullable|string',
             'payment_method' => 'nullable|string',
             'sender_telegram_id' => 'nullable|string',
             'employee_id' => 'nullable|exists:employees,id',
             'is_rental' => 'nullable|boolean',
+            'transaction_type' => 'nullable|string',
+            'rental_days' => 'nullable|integer|min:1',
+            'rental_start_date' => 'nullable|date',
+            'rental_end_date' => 'nullable|date|after_or_equal:rental_start_date',
         ]);
 
         $qty = (int) ($validated['quantity'] ?? 1);
@@ -2143,13 +2227,28 @@ class WebhookTransactionController extends Controller
             $paymentMethod = 'cod';
         }
 
-        $isRental = $request->boolean('is_rental');
+        $isRental = $request->boolean('is_rental') || strtolower($request->input('transaction_type', '')) === 'rental';
 
         $sale = DB::transaction(function () use ($product, $qty, $validated, $account, $csEmployee, $paymentMethod, $isRental) {
             $product->decrement('stock', $qty);
 
             $unitCost = (float) $product->cost_price;
-            $unitPrice = (float) ($isRental ? $product->effective_rental_price : $product->selling_price);
+            
+            $startDate = $isRental 
+                ? (isset($validated['rental_start_date']) ? \Carbon\Carbon::parse($validated['rental_start_date']) : now()) 
+                : null;
+                
+            $endDate = $isRental 
+                ? (isset($validated['rental_end_date']) ? \Carbon\Carbon::parse($validated['rental_end_date']) : $startDate->copy()->addDays($validated['rental_days'] ?? 3)) 
+                : null;
+
+            $rentalDays = $isRental ? max(1, (int) $startDate->diffInDays($endDate)) : 0;
+            $rentalMultiplier = $isRental ? (int) ceil($rentalDays / 3) : 1;
+            
+            $unitPrice = isset($validated['price']) && $validated['price'] > 0
+                ? (float) $validated['price']
+                : (float) ($isRental ? ($product->effective_rental_price * $rentalMultiplier) : $product->selling_price);
+                
             $subtotal = $unitPrice * $qty;
             $totalCost = $unitCost * $qty;
             $invoiceNumber = ($isRental ? 'RNT-' : 'RTL-').date('Ymd').'-'.strtoupper(Str::random(4));
@@ -2159,6 +2258,9 @@ class WebhookTransactionController extends Controller
                 'employee_id' => $csEmployee?->id,
                 'transaction_type' => $isRental ? 'rental' : 'sale',
                 'sale_date' => now(),
+                'rental_start_date' => $startDate,
+                'rental_end_date' => $endDate,
+                'rental_status' => $isRental ? 'active' : null,
                 'customer_name' => $validated['customer_name'] ?? 'Pelanggan Telegram',
                 'payment_method' => $paymentMethod,
                 'account_id' => $account?->id,
@@ -3076,7 +3178,49 @@ class WebhookTransactionController extends Controller
             $ratePerPoint = (float) $employee->rate_per_point;
             $statusText = 'Belum Dibayar (Draft)';
             $refText = '';
-            $slipUrl = route('employees.slip.preview', $employee->id);
+            
+            // Simpan Draft ke database agar saat di-approve, data kehadiran tidak hilang.
+            $existingPayroll = EmployeePayroll::updateOrCreate(
+                [
+                    'employee_id' => $employee->id,
+                    'period' => $period,
+                    'journal_entry_id' => null, // Cari yang statusnya masih draft
+                ],
+                [
+                    'period_start' => now()->subMonth()->setDay(26)->toDateString(),
+                    'period_end' => now()->setDay(25)->toDateString(),
+                    'payment_method' => 'Transfer',
+                    'total_shifts' => $totalShifts,
+                    'total_present' => $totalPresent,
+                    'late_count' => $lateCount,
+                    'discipline_present' => $disciplinePresent,
+                    'holiday_shifts' => $holidayShifts,
+                    'daily_rate' => $dailyRate,
+                    'discipline_rate' => $disciplineRate,
+                    'holiday_rate' => $holidayRate,
+                    'closing_points' => $closingPoints,
+                    'closing_pcs' => $closingPoints,
+                    'rate_per_point' => $ratePerPoint,
+                    'main_salary' => $mainSalary,
+                    'discipline_bonus' => $disciplineBonus,
+                    'sales_bonus' => $salesBonus,
+                    'holiday_bonus' => $holidayBonus,
+                    'allowance_total' => $allowanceTotal,
+                    'take_home_pay' => $takeHomePay,
+                    'notes' => 'Draft / Estimasi Berjalan (Belum Dibayar)',
+                    'hrd_name' => 'Ari Husbana',
+                ]
+            );
+
+            $slipUrl = route('employees.slip.preview', [
+                'employee' => $employee->id,
+                'period' => $period,
+                'total_shifts' => $totalShifts,
+                'total_present' => $totalPresent,
+                'late_count' => $lateCount,
+                'discipline_present' => $disciplinePresent,
+                'holiday_shifts' => $holidayShifts,
+            ]);
         }
 
         $cb = $existingPayroll?->closing_breakdown ?: [];
