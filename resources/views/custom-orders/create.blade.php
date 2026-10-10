@@ -353,7 +353,7 @@
                                 type="button" 
                                 @click="sendToAiAnalysis()"
                                 :disabled="estimateLoading"
-                                class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/20 hover:shadow-emerald-900/40 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50"
+                                class="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:brightness-110 text-white font-bold text-xs shadow-lg shadow-emerald-950/20 hover:shadow-emerald-900/40 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50"
                             >
                                 <svg class="w-4 h-4 animate-spin" x-show="estimateLoading" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                 <svg class="w-4 h-4" x-show="!estimateLoading" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
@@ -407,7 +407,7 @@
                         </div>
 
                         <div class="flex justify-end pt-3">
-                            <button type="submit" class="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2">
+                            <button type="submit" class="px-6 py-3 rounded-2xl bg-emerald-500 hover:brightness-110 text-white font-bold text-xs shadow-lg shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 <span>Simpan Pesanan ke Daftar Pesanan Bespoke / Custom</span>
                             </button>
@@ -418,7 +418,7 @@
 
                 <!-- Right Column: AI Material & Cost Estimator Card (5 cols) -->
                 <div class="lg:col-span-5 space-y-6">
-                    <div class="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-900 text-white rounded-3xl p-6 border border-emerald-800/60 shadow-xl space-y-5 sticky top-24">
+                    <div class="bg-emerald-950 text-white rounded-3xl p-6 border border-emerald-800/60 shadow-xl space-y-5 sticky top-24">
                         
                         <div class="flex items-center justify-between pb-3 border-b border-emerald-800/60">
                             <div class="flex items-center gap-2.5">

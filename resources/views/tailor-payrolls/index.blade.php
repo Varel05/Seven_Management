@@ -27,7 +27,7 @@
             <!-- Action Button: Buat Slip Upah Baru -->
             <div class="flex items-center gap-2">
                 <a href="{{ route('tailor-payrolls.create') }}" 
-                   class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs shadow-md shadow-amber-500/20 transition-all hover:scale-102">
+                   class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:brightness-110 text-white font-bold text-xs shadow-md shadow-amber-500/20 transition-all hover:scale-102">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                     </svg>

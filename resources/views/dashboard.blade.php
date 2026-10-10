@@ -499,7 +499,7 @@
                 
                 <!-- Card 1: Saldo Kas & Bank (Liquid Assets) -->
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-blue-300 dark:hover:border-slate-700 transition-all group">
-                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-blue-500"></div>
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-blue-300 uppercase tracking-wider">Kas & Bank</span>
                         <div class="p-2 xl:p-2.5 rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -519,7 +519,7 @@
 
                 <!-- Card 2: Pemasukan Bulan Ini (Revenue) -->
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-300 dark:hover:border-slate-700 transition-all group">
-                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-emerald-500"></div>
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-emerald-300 uppercase tracking-wider">Pendapatan</span>
                         <div class="p-2 xl:p-2.5 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -539,7 +539,7 @@
 
                 <!-- Card 3: Pengeluaran Bulan Ini (Expenses) -->
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-rose-300 dark:hover:border-slate-700 transition-all group">
-                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-500 to-pink-500"></div>
+                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-rose-500"></div>
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-rose-300 uppercase tracking-wider">Beban Usaha</span>
                         <div class="p-2 xl:p-2.5 rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -562,7 +562,7 @@
                     $isProfit = ($labaBersihBulanIni ?? 0) >= 0;
                 @endphp
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-teal-300 dark:hover:border-slate-700 transition-all group">
-                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-teal-500 to-cyan-500"></div>
+                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-teal-500"></div>
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-teal-300 uppercase tracking-wider">Laba / Rugi Bersih</span>
                         <div class="p-2 xl:p-2.5 rounded-xl {{ $isProfit ? 'bg-teal-50 text-teal-600 dark:bg-teal-600 dark:text-white' : 'bg-rose-50 text-rose-600 dark:bg-rose-600 dark:text-white' }} shadow-xs group-hover:scale-105 transition-transform">
@@ -584,7 +584,7 @@
 
                 <!-- Card 5: Perlu Audit / Verifikasi Telegram -->
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-4 xl:p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-slate-700 transition-all group">
-                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 to-orange-500"></div>
+                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-amber-500"></div>
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] xl:text-xs font-bold text-slate-700 dark:text-amber-300 uppercase tracking-wider">Perlu Audit AI</span>
                         <div class="p-2 xl:p-2.5 rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -794,7 +794,7 @@
                 <!-- Chart Header: Judul & Tombol Switch Mode -->
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-4">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
                             <!-- Icon Combo Chart (Bars & Line) -->
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -904,7 +904,7 @@
                         <button 
                             type="button" 
                             @click="openAddAccountModal()"
-                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-sm shadow-emerald-600/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:brightness-110 text-white text-xs font-bold shadow-sm shadow-emerald-600/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
                         >
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                             <span>Tambah Akun</span>
@@ -918,27 +918,27 @@
                             @php
                                 $typeConfigs = [
                                     'asset' => [
-                                        'box' => 'border-sky-200/90 dark:border-sky-900/50 bg-gradient-to-br from-sky-50 via-sky-50/40 to-white dark:from-slate-800 dark:to-slate-900 text-sky-950 dark:text-sky-200',
+                                        'box' => 'border-sky-200/90 dark:border-sky-900/50 bg-sky-50 dark:bg-slate-800 text-sky-950 dark:text-sky-200',
                                         'badge' => 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800',
                                         'code' => 'text-sky-700 dark:text-sky-400',
                                     ],
                                     'revenue' => [
-                                        'box' => 'border-emerald-200/90 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50 via-emerald-50/40 to-white dark:from-slate-800 dark:to-slate-900 text-emerald-950 dark:text-emerald-200',
+                                        'box' => 'border-emerald-200/90 dark:border-emerald-900/50 bg-emerald-50 dark:bg-slate-800 text-emerald-950 dark:text-emerald-200',
                                         'badge' => 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
                                         'code' => 'text-emerald-700 dark:text-emerald-400',
                                     ],
                                     'expense' => [
-                                        'box' => 'border-rose-200/90 dark:border-rose-900/50 bg-gradient-to-br from-rose-50 via-rose-50/40 to-white dark:from-slate-800 dark:to-slate-900 text-rose-950 dark:text-rose-200',
+                                        'box' => 'border-rose-200/90 dark:border-rose-900/50 bg-rose-50 dark:bg-slate-800 text-rose-950 dark:text-rose-200',
                                         'badge' => 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
                                         'code' => 'text-rose-700 dark:text-rose-400',
                                     ],
                                     'liability' => [
-                                        'box' => 'border-purple-200/90 dark:border-purple-900/50 bg-gradient-to-br from-purple-50 via-purple-50/40 to-white dark:from-slate-800 dark:to-slate-900 text-purple-950 dark:text-purple-200',
+                                        'box' => 'border-purple-200/90 dark:border-purple-900/50 bg-purple-50 dark:bg-slate-800 text-purple-950 dark:text-purple-200',
                                         'badge' => 'bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800',
                                         'code' => 'text-purple-700 dark:text-purple-400',
                                     ],
                                     'equity' => [
-                                        'box' => 'border-amber-200/90 dark:border-amber-900/50 bg-gradient-to-br from-amber-50 via-amber-50/40 to-white dark:from-slate-800 dark:to-slate-900 text-amber-950 dark:text-amber-200',
+                                        'box' => 'border-amber-200/90 dark:border-amber-900/50 bg-amber-50 dark:bg-slate-800 text-amber-950 dark:text-amber-200',
                                         'badge' => 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
                                         'code' => 'text-amber-700 dark:text-amber-400',
                                     ],
@@ -1016,7 +1016,7 @@
             <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold shadow-md shadow-purple-600/20">
+                        <div class="w-10 h-10 rounded-2xl bg-indigo-500 text-white flex items-center justify-center font-bold shadow-md shadow-purple-600/20">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                         </div>
                         <div>
@@ -1033,7 +1033,7 @@
                         <button 
                             type="button" 
                             @click="openAddRecurringModal()"
-                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-sm shadow-purple-600/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:brightness-110 text-white text-xs font-bold shadow-sm shadow-purple-600/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
                         >
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                             <span>Tambah Tagihan Rutin</span>
@@ -1110,7 +1110,7 @@
                                                 @csrf
                                                 <button 
                                                     type="submit" 
-                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-xs transition-all hover:scale-105 active:scale-95"
+                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:brightness-110 text-white text-xs font-bold shadow-xs transition-all hover:scale-105 active:scale-95"
                                                     title="Bukukan ke Jurnal Sekarang"
                                                 >
                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -1264,7 +1264,7 @@
                 <div class="w-full overflow-x-auto">
                     <table class="w-full text-left border-collapse table-auto lg:table-fixed">
                         <thead>
-                            <tr class="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800/80 dark:to-slate-800/60 border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                            <tr class="bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                                 <th class="px-3 py-3 w-28 lg:w-32">Tanggal</th>
                                 <th class="px-3 py-3 w-32 lg:w-36">No. Referensi</th>
                                 <th class="px-3 py-3 min-w-0 w-auto">Keterangan / Transaksi</th>
@@ -1285,7 +1285,7 @@
                 @if($transactions->isNotEmpty())
                     <div 
                         x-show="filteredItems.length > 0" 
-                        class="px-5 py-3.5 border-t border-slate-200/80 dark:border-slate-800 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/80 dark:from-slate-900 dark:to-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                        class="px-5 py-3.5 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                     >
                         <!-- Rentang & Total Data Transaksi -->
                         <div class="flex items-center gap-2 text-slate-600 dark:text-slate-400">
@@ -1443,7 +1443,7 @@
                         </h4>
                         <div class="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
                             <table class="w-full text-xs text-left">
-                                <thead class="bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-800 text-slate-700 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
+                                <thead class="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
                                     <tr>
                                         <th class="px-4 py-3">Kode Akun</th>
                                         <th class="px-4 py-3">Nama Akun & Posisi</th>
@@ -1499,7 +1499,7 @@
                                     <form :action="'/journal-entries/' + selectedTrx.id + '/verify'" method="POST">
                                         @csrf
                                         @method('PATCH')
-                                        <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5">
+                                        <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:brightness-110 text-white shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
                                             Verifikasi Jurnal
                                         </button>
@@ -1693,7 +1693,7 @@
                     <!-- Header -->
                     <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
                         <div class="flex items-center gap-3">
-                            <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-600/20">
+                            <div class="w-11 h-11 rounded-2xl bg-emerald-500 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-600/20">
                                 <template x-if="!isEditAccount">
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
                                 </template>
@@ -1783,7 +1783,7 @@
                             </button>
                             <button 
                                 type="submit" 
-                                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:brightness-110 text-white shadow-md shadow-emerald-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
                             >
                                 <template x-if="!isEditAccount">
                                     <span>Simpan Akun Baru</span>
@@ -1882,7 +1882,7 @@
                                 @method('DELETE')
                                 <button 
                                     type="submit" 
-                                    class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-md shadow-rose-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                                    class="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:brightness-110 text-white shadow-md shadow-rose-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
                                 >
                                     Ya, Hapus Akun
                                 </button>
@@ -1928,7 +1928,7 @@
                     <!-- Header -->
                     <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
                         <div class="flex items-center gap-3">
-                            <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-purple-600/20">
+                            <div class="w-11 h-11 rounded-2xl bg-purple-500 text-white flex items-center justify-center font-bold shadow-md shadow-purple-600/20">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                             </div>
                             <div>
@@ -2091,7 +2091,7 @@
                             </button>
                             <button 
                                 type="submit" 
-                                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-purple-600 hover:brightness-110 text-white shadow-md shadow-purple-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
                             >
                                 <template x-if="!isEditRecurring">
                                     <span>Jadwalkan Pengeluaran</span>
@@ -2174,7 +2174,7 @@
                                 @method('DELETE')
                                 <button 
                                     type="submit" 
-                                    class="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-md shadow-rose-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                                    class="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:brightness-110 text-white shadow-md shadow-rose-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
                                 >
                                     Ya, Hapus Jadwal
                                 </button>
@@ -2198,7 +2198,7 @@
             class="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-slate-900/95 dark:bg-slate-900/95 text-white backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-emerald-500/50 flex items-start gap-3.5 ring-1 ring-emerald-400/30"
             style="display: none;"
         >
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
                 <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
             </div>
             <div class="flex-1 min-w-0">

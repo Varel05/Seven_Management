@@ -26,7 +26,7 @@
                     type="button" 
                     @click="window.dispatchEvent(new CustomEvent('open-pos-modal'))"
                     onclick="window.dispatchEvent(new CustomEvent('open-pos-modal'))" 
-                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-600 to-indigo-600 hover:from-emerald-400 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:brightness-110 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
                     <span>Kasir</span>
@@ -903,7 +903,7 @@
                             type="submit" 
                             :disabled="cartItems.length === 0" 
                             class="px-5 py-2.5 rounded-xl disabled:opacity-50 text-white text-xs font-bold shadow-md cursor-pointer transition-all"
-                            :class="transactionType === 'rental' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500' : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500'"
+                            :class="transactionType === 'rental' ? 'bg-blue-600 hover:brightness-110' : 'bg-emerald-500 hover:brightness-110'"
                         >
                             <span x-text="transactionType === 'rental' ? 'Proses Penyewaan & Bukukan Jurnal' : 'Proses Penjualan & Bukukan Jurnal'"></span>
                         </button>

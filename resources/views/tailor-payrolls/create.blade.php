@@ -554,7 +554,7 @@
                     </div>
                     <button 
                         type="submit" 
-                        class="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black text-sm shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        class="px-6 py-3 rounded-xl bg-amber-500 hover:brightness-110 text-white font-black text-sm shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                         <span>Simpan & Cetak Slip Upah</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

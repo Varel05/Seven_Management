@@ -22,7 +22,7 @@
         class="relative overflow-hidden bg-white/95 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/60 dark:shadow-none transition-all"
     >
         <!-- Top Gradient Accent -->
-        <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600"></div>
+        <div class="absolute top-0 left-0 right-0 h-1.5 bg-emerald-500"></div>
 
         <!-- Header -->
         <div class="mb-6 text-center">
@@ -210,7 +210,7 @@
             <div class="pt-1">
                 <button 
                     type="submit" 
-                    class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-sm shadow-lg shadow-emerald-600/25 dark:shadow-emerald-950/40 hover:shadow-emerald-600/35 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                    class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:brightness-110 text-white font-semibold text-sm shadow-lg shadow-emerald-600/25 dark:shadow-emerald-950/40 hover:shadow-emerald-600/35 transition-all flex items-center justify-center gap-2 group cursor-pointer"
                 >
                     <span>Masuk ke Dashboard</span>
                     <svg class="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">

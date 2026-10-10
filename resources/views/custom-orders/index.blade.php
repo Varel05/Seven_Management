@@ -24,7 +24,7 @@
             <div class="flex items-center gap-2.5">
                 <a 
                     href="{{ route('custom-orders.create') }}" 
-                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:brightness-110 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
                     <span>+ Buat Pesanan Custom (+ AI Estimasi)</span>
@@ -400,7 +400,7 @@
 
                     <div class="flex justify-end gap-2 pt-2">
                         <button type="button" @click="paymentModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Batal</button>
-                        <button type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold shadow-md cursor-pointer">Simpan & Bukukan ke Jurnal</button>
+                        <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-500 text-white text-xs font-bold shadow-md cursor-pointer">Simpan & Bukukan ke Jurnal</button>
                     </div>
                 </form>
             </div>

@@ -22,7 +22,7 @@
                     type="button" 
                     id="btn-download-pdf"
                     onclick="downloadSlipPdf()" 
-                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer print:hidden"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:brightness-110 text-slate-950 text-xs font-black shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer print:hidden"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                     <span id="btn-download-text">Unduh Slip PDF</span>

@@ -2,7 +2,7 @@
     <!-- ========================================================================= -->
     <!-- TOP HEADER BAR (Navbar Atas: Nama Aplikasi, Trigger, Status AI, Tema, Profil & Logout) -->
     <!-- ========================================================================= -->
-    <header class="fixed top-0 inset-x-0 h-16 z-40 bg-gradient-to-r from-emerald-950 via-emerald-900 to-slate-950 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 border-b border-emerald-800/60 dark:border-slate-800 shadow-md backdrop-blur-md px-3 sm:px-6 flex items-center justify-between">
+    <header class="fixed top-0 inset-x-0 h-16 z-40 bg-emerald-950  border-b border-emerald-800/60 dark:border-slate-800 shadow-md backdrop-blur-md px-3 sm:px-6 flex items-center justify-between">
         
         <!-- Sisi Kiri: Tombol Trigger + Brand Logo & Nama Aplikasi -->
         <div class="flex items-center gap-3 sm:gap-4">
@@ -18,7 +18,7 @@
 
             <!-- Brand Logo & Nama Aplikasi -->
             <a href="{{ route('dashboard') }}" class="flex items-center gap-2.5 sm:gap-3 group">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center font-black shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform shrink-0">
+                <div class="w-9 h-9 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform shrink-0">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                     </svg>
@@ -99,7 +99,7 @@
                mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
                sidebarOpen ? 'md:w-64' : 'md:w-16'
            ]"
-           class="fixed top-16 bottom-0 left-0 z-40 w-64 md:w-16 bg-gradient-to-b from-emerald-950 via-emerald-950 to-slate-950 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 border-r border-emerald-800/50 dark:border-slate-800 shadow-2xl flex flex-col justify-between transition-all duration-300 ease-in-out">
+           class="fixed top-16 bottom-0 left-0 z-40 w-64 md:w-16 bg-emerald-950  border-r border-emerald-800/50 dark:border-slate-800 shadow-2xl flex flex-col justify-between transition-all duration-300 ease-in-out">
         
         <!-- Bagian Navigasi Menu Terkategori -->
         <div class="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar py-3">
