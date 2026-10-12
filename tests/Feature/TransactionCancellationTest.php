@@ -6,8 +6,6 @@ use App\Models\Account;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
-use App\Models\Material;
-use App\Models\Product;
 use App\Models\User;
 use App\Services\TransactionCancellationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -84,93 +82,6 @@ class TransactionCancellationTest extends TestCase
             JournalEntryLine::active()->where('account_id', $kas->id)->sum('debit')
             - JournalEntryLine::active()->where('account_id', $kas->id)->sum('credit')
         ));
-    }
-
-    public function test_cancel_retail_sale_restores_product_stock(): void
-    {
-        $product = Product::create([
-            'code' => 'KMG-01',
-            'name' => 'Kemeja Putih Formal',
-            'category' => 'clothing',
-            'stock' => 10,
-            'cost_price' => 50000,
-            'selling_price' => 100000,
-            'rental_price' => 25000,
-            'is_for_sale' => true,
-            'is_for_rent' => true,
-            'is_active' => true,
-        ]);
-
-        $webhookSecret = 'FpQqz4n9Czoh423Ok2tDs9RPGfAl4gfC';
-        config(['services.webhook.secret' => $webhookSecret]);
-
-        // Jual 3 pcs
-        $saleResponse = $this->withHeader('X-Webhook-Secret', $webhookSecret)
-            ->postJson('/api/webhook/retail/sale', [
-                'product_code' => 'KMG-01',
-                'quantity' => 3,
-                'customer_name' => 'Budi Santoso',
-            ]);
-
-        $saleResponse->assertOk();
-        $product->refresh();
-        $this->assertEquals(7, $product->stock);
-
-        $invoice = $saleResponse->json('sale.invoice_number');
-        $journalEntry = JournalEntry::where('reference', $invoice)->first();
-        $this->assertNotNull($journalEntry);
-
-        // Batalkan transaksi via cancellation service
-        $cancellationService = app(TransactionCancellationService::class);
-        $result = $cancellationService->cancel($journalEntry, 'Pelanggan membatalkan pesanan', 'Admin Test');
-
-        $this->assertTrue($result['success']);
-        $product->refresh();
-        // Stok harus kembali menjadi 10!
-        $this->assertEquals(10, $product->stock);
-        $this->assertEquals('rejected', $journalEntry->fresh()->status);
-    }
-
-    public function test_cancel_material_restock_reverts_material_stock(): void
-    {
-        $material = Material::create([
-            'code' => 'K-FR-01',
-            'name' => 'Kain Wool Ferari Hitam',
-            'category' => 'raw_material',
-            'unit' => 'meter',
-            'stock' => 50.0,
-            'min_stock' => 10.0,
-            'standard_cost' => 60000,
-        ]);
-
-        $webhookSecret = 'FpQqz4n9Czoh423Ok2tDs9RPGfAl4gfC';
-        config(['services.webhook.secret' => $webhookSecret]);
-
-        // Restock 20 meter
-        $restockResponse = $this->withHeader('X-Webhook-Secret', $webhookSecret)
-            ->postJson('/api/webhook/materials/restock', [
-                'material_code' => 'K-FR-01',
-                'quantity' => 20,
-                'total_cost' => 1200000,
-            ]);
-
-        $restockResponse->assertOk();
-        $material->refresh();
-        $this->assertEquals(70.0, (float) $material->stock);
-
-        $ref = $restockResponse->json('movement.reference_number');
-        $journalEntry = JournalEntry::where('reference', $ref)->first();
-        $this->assertNotNull($journalEntry);
-
-        // Batalkan restock
-        $cancellationService = app(TransactionCancellationService::class);
-        $result = $cancellationService->cancel($journalEntry, 'Vendor salah kirim faktur', 'Admin Test');
-
-        $this->assertTrue($result['success']);
-        $material->refresh();
-        // Stok harus kembali ke 50.0!
-        $this->assertEquals(50.0, (float) $material->stock);
-        $this->assertEquals('rejected', $journalEntry->fresh()->status);
     }
 
     public function test_cancel_employee_payroll_resets_last_paid_at_and_deletes_payroll_slip(): void

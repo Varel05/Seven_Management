@@ -9,28 +9,28 @@
              accountId: '{{ $paymentAccounts->first()?->id }}',
              notes: '',
 
-             // Rincian Item Jahitan (Default dari HPP)
+             // Rincian Item Jahitan Standar
              items: [
                  {
-                     material_id: '{{ $laborMaterials->firstWhere('code', 'LAB-JHT-REG')?->id }}',
+                     material_id: null,
                      item_name: 'Jas Reguler',
                      quantity: 0,
                      rate_per_piece: {{ $laborMaterials->firstWhere('code', 'LAB-JHT-REG')?->standard_cost ?? 50000 }}
                  },
                  {
-                     material_id: '{{ $laborMaterials->firstWhere('code', 'LAB-JHT-VST')?->id }}',
+                     material_id: null,
                      item_name: 'Vest',
                      quantity: 0,
                      rate_per_piece: {{ $laborMaterials->firstWhere('code', 'LAB-JHT-VST')?->standard_cost ?? 37000 }}
                  },
                  {
-                     material_id: '{{ $laborMaterials->firstWhere('code', 'LAB-JHT-PRM')?->id }}',
+                     material_id: null,
                      item_name: 'Jas Premium',
                      quantity: 0,
                      rate_per_piece: {{ $laborMaterials->firstWhere('code', 'LAB-JHT-PRM')?->standard_cost ?? 150000 }}
                  },
                  {
-                     material_id: '{{ $laborMaterials->firstWhere('code', 'LAB-JHT-REV')?->id }}',
+                     material_id: null,
                      item_name: 'Revisi',
                      quantity: 0,
                      rate_per_piece: {{ $laborMaterials->firstWhere('code', 'LAB-JHT-REV')?->standard_cost ?? 0 }}
@@ -365,14 +365,14 @@
                         <!-- Dropdown Tambah Item dari HPP -->
                         <div class="p-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
                             <div class="flex items-center gap-2">
-                                <span class="text-xs font-bold text-slate-600 dark:text-slate-400">+ Tambah dari HPP:</span>
+                                <span class="text-xs font-bold text-slate-600 dark:text-slate-400">+ Tambah Item Standar:</span>
                                 <select 
                                     @change="addItemFromHpp($event)"
                                     class="text-xs rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-amber-500"
                                 >
-                                    <option value="">-- Pilih Item Tenaga Kerja HPP --</option>
+                                    <option value="">-- Pilih Item Tarif Standar --</option>
                                     @foreach ($laborMaterials as $lm)
-                                        <option value="{{ $lm->id }}" data-name="{{ str_replace(['Upah Penjahit ', 'Biaya '], '', $lm->name) }}" data-cost="{{ $lm->standard_cost }}">
+                                        <option value="" data-name="{{ str_replace(['Upah Penjahit ', 'Biaya '], '', $lm->name) }}" data-cost="{{ $lm->standard_cost }}">
                                             {{ $lm->name }} (Rp {{ number_format($lm->standard_cost, 0, ',', '.') }})
                                         </option>
                                     @endforeach

@@ -6,7 +6,6 @@ use App\Models\Account;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
-use App\Models\Material;
 use App\Models\TailorPayroll;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -50,8 +49,8 @@ class TailorPayrollController extends Controller
         $totalBonThisMonth = $monthlyPayrolls->sum('total_bon');
         $totalPiecesThisMonth = $monthlyPayrolls->sum('total_pieces');
 
-        // Master tarif upah penjahit di HPP (Direct Labor)
-        $laborMaterials = Material::where('category', 'direct_labor')->orderBy('code')->get();
+        // Master tarif upah penjahit standar (Direct Labor)
+        $laborMaterials = TailorPayroll::getLaborRates();
 
         return view('tailor-payrolls.index', compact(
             'payrolls',
@@ -73,8 +72,8 @@ class TailorPayrollController extends Controller
             ->orderBy('name')
             ->get();
 
-        // Ambil seluruh komponen upah tenaga kerja langsung dari HPP (Direct Labor)
-        $laborMaterials = Material::where('category', 'direct_labor')->orderBy('code')->get();
+        // Ambil seluruh komponen upah tenaga kerja langsung standar (Direct Labor)
+        $laborMaterials = TailorPayroll::getLaborRates();
 
         // Akun pembayaran (Kas & Bank)
         $paymentAccounts = Account::where('type', 'asset')
@@ -114,7 +113,7 @@ class TailorPayrollController extends Controller
             'items.*.item_name' => 'required|string|max:255',
             'items.*.quantity' => 'required|integer|min:0',
             'items.*.rate_per_piece' => 'required|numeric|min:0',
-            'items.*.material_id' => 'nullable|exists:materials,id',
+            'items.*.material_id' => 'nullable',
 
             // Rincian Kasbon / Bon
             'advances' => 'nullable|array',
@@ -282,7 +281,7 @@ class TailorPayrollController extends Controller
      */
     public function show(TailorPayroll $tailorPayroll)
     {
-        $tailorPayroll->load(['items.material', 'advances', 'employee', 'journalEntry']);
+        $tailorPayroll->load(['items', 'advances', 'employee', 'journalEntry']);
 
         return view('tailor-payrolls.show', compact('tailorPayroll'));
     }

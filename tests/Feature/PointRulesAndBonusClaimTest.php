@@ -6,7 +6,6 @@ use App\Models\Account;
 use App\Models\Employee;
 use App\Models\EmployeePointLog;
 use App\Models\PointSetting;
-use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -19,10 +18,6 @@ class PointRulesAndBonusClaimTest extends TestCase
     protected Employee $cs1;
 
     protected Employee $cs2;
-
-    protected Product $tuxedoProduct;
-
-    protected Product $shirtProduct;
 
     protected function setUp(): void
     {
@@ -76,103 +71,6 @@ class PointRulesAndBonusClaimTest extends TestCase
             'claim_bonus' => true,
         ]);
 
-        // Tuksedo: 20 poin standar
-        $this->tuxedoProduct = Product::create([
-            'code' => 'TUX-001',
-            'name' => 'Tuksedo Klasik Black Tie',
-            'category' => 'tuksedo',
-            'selling_price' => 1500000,
-            'rental_price' => 500000,
-            'cost_price' => 800000,
-            'stock' => 10,
-        ]);
-
-        // Kemeja: 5 poin standar
-        $this->shirtProduct = Product::create([
-            'code' => 'KEM-001',
-            'name' => 'Kemeja Formal Putih',
-            'category' => 'kemeja',
-            'selling_price' => 250000,
-            'rental_price' => 75000,
-            'cost_price' => 120000,
-            'stock' => 10,
-        ]);
-    }
-
-    /**
-     * Syarat 1 & 5: Poin mentah (jual / sewa) berdasarkan item, dan poin quantity bernilai 1 per pcs.
-     */
-    public function test_raw_points_for_sale_and_rental_are_based_on_item(): void
-    {
-        // 1. Penjualan 2 pcs Tuksedo (20 pt per item) via Telegram Webhook
-        $responseSale = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
-            ->postJson('/api/webhook/retail/sale', [
-                'product_code' => $this->tuxedoProduct->code,
-                'quantity' => 2,
-                'payment_method' => 'cash',
-                'sender_phone' => $this->cs1->phone,
-            ]);
-
-        $responseSale->assertOk();
-
-        // Poin: Item tuksedo (20 pt) + Qty (2 pt) = 22 pt
-        $this->assertEquals(22, $this->cs1->fresh()->current_points);
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->cs1->id,
-            'category' => EmployeePointLog::CATEGORY_ITEM_SALE,
-            'points' => 20,
-        ]);
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->cs1->id,
-            'category' => EmployeePointLog::CATEGORY_QUANTITY,
-            'points' => 2,
-        ]);
-
-        // 2. Penyewaan 1 pcs Kemeja (5 pt per item) via Telegram Webhook
-        $responseRent = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
-            ->postJson('/api/webhook/retail/sale', [
-                'product_code' => $this->shirtProduct->code,
-                'quantity' => 1,
-                'is_rental' => true,
-                'payment_method' => 'cash',
-                'sender_phone' => $this->cs1->phone,
-            ]);
-
-        $responseRent->assertOk();
-
-        // Poin kemeja sewa berdasarkan item = 5 pt + Qty 1 pt = 6 pt tambahan -> Total 28 pt
-        $this->assertEquals(28, $this->cs1->fresh()->current_points);
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->cs1->id,
-            'category' => EmployeePointLog::CATEGORY_ITEM_RENT,
-            'points' => 5,
-        ]);
-    }
-
-    /**
-     * Syarat 2: Poin COD bernilai 1 setiap transaksi COD yang dilayani, trigger dari kata kunci 'cod'.
-     */
-    public function test_cod_points_awards_1_point_with_keyword_cod_from_telegram(): void
-    {
-        // Transaksi dengan kata kunci COD di catatan
-        $response = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
-            ->postJson('/api/webhook/retail/sale', [
-                'product_code' => $this->shirtProduct->code,
-                'quantity' => 1,
-                'payment_method' => 'transfer',
-                'notes' => 'Pesanan COD kurir AnterAja',
-                'sender_phone' => $this->cs1->phone,
-            ]);
-
-        $response->assertOk();
-
-        // 5 pt (item) + 1 pt (qty) + 1 pt (cod) = 7 pt
-        $this->assertEquals(7, $this->cs1->fresh()->current_points);
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->cs1->id,
-            'category' => EmployeePointLog::CATEGORY_COD,
-            'points' => 1,
-        ]);
     }
 
     /**

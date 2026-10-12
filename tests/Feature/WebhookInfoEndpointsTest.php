@@ -7,7 +7,6 @@ use App\Models\Account;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
-use App\Models\Material;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -293,11 +292,6 @@ class WebhookInfoEndpointsTest extends TestCase
     public function test_webhook_tailor_payroll_rates(): void
     {
         config(['services.telegram.owner_phones' => ['08111111111']]);
-
-        Material::firstOrCreate(
-            ['code' => 'LAB-JHT-REG'],
-            ['name' => 'Upah Penjahit Jas Reguler', 'category' => 'direct_labor', 'unit' => 'pcs', 'standard_cost' => 50000, 'stock' => 0, 'min_stock' => 0]
-        );
 
         $response = $this->postJson('/api/webhook/tailor-payroll', [
             'action' => 'rates',

@@ -2,16 +2,11 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AllowanceController;
-use App\Http\Controllers\CostSheetController;
-use App\Http\Controllers\CustomSuitOrderController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\JournalExportController;
-use App\Http\Controllers\MaterialController;
-use App\Http\Controllers\ProductionOrderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
-use App\Http\Controllers\RetailController;
 use App\Http\Controllers\TailorPayrollController;
 use App\Models\JournalEntry;
 use App\Services\TransactionCancellationService;
@@ -24,6 +19,7 @@ Route::get('/', function () {
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 Route::get('/dashboard/live-data', [DashboardController::class, 'liveData'])->middleware(['auth', 'verified'])->name('dashboard.live-data');
+Route::post('/tax/pay', [DashboardController::class, 'recordTaxPayment'])->middleware(['auth', 'verified'])->name('tax.pay');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -84,46 +80,6 @@ Route::middleware('auth')->group(function () {
     Route::put('/allowances/{allowance}', [AllowanceController::class, 'update'])->name('allowances.update');
     Route::patch('/allowances/{allowance}/toggle', [AllowanceController::class, 'toggle'])->name('allowances.toggle');
     Route::delete('/allowances/{allowance}', [AllowanceController::class, 'destroy'])->name('allowances.destroy');
-
-    // Manajemen Retail Pakaian & Kasir
-    Route::get('/retail', [RetailController::class, 'index'])->name('retail.index');
-    Route::post('/retail/products', [RetailController::class, 'storeProduct'])->name('retail.products.store');
-    Route::put('/retail/products/{product}', [RetailController::class, 'updateProduct'])->name('retail.products.update');
-    Route::post('/retail/products/update-points', [RetailController::class, 'updateItemPoints'])->name('retail.products.update-points');
-    Route::post('/retail/point-settings', [RetailController::class, 'updatePointSettings'])->name('retail.point-settings.update');
-    Route::delete('/retail/products/{product}', [RetailController::class, 'destroyProduct'])->name('retail.products.destroy');
-    Route::post('/retail/sales', [RetailController::class, 'storeSale'])->name('retail.sales.store');
-    Route::post('/retail/rentals/{sale}/return', [RetailController::class, 'returnRental'])->name('retail.rentals.return');
-
-    // Manajemen Jasa Pembuatan Jas Custom & AI Material Estimator
-    Route::get('/custom-orders', [CustomSuitOrderController::class, 'index'])->name('custom-orders.index');
-    Route::get('/custom-orders/create', [CustomSuitOrderController::class, 'create'])->name('custom-orders.create');
-    Route::post('/custom-orders', [CustomSuitOrderController::class, 'store'])->name('custom-orders.store');
-    Route::get('/custom-orders/{order}', [CustomSuitOrderController::class, 'show'])->name('custom-orders.show');
-    Route::post('/custom-orders/estimate', [CustomSuitOrderController::class, 'calculateEstimate'])->name('custom-orders.estimate');
-    Route::patch('/custom-orders/{order}/status', [CustomSuitOrderController::class, 'updateStatus'])->name('custom-orders.status');
-    Route::post('/custom-orders/{order}/payment', [CustomSuitOrderController::class, 'recordPayment'])->name('custom-orders.payment');
-    Route::post('/custom-orders/{order}/cut-material', [CustomSuitOrderController::class, 'cutMaterial'])->name('custom-orders.cut-material');
-
-    // Manajemen Stok Bahan Baku & Komponen Biaya
-    Route::get('/materials', MaterialController::class.'@index')->name('materials.index');
-    Route::post('/materials', MaterialController::class.'@store')->name('materials.store');
-    Route::put('/materials/{material}', MaterialController::class.'@update')->name('materials.update');
-    Route::post('/materials/{material}/restock', MaterialController::class.'@restock')->name('materials.restock');
-    Route::delete('/materials/{material}', MaterialController::class.'@destroy')->name('materials.destroy');
-
-    // Kartu HPP & Bill of Materials (BOM)
-    Route::get('/cost-sheets', CostSheetController::class.'@index')->name('cost-sheets.index');
-    Route::post('/cost-sheets', CostSheetController::class.'@store')->name('cost-sheets.store');
-    Route::get('/cost-sheets/{costSheet}', CostSheetController::class.'@show')->name('cost-sheets.show');
-    Route::post('/cost-sheets/{costSheet}/variants', CostSheetController::class.'@storeVariant')->name('cost-sheets.variants.store');
-    Route::post('/cost-sheet-variants/{variant}/items', CostSheetController::class.'@storeItem')->name('cost-sheets.items.store');
-    Route::delete('/cost-sheet-items/{item}', CostSheetController::class.'@destroyItem')->name('cost-sheets.items.destroy');
-    Route::post('/cost-sheet-variants/{variant}/sync-product', CostSheetController::class.'@syncProduct')->name('cost-sheets.sync-product');
-
-    // Form Manual Produksi Baju (Work Order & Eksekusi Potong Bahan)
-    Route::get('/production/create', ProductionOrderController::class.'@create')->name('production.create');
-    Route::post('/production', ProductionOrderController::class.'@store')->name('production.store');
 
     // Upah Penjahit (Borongan) & Cetak Slip Upah HPP
     Route::resource('tailor-payrolls', TailorPayrollController::class);

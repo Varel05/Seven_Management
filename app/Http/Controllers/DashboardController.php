@@ -6,8 +6,10 @@ use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\RecurringTransaction;
+use App\Services\TaxService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -63,7 +65,7 @@ class DashboardController extends Controller
             $firstLine = $latestEntry->lines->first();
             $expenseLine = $latestEntry->lines->first(fn ($l) => $l->account && $l->account->type === 'expense');
             $revenueLine = $latestEntry->lines->first(fn ($l) => $l->account && $l->account->type === 'revenue');
-            
+
             if ($revenueLine) {
                 $amount = $revenueLine->credit ?? $latestEntry->lines->sum('debit');
             } elseif ($expenseLine) {
@@ -126,6 +128,7 @@ class DashboardController extends Controller
             ],
             'accounts' => $metrics['accounts'],
             'chartData' => $metrics['chartData'],
+            'tax' => $metrics['currentTax'],
             'items' => $items,
             'table_html' => $tableHtml,
         ]);
@@ -286,6 +289,38 @@ class DashboardController extends Controller
             'expenseAccounts' => $expenseAccounts,
             'assetAccounts' => $assetAccounts,
             'chartData' => $chartData,
+            'currentTax' => app(TaxService::class)->calculateMonthlyTax((int) now()->year, (int) now()->month),
         ];
+    }
+
+    /**
+     * Catat pembayaran setoran PPh Final UMKM dari Dashboard.
+     */
+    public function recordTaxPayment(Request $request, TaxService $taxService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'year' => 'required|integer',
+            'month' => 'required|integer|min:1|max:12',
+            'amount' => 'nullable|numeric|min:1',
+            'account_code' => 'nullable|string',
+            'ntpn' => 'nullable|string|max:50',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        try {
+            $taxService->recordTaxPayment(
+                year: (int) $validated['year'],
+                month: (int) $validated['month'],
+                amount: ! empty($validated['amount']) ? (float) $validated['amount'] : null,
+                paymentAccountCode: $validated['account_code'] ?? '1001',
+                ntpn: $validated['ntpn'] ?? null,
+                source: 'website',
+                notes: $validated['notes'] ?? null
+            );
+
+            return redirect()->route('dashboard')->with('success', 'Penyetoran PPh Final UMKM berhasil dicatat ke buku besar akuntansi.');
+        } catch (\Exception $e) {
+            return redirect()->route('dashboard')->with('error', 'Gagal mencatat penyetoran pajak: '.$e->getMessage());
+        }
     }
 }

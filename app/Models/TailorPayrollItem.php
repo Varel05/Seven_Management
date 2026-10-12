@@ -24,11 +24,6 @@ class TailorPayrollItem extends Model
         return $this->belongsTo(TailorPayroll::class);
     }
 
-    public function material(): BelongsTo
-    {
-        return $this->belongsTo(Material::class);
-    }
-
     public function getFormattedRateAttribute(): string
     {
         return 'Rp '.number_format($this->rate_per_piece, 0, ',', '.');

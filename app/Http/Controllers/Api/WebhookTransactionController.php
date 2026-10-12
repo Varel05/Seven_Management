@@ -5,21 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Enums\EmployeeRole;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
-use App\Models\CustomSuitOrder;
 use App\Models\Employee;
 use App\Models\EmployeePayroll;
 use App\Models\EmployeePointLog;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
-use App\Models\Material;
-use App\Models\MaterialStockMovement;
-use App\Models\PointSetting;
-use App\Models\Product;
 use App\Models\RecurringTransaction;
-use App\Models\RetailSale;
-use App\Models\RetailSaleItem;
 use App\Models\TailorPayroll;
-use App\Services\SuitMaterialEstimatorService;
+use App\Services\TaxService;
 use App\Services\TransactionCancellationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -219,7 +212,7 @@ class WebhookTransactionController extends Controller
         if ($request->filled('type')) {
             $type = strtolower($request->type);
             $mappedType = in_array($type, ['pengeluaran', 'keluar']) ? 'expense' : (in_array($type, ['pemasukan', 'masuk']) ? 'income' : $type);
-            
+
             $query->whereHas('lines.account', function ($q) use ($mappedType) {
                 $q->where('type', $mappedType);
             });
@@ -228,9 +221,9 @@ class WebhookTransactionController extends Controller
         // Pencarian teks deskripsi / referensi
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('description', 'like', "%{$search}%")
-                  ->orWhere('reference', 'like', "%{$search}%");
+                    ->orWhere('reference', 'like', "%{$search}%");
             });
         }
 
@@ -535,6 +528,17 @@ class WebhookTransactionController extends Controller
             }
         }
 
+        // HANYA akun kas & bank (likuid) yang dapat dipilih otomatis sebagai sumber dana pembayaran / penerimaan.
+        // Akun persediaan (1003, 1004), piutang (1005), dan aset tetap BUKAN akun kas/bank!
+        $liquidAccounts = $assetAccounts->filter(function ($acc) {
+            $nameLower = strtolower($acc->name);
+
+            return ! str_contains($nameLower, 'persediaan')
+                && ! str_contains($nameLower, 'piutang')
+                && ! str_contains($nameLower, 'aset tetap')
+                && ! str_contains($nameLower, 'akumulasi');
+        });
+
         // 2. Gabungkan teks petunjuk (account, category, description)
         $searchSources = [
             trim($validated['account'] ?? ''),
@@ -547,7 +551,7 @@ class WebhookTransactionController extends Controller
         $bestAccount = null;
         $highestScore = 0;
 
-        foreach ($assetAccounts as $acc) {
+        foreach ($liquidAccounts as $acc) {
             $score = 0;
             $accNameLower = strtolower($acc->name);
             $accCodeLower = strtolower($acc->code);
@@ -576,7 +580,7 @@ class WebhookTransactionController extends Controller
 
             // D. Kecocokan kata "kas" atau "tunai"
             if (str_contains($accNameLower, 'kas') && (preg_match('/\b(kas|tunai|cash)\b/i', $fullSearchText))) {
-                $score += 30;
+                $score += 50;
             }
 
             if ($score > $highestScore) {
@@ -1509,7 +1513,7 @@ class WebhookTransactionController extends Controller
         }
 
         $journalEntry = $employee->executePayrollPosting($customAmount, 'telegram');
-        
+
         $newPayroll = EmployeePayroll::where('journal_entry_id', $journalEntry->id)->first();
         $finalAmount = $newPayroll ? (float) $newPayroll->take_home_pay : (float) $employee->total_salary;
 
@@ -1578,11 +1582,11 @@ class WebhookTransactionController extends Controller
             'day_of_month' => $validated['day_of_month'],
             'expense_account_id' => $expenseAccount->id,
             'asset_account_id' => $assetAccount->id,
-            'status' => 'active'
+            'status' => 'active',
         ]);
 
-        $formattedAmount = 'Rp ' . number_format($recurring->amount, 0, ',', '.');
-        $freqText = match($recurring->frequency) {
+        $formattedAmount = 'Rp '.number_format($recurring->amount, 0, ',', '.');
+        $freqText = match ($recurring->frequency) {
             'monthly' => 'Setiap Bulan',
             'weekly' => 'Setiap Minggu',
             'yearly' => 'Setiap Tahun',
@@ -1591,14 +1595,15 @@ class WebhookTransactionController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => "✅ *Berhasil Membuat Jadwal Rutin Baru!*\n\n" .
-                         "Nama Tagihan: *{$recurring->name}*\n" .
-                         "Nominal: *{$formattedAmount}*\n" .
-                         "Periode: {$freqText} (Tiap tgl/hari ke-{$recurring->day_of_month})\n\n" .
+            'message' => "✅ *Berhasil Membuat Jadwal Rutin Baru!*\n\n".
+                         "Nama Tagihan: *{$recurring->name}*\n".
+                         "Nominal: *{$formattedAmount}*\n".
+                         "Periode: {$freqText} (Tiap tgl/hari ke-{$recurring->day_of_month})\n\n".
                          "💡 Anda kini bisa menanyakan 'Cek tagihan rutin bulan ini' untuk mengecek statusnya.",
-            'data' => $recurring
+            'data' => $recurring,
         ], 201);
     }
+
     /**
      * Get real-time balance of all asset (cash & bank) accounts.
      */
@@ -1668,12 +1673,17 @@ class WebhookTransactionController extends Controller
         $pendingCount = JournalEntry::where('status', 'pending')->count();
         $verifiedCount = JournalEntry::where('status', 'verified')->count();
 
+        $taxService = app(TaxService::class);
+        $taxData = $taxService->calculateMonthlyTax($now->year, $now->month);
+        $taxStatusStr = $taxData['is_paid'] ? '(✅ Disetor)' : '(⏳ Belum Setor)';
+
         $messageLines = [
             "📊 *Ringkasan Keuangan ({$monthName})*\n",
             '🟢 *Pemasukan*: Rp '.number_format($revenue, 0, ',', '.'),
             '🔴 *Pengeluaran*: Rp '.number_format($expense, 0, ',', '.'),
             '───────────────────',
             ($netProfit >= 0 ? '📈' : '📉').' *Laba Bersih*: Rp '.number_format($netProfit, 0, ',', '.'),
+            "🏛️ *PPh Final (0,5%)*: {$taxData['formatted_tax_amount']} {$taxStatusStr}",
             "\n⏳ *Status Transaksi Bulan Ini*:",
             "• Menunggu Verifikasi: {$pendingCount}",
             "• Terverifikasi: {$verifiedCount}",
@@ -1685,6 +1695,13 @@ class WebhookTransactionController extends Controller
             'revenue' => $revenue,
             'expense' => $expense,
             'net_profit' => $netProfit,
+            'tax' => [
+                'gross_revenue' => $taxData['gross_revenue'],
+                'tax_amount' => $taxData['tax_amount'],
+                'formatted_tax_amount' => $taxData['formatted_tax_amount'],
+                'is_paid' => $taxData['is_paid'],
+                'due_date' => $taxData['due_date'],
+            ],
             'pending_count' => $pendingCount,
             'verified_count' => $verifiedCount,
             'message' => implode("\n", $messageLines),
@@ -1692,984 +1709,135 @@ class WebhookTransactionController extends Controller
     }
 
     /**
-     * Webhook n8n: Estimasi kebutuhan bahan, HPP, dan rekomendasi harga jas via AI Agent / Telegram.
+     * Webhook/Telegram: Ringkasan Pajak PPh Final UMKM 0,5% (Bulanan atau Rekap Tahunan).
      */
-    public function estimateSuit(Request $request, SuitMaterialEstimatorService $estimator)
+    public function taxSummary(Request $request, TaxService $taxService)
     {
-        $suitType = $request->input('suit_type', 'jas_blazer_pria');
-        $aiVision = $request->input('ai_vision') ?? $request->input('gemini_analysis') ?? [];
-        $parsedMeasurements = $aiVision['parsed_measurements'] ?? [];
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
 
-        $measurements = [
-            'height' => (float) ($request->input('height') ?? $parsedMeasurements['height'] ?? $request->input('tinggi_badan') ?? 170),
-            'chest' => (float) ($request->input('chest') ?? $parsedMeasurements['chest'] ?? $request->input('lingkar_dada') ?? 96),
-            'waist' => (float) ($request->input('waist') ?? $parsedMeasurements['waist'] ?? $request->input('lingkar_pinggang') ?? 82),
-            'jacket_length' => (float) ($request->input('jacket_length') ?? $parsedMeasurements['jacket_length'] ?? $request->input('panjang_jas') ?? 74),
-            'trouser_length' => (float) ($request->input('trouser_length') ?? $parsedMeasurements['trouser_length'] ?? $request->input('panjang_celana') ?? 98),
-        ];
+        $year = (int) ($request->input('year') ?? Carbon::now()->year);
+        $month = (int) ($request->input('month') ?? Carbon::now()->month);
+        $isAnnual = $request->boolean('annual') || $request->input('period') === 'annual' || $request->input('type') === 'annual';
 
-        $customOptions = [
-            'fabric_price_per_meter' => $request->input('fabric_price_per_meter'),
-            'labor_cost' => $request->input('labor_cost'),
-            'target_margin_percent' => $request->input('target_margin_percent', 45),
-        ];
-
-        $estimate = $estimator->estimate($suitType, $measurements, $customOptions, $aiVision);
-
-        $typeName = Product::CATEGORIES[$suitType] ?? ucfirst(str_replace('_', ' ', $suitType));
-        $m = $estimate['materials'];
-        $fin = $estimate['financial'];
-
-        $telegramMsg = [
-            '🧵 *Hasil Analisis Gambar & Estimasi Bahan Jas (AI Master Tailor)*',
-            "👔 *Kategori Model*: {$typeName}",
-        ];
-
-        if (! empty($aiVision['model_name'])) {
-            $telegramMsg[] = "🧥 *Desain Jas*: {$aiVision['model_name']}";
-        }
-        if (! empty($aiVision['lapel_style'])) {
-            $telegramMsg[] = "👔 *Gaya Kerah*: {$aiVision['lapel_style']}";
-        }
-        if (! empty($aiVision['button_layout'])) {
-            $telegramMsg[] = "🔘 *Kancing*: {$aiVision['button_layout']}";
-        }
-        if (! empty($aiVision['pocket_type'])) {
-            $telegramMsg[] = "👝 *Tipe Saku*: {$aiVision['pocket_type']}";
-        }
-        if (! empty($aiVision['color'])) {
-            $telegramMsg[] = "🎨 *Warna*: {$aiVision['color']}";
-        }
-        if (! empty($aiVision['recommended_cut'])) {
-            $telegramMsg[] = "✂️ *Potongan Rekomendasi*: {$aiVision['recommended_cut']}";
-        }
-
-        $telegramMsg[] = '───────────────────';
-        $telegramMsg[] = '📐 *Data Ukuran Kustom (Caption):*';
-        $telegramMsg[] = "• TB: {$measurements['height']} cm | LD: {$measurements['chest']} cm | LP: {$measurements['waist']} cm";
-        if (! empty($parsedMeasurements['shoulder']) || ! empty($parsedMeasurements['sleeve_length'])) {
-            $shoulder = $parsedMeasurements['shoulder'] ?? '-';
-            $sleeve = $parsedMeasurements['sleeve_length'] ?? '-';
-            $telegramMsg[] = "• Bahu: {$shoulder} cm | Panjang Lengan: {$sleeve} cm";
-        }
-
-        if (! empty($aiVision['ai_fit_advisory'])) {
-            $telegramMsg[] = '───────────────────';
-            $telegramMsg[] = '💡 *Analisis & Rekomendasi Fit AI:*';
-            $telegramMsg[] = "{$aiVision['ai_fit_advisory']}";
-        }
-
-        $telegramMsg[] = '───────────────────';
-        $telegramMsg[] = '🧵 *Kalkulasi Bahan Baku:*';
-        $telegramMsg[] = "📏 *Kain Utama*: {$m['main_fabric_meters']} meter ({$m['main_fabric_description']})";
-
-        if (($m['lining_meters'] ?? 0) > 0) {
-            $telegramMsg[] = "🧶 *Kain Furing / Lining*: {$m['lining_meters']} meter";
-        }
-        if (($m['interlining_kufner_meters'] ?? 0) > 0) {
-            $telegramMsg[] = "✂️ *Interlining / Kufner*: {$m['interlining_kufner_meters']} meter";
-        }
-
-        $telegramMsg[] = '───────────────────';
-        $telegramMsg[] = '💵 *Estimasi HPP (Modal)*: Rp '.number_format($fin['total_cost'], 0, ',', '.');
-        $telegramMsg[] = '   • Bahan Baku: Rp '.number_format($m['total_material_cost'], 0, ',', '.');
-        $telegramMsg[] = '   • Ongkos Jahit: Rp '.number_format($estimate['labor']['labor_cost'], 0, ',', '.');
-        $telegramMsg[] = '🏷️ *Rekomendasi Harga Jual*: Rp '.number_format($fin['suggested_price'], 0, ',', '.');
-        $telegramMsg[] = '📈 *Proyeksi Keuntungan*: Rp '.number_format($fin['projected_profit'], 0, ',', '.')." ({$fin['profit_margin_percent']}%)";
-
-        return response()->json([
-            'status' => true,
-            'data' => $estimate,
-            'message' => implode("\n", $telegramMsg),
-        ]);
-    }
-
-    /**
-     * Webhook n8n: Membuat pesanan jas custom langsung dari bot Telegram.
-     */
-    public function orderCustomSuit(Request $request, SuitMaterialEstimatorService $estimator)
-    {
-        $validated = $request->validate([
-            'customer_name' => 'required|string|max:255',
-            'customer_phone' => 'nullable|string|max:50',
-            'suit_type' => 'nullable|string',
-            'fabric_type' => 'nullable|string|max:150',
-            'color' => 'nullable|string|max:100',
-            'image_url' => 'nullable|string',
-            'total_price' => 'nullable|numeric|min:0',
-            'down_payment' => 'nullable|numeric|min:0',
-            'account_code' => 'nullable|string|max:20',
-            'notes' => 'nullable|string|max:1000',
-        ]);
-
-        $suitType = $validated['suit_type'] ?? 'jas_blazer_pria';
-        if (! array_key_exists($suitType, Product::CATEGORIES)) {
-            $suitType = 'jas_blazer_pria';
-        }
-
-        $measurements = [
-            'height' => (float) ($request->input('height') ?? $request->input('tinggi_badan') ?? 170),
-            'chest' => (float) ($request->input('chest') ?? $request->input('lingkar_dada') ?? 96),
-            'waist' => (float) ($request->input('waist') ?? $request->input('lingkar_pinggang') ?? 82),
-            'jacket_length' => (float) ($request->input('jacket_length') ?? $request->input('panjang_jas') ?? 74),
-            'trouser_length' => (float) ($request->input('trouser_length') ?? $request->input('panjang_celana') ?? 98),
-        ];
-
-        $estimate = $estimator->estimate($suitType, $measurements, [], $request->input('gemini_analysis'));
-
-        $totalPrice = (float) ($validated['total_price'] ?? $estimate['financial']['suggested_price']);
-        $totalCost = (float) $estimate['financial']['total_cost'];
-        $materialCost = (float) $estimate['materials']['total_material_cost'];
-        $laborCost = (float) $estimate['labor']['labor_cost'];
-        $downPayment = (float) ($validated['down_payment'] ?? 0);
-
-        $orderNumber = 'CST-'.date('Ymd').'-'.strtoupper(Str::random(4));
-
-        $paymentStatus = 'unpaid';
-        if ($downPayment >= $totalPrice && $totalPrice > 0) {
-            $paymentStatus = 'paid';
-        } elseif ($downPayment > 0) {
-            $paymentStatus = 'partial_dp';
-        }
-
-        $senderId = trim((string) ($request->input('sender_telegram_id') ?? ''));
-        $employeeId = $request->input('employee_id');
-        $csEmployee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
-
-        $order = DB::transaction(function () use (
-            $validated,
-            $orderNumber,
-            $suitType,
-            $measurements,
-            $estimate,
-            $materialCost,
-            $laborCost,
-            $totalCost,
-            $totalPrice,
-            $downPayment,
-            $paymentStatus,
-            $csEmployee
-        ) {
-            $accountCode = $validated['account_code'] ?? '1001';
-            $account = Account::where('code', $accountCode)->first()
-                ?? Account::where('type', 'asset')->first();
-
-            $customOrder = CustomSuitOrder::create([
-                'order_number' => $orderNumber,
-                'employee_id' => $csEmployee?->id,
-                'customer_name' => $validated['customer_name'],
-                'customer_phone' => $validated['customer_phone'] ?? null,
-                'order_date' => now()->toDateString(),
-                'due_date' => now()->addDays(14)->toDateString(),
-                'suit_type' => $suitType,
-                'fabric_type' => $validated['fabric_type'] ?? 'Wool Blend Standar',
-                'color' => $validated['color'] ?? 'Custom Color',
-                'body_measurements' => $measurements,
-                'reference_image' => $validated['image_url'] ?? null,
-                'ai_estimation' => $estimate,
-                'material_cost' => $materialCost,
-                'labor_cost' => $laborCost,
-                'total_cost' => $totalCost,
-                'total_price' => $totalPrice,
-                'down_payment' => $downPayment,
-                'payment_status' => $paymentStatus,
-                'production_status' => 'consultation',
-                'account_id' => $account?->id,
-                'source' => 'telegram',
-                'notes' => $validated['notes'] ?? 'Dibuat otomatis via Telegram n8n AI Agent'.($csEmployee ? " (CS: {$csEmployee->name})" : ''),
-            ]);
-
-            // Jika ada DP, bukukan langsung ke kasir akuntansi
-            if ($downPayment > 0 && $account) {
-                $customRevenueAccount = Account::firstOrCreate(
-                    ['code' => '4003'],
-                    ['name' => 'Pendapatan Jasa Pembuatan Jas Custom', 'type' => 'revenue']
-                );
-
-                $journal = JournalEntry::create([
-                    'reference' => $orderNumber,
-                    'description' => "DP Pesanan Jas Telegram {$customOrder->customer_name} ({$orderNumber})",
-                    'date' => now(),
-                    'source' => 'custom_suit',
-                    'status' => 'verified',
-                ]);
-
-                JournalEntryLine::create([
-                    'journal_entry_id' => $journal->id,
-                    'account_id' => $account->id,
-                    'description' => "Penerimaan DP pesanan jas {$orderNumber}",
-                    'debit' => $downPayment,
-                    'credit' => 0,
-                ]);
-
-                JournalEntryLine::create([
-                    'journal_entry_id' => $journal->id,
-                    'account_id' => $customRevenueAccount->id,
-                    'description' => "Pendapatan jasa tailor {$orderNumber}",
-                    'debit' => 0,
-                    'credit' => $downPayment,
-                ]);
-
-                $customOrder->update(['journal_entry_id' => $journal->id]);
-            }
-
-            return $customOrder;
-        });
-
-        // Berikan poin pelayanan jas custom ke CS jika teridentifikasi
-        $pointInfo = null;
-        if ($csEmployee) {
-            $actor = $senderId ? "Telegram:{$senderId}" : 'CS';
-            $suitPoints = PointSetting::get('service:custom_suit', EmployeePointLog::PRODUCT_POINTS['custom_made_jas'] ?? 25);
-            $csEmployee->addPoints(
-                $suitPoints,
-                EmployeePointLog::CATEGORY_ITEM_SALE,
-                "Pesanan Jas Custom {$order->order_number} ({$order->customer_name})",
-                'custom_order',
-                $order->id,
-                $actor
-            );
-
-            $companyBonus = 0;
-
-            $pointInfo = [
-                'points' => $suitPoints + $companyBonus,
-                'suit_points' => $suitPoints,
-                'company_bonus' => $companyBonus,
-                'employee_name' => $csEmployee->name,
-                'new_points' => $csEmployee->fresh()->current_points,
+        if ($isAnnual) {
+            $annualData = $taxService->calculateAnnualSummary($year);
+            $lines = [
+                "🏛️ *Rekapitulasi Tahunan PPh Final UMKM ({$year})*",
+                "🏢 *Status Entitas*: {$annualData['entity_type']}",
+                '🏷️ *Tarif Pajak*: 0,5% (PP 55/2022)',
+                '───────────────────',
+                "💰 *Total Omzet Tahunan*: {$annualData['formatted_total_annual_revenue']}",
+                "💵 *Total PPh Terutang*: {$annualData['formatted_total_annual_tax']}",
+                "✅ *Sudah Disetor*: {$annualData['formatted_total_paid_tax']}",
             ];
-        }
 
-        $msg = [
-            '✅ *Pesanan Pembuatan Jas Berhasil Dibuat!*',
-            "📋 *No. Pesanan*: `{$order->order_number}`",
-            "👤 *Pelanggan*: {$order->customer_name}",
-            "👔 *Jenis*: {$order->suit_type_label}",
-            '💰 *Total Biaya*: Rp '.number_format($order->total_price, 0, ',', '.'),
-            '💵 *Uang Muka (DP)*: Rp '.number_format($order->down_payment, 0, ',', '.'),
-            '💳 *Sisa Tagihan*: Rp '.number_format($order->remaining_payment, 0, ',', '.'),
-            '📍 *Status*: Konsultasi / Ukur',
-            '📅 *Target Jadi*: '.($order->due_date ? $order->due_date->format('d M Y') : '14 hari'),
-        ];
-
-        if ($pointInfo) {
-            $msg[] = '───────────────────';
-            $msg[] = "⭐ *Poin Pelayanan CS*: +{$pointInfo['points']} pt ({$pointInfo['employee_name']})";
-            $msg[] = "   • Total Poin CS Sekarang: *{$pointInfo['new_points']} pt*";
-        }
-
-        return response()->json([
-            'status' => true,
-            'order' => $order,
-            'points_awarded' => $pointInfo,
-            'message' => implode("\n", $msg),
-        ]);
-    }
-
-    /**
-     * Webhook n8n: Tracking status pengerjaan pesanan jas custom via Telegram.
-     */
-    public function trackCustomSuit(Request $request)
-    {
-        $query = CustomSuitOrder::query();
-
-        if ($search = $request->input('q')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('order_number', 'like', "%{$search}%")
-                    ->orWhere('customer_name', 'like', "%{$search}%")
-                    ->orWhere('customer_phone', 'like', "%{$search}%");
-            });
-        }
-
-        if ($status = $request->input('status')) {
-            $query->where('production_status', $status);
-        } else {
-            // Default: tampilkan yang masih aktif jika tidak mencari spesifik
-            if (! $search) {
-                $query->whereNotIn('production_status', ['completed', 'cancelled']);
+            $remaining = $annualData['total_annual_tax'] - $annualData['total_paid_tax'];
+            if ($remaining > 0) {
+                $lines[] = '⏳ *Sisa Belum Disetor*: Rp '.number_format($remaining, 0, ',', '.');
             }
-        }
 
-        $orders = $query->latest('id')->limit(8)->get();
+            $lines[] = '───────────────────';
+            $lines[] = '*Rincian Bulanan:*';
+            foreach ($annualData['months'] as $m => $mData) {
+                if ($mData['gross_revenue'] > 0 || $m <= Carbon::now()->month) {
+                    $status = $mData['is_paid'] ? '✅' : ($mData['tax_amount'] > 0 ? '⏳' : '⚪');
+                    $lines[] = "• {$mData['period']}: Omzet {$mData['formatted_gross_revenue']} | Pajak {$mData['formatted_tax_amount']} {$status}";
+                }
+            }
 
-        if ($orders->isEmpty()) {
             return response()->json([
                 'status' => true,
-                'count' => 0,
-                'orders' => [],
-                'message' => 'ℹ️ Tidak ditemukan data pesanan jas custom yang cocok.'.($search ? " Pencarian: '{$search}'" : ''),
+                'type' => 'annual',
+                'data' => $annualData,
+                'message' => implode("\n", $lines),
             ]);
         }
 
-        $statusIcons = [
-            'consultation' => '📐',
-            'cutting_sewing' => '✂️',
-            'fitting' => '👔',
-            'finishing' => '✨',
-            'ready' => '📦',
-            'completed' => '✅',
-            'cancelled' => '❌',
-        ];
-
-        $lines = ["🧵 *Tracking Pesanan Jas Custom Seven Management:*\n"];
-        foreach ($orders as $o) {
-            $icon = $statusIcons[$o->production_status] ?? '📍';
-            $lines[] = "{$icon} *#{$o->order_number}* — {$o->customer_name}";
-            $lines[] = "   • Model: {$o->suit_type_label} | {$o->color}";
-            $lines[] = "   • Tahap: *{$o->production_status_label}*";
-            $lines[] = "   • Bayar: {$o->payment_status_label} (Sisa: Rp ".number_format($o->remaining_payment, 0, ',', '.').')';
-            if ($o->due_date) {
-                $lines[] = '   • Target: '.$o->due_date->format('d M Y');
-            }
-            $lines[] = '';
-        }
+        $monthlyData = $taxService->calculateMonthlyTax($year, $month);
+        $telegramMessage = $taxService->formatTelegramTaxSummary($monthlyData);
 
         return response()->json([
             'status' => true,
-            'count' => $orders->count(),
-            'orders' => $orders,
-            'message' => trim(implode("\n", $lines)),
+            'type' => 'monthly',
+            'data' => $monthlyData,
+            'message' => $telegramMessage,
         ]);
     }
 
     /**
-     * Webhook n8n: Update status produksi pesanan jas custom dari Telegram.
+     * Webhook/Telegram: Catat penyetoran PPh Final UMKM ke pembukuan akuntansi.
      */
-    public function updateCustomSuitStatus(Request $request)
+    public function recordTaxPayment(Request $request, TaxService $taxService)
     {
-        $validated = $request->validate([
-            'order_query' => 'required|string',
-            'status' => 'required|string',
-        ]);
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
 
-        $search = trim($validated['order_query']);
-        $order = CustomSuitOrder::where('order_number', $search)
-            ->orWhere('order_number', 'like', "%{$search}%")
-            ->orWhere('customer_name', 'like', "%{$search}%")
-            ->latest('id')
-            ->first();
-
-        if (! $order) {
-            return response()->json([
-                'status' => false,
-                'message' => "❌ Pesanan jas dengan kata kunci '{$search}' tidak ditemukan.",
-            ], 404);
-        }
-
-        $aliasMap = [
-            'konsultasi' => 'consultation',
-            'ukur' => 'consultation',
-            'potong' => 'cutting_sewing',
-            'jahit' => 'cutting_sewing',
-            'potong_jahit' => 'cutting_sewing',
-            'fitting' => 'fitting',
-            'finishing' => 'finishing',
-            'press' => 'finishing',
-            'siap' => 'ready',
-            'ready' => 'ready',
-            'ambil' => 'ready',
-            'selesai' => 'completed',
-            'batal' => 'cancelled',
-        ];
-
-        $targetStatus = strtolower(trim($validated['status']));
-        $finalStatus = $aliasMap[$targetStatus] ?? $targetStatus;
-
-        if (! array_key_exists($finalStatus, CustomSuitOrder::PRODUCTION_STATUSES)) {
-            $validList = implode(', ', array_keys($aliasMap));
-
-            return response()->json([
-                'status' => false,
-                'message' => "❌ Status '{$validated['status']}' tidak valid. Pilihan status: {$validList}.",
-            ], 422);
-        }
-
-        $oldStatusLabel = $order->production_status_label;
-        $order->update(['production_status' => $finalStatus]);
-        $newStatusLabel = $order->fresh()->production_status_label;
-
-        $statusIcons = [
-            'consultation' => '📐',
-            'cutting_sewing' => '✂️',
-            'fitting' => '👔',
-            'finishing' => '✨',
-            'ready' => '📦',
-            'completed' => '✅',
-            'cancelled' => '❌',
-        ];
-        $icon = $statusIcons[$finalStatus] ?? '📍';
-
-        $msg = [
-            "{$icon} *Status Produksi Jas Berhasil Diperbarui!*",
-            "📋 *No. Pesanan*: `{$order->order_number}`",
-            "👤 *Pelanggan*: {$order->customer_name}",
-            "👔 *Model*: {$order->suit_type_label}",
-            "🔄 *Perubahan*: {$oldStatusLabel} ➔ *{$newStatusLabel}*",
-        ];
-
-        return response()->json([
-            'status' => true,
-            'order' => $order,
-            'message' => implode("\n", $msg),
-        ]);
-    }
-
-    /**
-     * Webhook n8n: Cek stok pakaian retail via Telegram / AI Agent.
-     */
-    public function checkRetailStock(Request $request)
-    {
-        $query = Product::query();
-
-        $search = $request->input('q') ?? $request->input('query');
-
-        if ($request->boolean('low_stock')) {
-            $query->whereColumn('stock', '<=', 'min_stock');
-        } elseif ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%")
-                    ->orWhere('category', 'like', "%{$search}%");
-            });
-        } elseif ($cat = $request->input('category')) {
-            $query->where('category', $cat);
-        }
-
-        $products = $query->orderBy('stock', 'asc')->limit(15)->get();
-
-        if ($products->isEmpty()) {
-            return response()->json([
-                'status' => true,
-                'count' => 0,
-                'products' => [],
-                'message' => 'ℹ️ Tidak ditemukan produk pakaian yang sesuai kriteria pencarian.',
-            ]);
-        }
-
-        $lines = ["📦 *Informasi Stok & Harga Produk Retail Seven Management:*\n"];
-        foreach ($products as $p) {
-            $statusIcon = $p->stock <= 0 ? '❌' : ($p->stock <= $p->min_stock ? '⚠️' : '✅');
-            $lines[] = "{$statusIcon} *{$p->name}* ({$p->code})";
-            $lineDetails = "   Stok: {$p->stock} pcs | Harga Jual: Rp ".number_format($p->selling_price, 0, ',', '.');
-            if ($p->cost_price > 0) {
-                $lineDetails .= ' | HPP (Batas Min): Rp '.number_format($p->cost_price, 0, ',', '.');
-            }
-            $lines[] = $lineDetails;
-        }
-
-        return response()->json([
-            'status' => true,
-            'count' => $products->count(),
-            'products' => $products,
-            'message' => implode("\n", $lines),
-        ]);
-    }
-
-    /**
-     * Webhook n8n: Catat transaksi penjualan retail dari Telegram.
-     */
-    public function recordRetailSale(Request $request)
-    {
-        $validated = $request->validate([
-            'product_code' => 'required_without:product_id|string',
-            'product_id' => 'nullable|exists:products,id',
-            'quantity' => 'nullable|integer|min:1',
-            'price' => 'nullable|numeric|min:0',
-            'customer_name' => 'nullable|string|max:255',
-            'account_code' => 'nullable|string',
-            'payment_method' => 'nullable|string',
-            'sender_telegram_id' => 'nullable|string',
-            'employee_id' => 'nullable|exists:employees,id',
-            'is_rental' => 'nullable|boolean',
-            'transaction_type' => 'nullable|string',
-            'rental_days' => 'nullable|integer|min:1',
-            'rental_start_date' => 'nullable|date',
-            'rental_end_date' => 'nullable|date|after_or_equal:rental_start_date',
-        ]);
-
-        $qty = (int) ($validated['quantity'] ?? 1);
-        $product = ! empty($validated['product_id'])
-            ? Product::find($validated['product_id'])
-            : Product::where('code', $validated['product_code'])->first();
-
-        if (! $product) {
-            return response()->json([
-                'status' => false,
-                'message' => "❌ Produk dengan kode '{$validated['product_code']}' tidak ditemukan.",
-            ], 404);
-        }
-
-        if ($product->stock < $qty) {
-            return response()->json([
-                'status' => false,
-                'message' => "❌ Stok produk '{$product->name}' tidak mencukupi (sisa: {$product->stock}, diminta: {$qty}).",
-            ], 422);
-        }
-
-        $account = Account::where('code', $validated['account_code'] ?? '1001')->first()
-            ?? Account::where('type', 'asset')->first();
-
-        $senderId = trim((string) ($request->input('sender_telegram_id') ?? ''));
-        $employeeId = $request->input('employee_id');
-        $csEmployee = $employeeId ? Employee::find($employeeId) : $this->resolveTelegramEmployee($request);
-
-        $paymentMethod = strtolower($request->input('payment_method', 'cash'));
-        $rawText = strtolower(implode(' ', [
-            $paymentMethod,
-            (string) $request->input('notes', ''),
-            (string) $request->input('text', ''),
-            (string) $request->input('message', ''),
-            (string) $request->input('description', ''),
-        ]));
-        $isCod = preg_match('/\bcod\b/i', $rawText) || str_contains($rawText, 'cod') || ($paymentMethod === 'cod');
-        if ($isCod) {
-            $paymentMethod = 'cod';
-        }
-
-        $isRental = $request->boolean('is_rental') || strtolower($request->input('transaction_type', '')) === 'rental';
-
-        $sale = DB::transaction(function () use ($product, $qty, $validated, $account, $csEmployee, $paymentMethod, $isRental) {
-            $product->decrement('stock', $qty);
-
-            $unitCost = (float) $product->cost_price;
-            
-            $startDate = $isRental 
-                ? (isset($validated['rental_start_date']) ? \Carbon\Carbon::parse($validated['rental_start_date']) : now()) 
-                : null;
-                
-            $endDate = $isRental 
-                ? (isset($validated['rental_end_date']) ? \Carbon\Carbon::parse($validated['rental_end_date']) : $startDate->copy()->addDays($validated['rental_days'] ?? 3)) 
-                : null;
-
-            $rentalDays = $isRental ? max(1, (int) $startDate->diffInDays($endDate)) : 0;
-            $rentalMultiplier = $isRental ? (int) ceil($rentalDays / 3) : 1;
-            
-            $unitPrice = isset($validated['price']) && $validated['price'] > 0
-                ? (float) $validated['price']
-                : (float) ($isRental ? ($product->effective_rental_price * $rentalMultiplier) : $product->selling_price);
-                
-            $subtotal = $unitPrice * $qty;
-            $totalCost = $unitCost * $qty;
-            $invoiceNumber = ($isRental ? 'RNT-' : 'RTL-').date('Ymd').'-'.strtoupper(Str::random(4));
-
-            $retailSale = RetailSale::create([
-                'invoice_number' => $invoiceNumber,
-                'employee_id' => $csEmployee?->id,
-                'transaction_type' => $isRental ? 'rental' : 'sale',
-                'sale_date' => now(),
-                'rental_start_date' => $startDate,
-                'rental_end_date' => $endDate,
-                'rental_status' => $isRental ? 'active' : null,
-                'customer_name' => $validated['customer_name'] ?? 'Pelanggan Telegram',
-                'payment_method' => $paymentMethod,
-                'account_id' => $account?->id,
-                'total_amount' => $subtotal,
-                'total_cost' => $totalCost,
-                'notes' => 'Transaksi via Bot Telegram n8n'.($csEmployee ? " (CS: {$csEmployee->name})" : ''),
-            ]);
-
-            RetailSaleItem::create([
-                'retail_sale_id' => $retailSale->id,
-                'product_id' => $product->id,
-                'transaction_type' => $isRental ? 'rental' : 'sale',
-                'quantity' => $qty,
-                'unit_cost_price' => $unitCost,
-                'unit_selling_price' => $isRental ? 0 : $unitPrice,
-                'unit_rental_price' => $isRental ? $unitPrice : 0,
-                'subtotal' => $subtotal,
-            ]);
-
-            // Posting otomatis ke Akuntansi
-            $pendapatanAccount = Account::firstOrCreate(
-                ['code' => $isRental ? '4003' : '4002'],
-                ['name' => $isRental ? 'Pendapatan Sewa Pakaian' : 'Pendapatan Penjualan Retail', 'type' => 'revenue']
-            );
-            $persediaanAccount = Account::firstOrCreate(
-                ['code' => '1003'],
-                ['name' => 'Persediaan Barang Dagang (Retail)', 'type' => 'asset']
-            );
-            $hppAccount = Account::firstOrCreate(
-                ['code' => '5004'],
-                ['name' => 'Beban Pokok Penjualan (HPP) Retail', 'type' => 'expense']
-            );
-
-            $journal = JournalEntry::create([
-                'reference' => $invoiceNumber,
-                'description' => ($isRental ? 'Sewa ' : 'Penjualan ')."Retail {$product->name} x{$qty} ({$invoiceNumber})",
-                'date' => now(),
-                'source' => 'retail',
-                'status' => 'verified',
-            ]);
-
-            if ($account) {
-                JournalEntryLine::create([
-                    'journal_entry_id' => $journal->id,
-                    'account_id' => $account->id,
-                    'description' => "Penerimaan kas/bank {$invoiceNumber}",
-                    'debit' => $subtotal,
-                    'credit' => 0,
-                ]);
-            }
-
-            JournalEntryLine::create([
-                'journal_entry_id' => $journal->id,
-                'account_id' => $pendapatanAccount->id,
-                'description' => "Pendapatan retail {$invoiceNumber}",
-                'debit' => 0,
-                'credit' => $subtotal,
-            ]);
-
-            if (! $isRental && $totalCost > 0) {
-                JournalEntryLine::create([
-                    'journal_entry_id' => $journal->id,
-                    'account_id' => $hppAccount->id,
-                    'description' => "HPP penjualan {$invoiceNumber}",
-                    'debit' => $totalCost,
-                    'credit' => 0,
-                ]);
-                JournalEntryLine::create([
-                    'journal_entry_id' => $journal->id,
-                    'account_id' => $persediaanAccount->id,
-                    'description' => "Pengurangan stok {$invoiceNumber}",
-                    'debit' => 0,
-                    'credit' => $totalCost,
-                ]);
-            }
-
-            $retailSale->update(['journal_entry_id' => $journal->id]);
-
-            return $retailSale;
-        });
-
-        // Hitung & Berikan Poin Pelayanan ke CS jika terdeteksi
-        $pointInfo = null;
-        if ($csEmployee) {
-            // 1. Poin mentah (jual / sewa): berdasarkan item
-            $itemBasePoints = $product->effective_point_reward;
-
-            // 2. Poin quantity: bernilai 1 untuk setiap jumlah barang sekali transaksi
-            $qtyBonus = $qty * PointSetting::get('service:quantity_extra', EmployeePointLog::DEFAULT_QTY_EXTRA_POINTS);
-
-            // 3. Poin COD: bernilai 1 setiap transaksi COD yang dilayani (kata kunci 'cod')
-            $codBonus = ($paymentMethod === 'cod' || $isCod) ? PointSetting::get('service:cod', EmployeePointLog::DEFAULT_COD_POINTS) : 0;
-
-            $companyBonus = 0;
-
-            $totalPointsEarned = $itemBasePoints + $qtyBonus + $codBonus + $companyBonus;
-
-            $pointCategory = $isRental ? EmployeePointLog::CATEGORY_ITEM_RENT : EmployeePointLog::CATEGORY_ITEM_SALE;
-            $actor = $senderId ? "Telegram:{$senderId}" : 'CS';
-
-            // 1. Poin dasar item
-            $csEmployee->addPoints(
-                $itemBasePoints,
-                $pointCategory,
-                ($isRental ? 'Sewa ' : 'Jual ')."{$product->name} (x{$qty})",
-                'retail_sale',
-                $sale->id,
-                $actor
-            );
-
-            // 2. Bonus kuantitas
-            if ($qtyBonus > 0) {
-                $csEmployee->addPoints(
-                    $qtyBonus,
-                    EmployeePointLog::CATEGORY_QUANTITY,
-                    "Bonus kuantitas x{$qty} {$product->name}",
-                    'retail_sale',
-                    $sale->id,
-                    $actor
-                );
-            }
-
-            // 3. Bonus Cash on Delivery (COD)
-            if ($codBonus > 0) {
-                $csEmployee->addPoints(
-                    $codBonus,
-                    EmployeePointLog::CATEGORY_COD,
-                    "Layanan Cash on Delivery (COD) {$product->name}",
-                    'retail_sale',
-                    $sale->id,
-                    $actor
-                );
-            }
-
-            $pointInfo = [
-                'total' => $totalPointsEarned,
-                'item_points' => $itemBasePoints,
-                'qty_bonus' => $qtyBonus,
-                'cod_bonus' => $codBonus,
-                'company_bonus' => $companyBonus,
-                'employee_name' => $csEmployee->name,
-                'new_points' => $csEmployee->fresh()->current_points,
-            ];
-        }
-
-        $typeLabel = $isRental ? 'Penyewaan Baju' : 'Penjualan Retail';
-        $msg = [
-            "🛍️ *{$typeLabel} Berhasil Dicatat!*",
-            "🧾 *Invoice*: `{$sale->invoice_number}`",
-            "📦 *Item*: {$product->name} (x{$qty})",
-            '💳 *Metode*: '.strtoupper($paymentMethod),
-            '💰 *Total Bayar*: Rp '.number_format($sale->total_amount, 0, ',', '.'),
-            '📉 *Sisa Stok*: '.($product->fresh()->stock).' pcs',
-        ];
-
-        if ($pointInfo) {
-            $msg[] = '───────────────────';
-            $msg[] = "⭐ *Poin Pelayanan CS*: +{$pointInfo['total']} pt ({$pointInfo['employee_name']})";
-            $subDetails = ["Item: +{$pointInfo['item_points']} pt", "Qty: +{$pointInfo['qty_bonus']} pt"];
-            if ($pointInfo['cod_bonus'] > 0) {
-                $subDetails[] = "COD: +{$pointInfo['cod_bonus']} pt";
-            }
-            if ($pointInfo['company_bonus'] > 0) {
-                $subDetails[] = "Bonus Perusahaan: +{$pointInfo['company_bonus']} pt";
-            }
-            $msg[] = '   • '.implode(' | ', $subDetails);
-            $msg[] = "   • Total Poin CS Sekarang: *{$pointInfo['new_points']} pt*";
-        }
-
-        return response()->json([
-            'status' => true,
-            'sale' => $sale,
-            'points_awarded' => $pointInfo,
-            'message' => implode("\n", $msg),
-        ]);
-    }
-
-    /**
-     * Webhook n8n: Cek stok gudang bahan baku & peringatan stok menipis (Low Stock Alert).
-     */
-    public function checkMaterialStock(Request $request)
-    {
-        $query = Material::physical();
-
-        $isLowStockOnly = $request->boolean('low_stock');
-        if ($isLowStockOnly) {
-            $query->whereColumn('stock', '<=', 'min_stock');
-        } elseif ($search = $request->input('q')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%")
-                    ->orWhere('category', 'like', "%{$search}%");
-            });
-        } elseif ($cat = $request->input('category')) {
-            $query->where('category', $cat);
-        }
-
-        $totalLowStock = Material::physical()->whereColumn('stock', '<=', 'min_stock')->count();
-        $materials = $query->orderBy('stock', 'asc')->limit(20)->get();
-
-        if ($materials->isEmpty()) {
-            return response()->json([
-                'status' => true,
-                'count' => 0,
-                'low_stock_count' => $totalLowStock,
-                'materials' => [],
-                'message' => $isLowStockOnly
-                    ? '✅ *Semua Stok Bahan Baku Aman!*\nTidak ada bahan baku atau aksesoris yang berada di bawah batas minimum.'
-                    : 'ℹ️ Tidak ditemukan bahan baku yang sesuai kriteria pencarian.',
-            ]);
-        }
-
-        $lines = [];
-        if ($isLowStockOnly) {
-            $lines[] = '⚠️ *Peringatan Stok Bahan Baku Menipis / Habis!*';
-            $lines[] = "Ditemukan *{$materials->count()}* bahan yang memerlukan pengadaan ulang:\n";
-        } else {
-            $lines[] = "🧶 *Gudang Bahan Baku & Aksesoris Seven Management:*\n";
-        }
-
-        foreach ($materials as $m) {
-            $statusIcon = $m->stock <= 0 ? '🔴' : ($m->stock <= $m->min_stock ? '⚠️' : '✅');
-            $stockText = $m->formatted_stock;
-            $minText = number_format($m->min_stock, 0, ',', '.').' '.$m->unit;
-
-            $lines[] = "{$statusIcon} *{$m->name}* (`{$m->code}`)";
-            $lines[] = "   • Stok: *{$stockText}* (Min: {$minText})";
-            $lines[] = "   • Kategori: {$m->category_label}";
-            $lines[] = "   • Biaya Std: {$m->formatted_standard_cost}/{$m->unit}";
-            $lines[] = '';
-        }
-
-        if ($totalLowStock > 0 && ! $isLowStockOnly) {
-            $lines[] = "⚠️ *Perhatian*: Ada *{$totalLowStock}* bahan di bawah batas minimum stok!";
-        }
-
-        $lines[] = '💡 *Restock Cepat via Bot*:';
-        $lines[] = '`/restock <kode/nama> <qty> [total_biaya] [kas/bank]`';
-        $lines[] = 'Contoh: `/restock KAIN-WOL 10 1500000 bank`';
-
-        return response()->json([
-            'status' => true,
-            'count' => $materials->count(),
-            'low_stock_count' => $totalLowStock,
-            'materials' => $materials,
-            'message' => trim(implode("\n", $lines)),
-        ]);
-    }
-
-    /**
-     * Webhook n8n: Catat pembelian / restock bahan baku langsung dari Telegram.
-     */
-    public function recordMaterialRestock(Request $request)
-    {
-        // Normalisasi alias parameter dari webhook / n8n
-        if (! $request->filled('material_code') && $request->filled('code')) {
-            $request->merge(['material_code' => $request->input('code')]);
-        }
-        if (! $request->filled('account_code') && $request->filled('payment_account')) {
-            $request->merge(['account_code' => $request->input('payment_account')]);
-        }
-
-        $validated = $request->validate([
-            'material_code' => 'required_without:material_id|string',
-            'material_id' => 'nullable|exists:materials,id',
-            'quantity' => 'required|numeric|min:0.001',
-            'unit_cost' => 'nullable|numeric|min:0',
-            'total_cost' => 'nullable|numeric|min:0',
-            'account_code' => 'nullable|string',
-            'reference_number' => 'nullable|string|max:100',
+        $request->validate([
+            'year' => 'nullable|integer|min:2020|max:2099',
+            'month' => 'nullable|integer|min:1|max:12',
+            'amount' => 'nullable|numeric|min:0',
+            'payment_account' => 'nullable|string',
+            'ntpn' => 'nullable|string|max:50',
             'notes' => 'nullable|string|max:255',
         ]);
 
-        $search = trim($validated['material_code'] ?? '');
-        $material = ! empty($validated['material_id'])
-            ? Material::find($validated['material_id'])
-            : Material::where('code', $search)
-                ->orWhere('code', 'like', "%{$search}%")
-                ->orWhere('name', 'like', "%{$search}%")
-                ->first();
+        $year = (int) ($request->input('year') ?? Carbon::now()->year);
+        $month = (int) ($request->input('month') ?? Carbon::now()->month);
+        $amount = $request->input('amount') ? (float) $request->input('amount') : null;
+        $paymentAccount = (string) ($request->input('payment_account') ?? $request->input('account') ?? '1001');
+        $ntpn = $request->input('ntpn');
+        $notes = $request->input('notes');
 
-        if (! $material) {
-            return response()->json([
-                'status' => false,
-                'message' => "❌ Bahan baku dengan kata kunci '{$search}' tidak ditemukan.",
-            ], 404);
-        }
-
-        if (! $material->isPhysical()) {
-            return response()->json([
-                'status' => false,
-                'message' => "❌ Komponen '{$material->name}' merupakan biaya jasa/overhead, bukan material fisik gudang.",
-            ], 422);
-        }
-
-        $qty = (float) $validated['quantity'];
-
-        // Tentukan unit cost dan total cost
-        if (! empty($validated['total_cost']) && (float) $validated['total_cost'] > 0) {
-            $totalCost = (float) $validated['total_cost'];
-            $unitCost = $totalCost / $qty;
-        } elseif (! empty($validated['unit_cost']) && (float) $validated['unit_cost'] > 0) {
-            $unitCost = (float) $validated['unit_cost'];
-            $totalCost = $unitCost * $qty;
-        } else {
-            $unitCost = (float) $material->standard_cost;
-            $totalCost = $unitCost * $qty;
-        }
-
-        // Akun Kas / Bank pembayaran
-        $accountSearch = strtolower(trim($validated['account_code'] ?? '1001'));
-        if (str_contains($accountSearch, 'bank') || str_contains($accountSearch, 'bca') || $accountSearch === '1002') {
-            $targetCode = '1002';
-        } else {
-            $targetCode = '1001';
-        }
-
-        $fundAccount = Account::where('code', $targetCode)->first()
-            ?? Account::where('code', '1001')->first()
-            ?? Account::where('type', 'asset')->first();
-
-        // Akun Persediaan Bahan Baku (1004)
-        $inventoryAccount = ($material->account_id ? Account::find($material->account_id) : null)
-            ?? Account::where('code', '1004')->first()
-            ?? Account::firstOrCreate(
-                ['code' => '1004'],
-                ['name' => 'Persediaan Bahan Baku & Pembantu', 'type' => 'asset']
+        try {
+            $journal = $taxService->recordTaxPayment(
+                year: $year,
+                month: $month,
+                amount: $amount,
+                paymentAccountCode: $paymentAccount,
+                ntpn: $ntpn,
+                source: 'telegram',
+                notes: $notes
             );
 
-        $refNumber = ! empty($validated['reference_number']) ? $validated['reference_number'] : ('RST-'.date('Ymd').'-'.strtoupper(Str::random(4)));
-        $notes = ! empty($validated['notes']) ? $validated['notes'] : "Restock {$material->name} x{$qty} {$material->unit} via Telegram";
+            $paidAmount = (float) $journal->lines->where('debit', '>', 0)->sum('debit');
+            $creditLine = $journal->lines->where('credit', '>', 0)->first();
+            $sourceAccountName = $creditLine?->account?->name ?? 'Kas/Bank';
+            $periodName = Carbon::create($year, $month, 1)->translatedFormat('F Y');
 
-        $movement = DB::transaction(function () use (
-            $material,
-            $qty,
-            $unitCost,
-            $totalCost,
-            $refNumber,
-            $notes,
-            $fundAccount,
-            $inventoryAccount
-        ) {
-            // 1. Tambah stok bahan
-            $material->increment('stock', $qty);
+            $lines = [
+                '✅ *Penyetoran PPh Final UMKM Berhasil Dicatat!*',
+                '🏢 *Entitas*: Badan Usaha (CV/PT)',
+                "📅 *Masa Pajak*: {$periodName}",
+                '───────────────────',
+                '💰 *Nominal Pajak*: Rp '.number_format($paidAmount, 0, ',', '.'),
+                "🏦 *Sumber Dana*: {$sourceAccountName}",
+                "🧾 *Ref Jurnal*: `{$journal->reference}`",
+            ];
 
-            // 2. Update harga standar jika harga beli baru diisi spesifik
-            if ($unitCost > 0) {
-                $material->update(['standard_cost' => $unitCost]);
+            if ($ntpn) {
+                $lines[] = "📋 *Kode NTPN*: `{$ntpn}`";
             }
 
-            // 3. Catat kartu mutasi stok
-            $stockMovement = MaterialStockMovement::create([
-                'material_id' => $material->id,
-                'type' => 'in',
-                'quantity' => $qty,
-                'unit_cost' => $unitCost,
-                'reference_type' => 'purchase',
-                'reference_number' => $refNumber,
-                'notes' => $notes,
+            $lines[] = '───────────────────';
+            $lines[] = 'Status: Terverifikasi (Buku Besar Diperbarui Otomatis)';
+
+            return response()->json([
+                'status' => true,
+                'journal_id' => $journal->id,
+                'reference' => $journal->reference,
+                'amount' => $paidAmount,
+                'message' => implode("\n", $lines),
             ]);
-
-            // 4. Catat Jurnal Pembukuan Otomatis (Double Entry)
-            if ($totalCost > 0 && $fundAccount && $inventoryAccount) {
-                $journal = JournalEntry::create([
-                    'reference' => $refNumber,
-                    'description' => "Pembelian/Restock {$material->name} ({$refNumber})",
-                    'date' => now(),
-                    'source' => 'material',
-                    'status' => 'verified',
-                ]);
-
-                // Debit Persediaan Bahan Baku
-                JournalEntryLine::create([
-                    'journal_entry_id' => $journal->id,
-                    'account_id' => $inventoryAccount->id,
-                    'description' => "Persediaan masuk {$material->name} x{$qty} {$material->unit}",
-                    'debit' => $totalCost,
-                    'credit' => 0,
-                ]);
-
-                // Credit Kas/Bank
-                JournalEntryLine::create([
-                    'journal_entry_id' => $journal->id,
-                    'account_id' => $fundAccount->id,
-                    'description' => "Pengeluaran pembelian bahan baku ({$refNumber})",
-                    'debit' => 0,
-                    'credit' => $totalCost,
-                ]);
-            }
-
-            return $stockMovement;
-        });
-
-        $updatedMaterial = $material->fresh();
-        $msg = [
-            '🧶 *Restock Bahan Baku Berhasil!*',
-            "📦 *Bahan*: {$updatedMaterial->name} (`{$updatedMaterial->code}`)",
-            "➕ *Jumlah Masuk*: +{$qty} {$updatedMaterial->unit}",
-            "📊 *Total Stok Sekarang*: *{$updatedMaterial->formatted_stock}*",
-            '💰 *Total Pembelian*: Rp '.number_format($totalCost, 0, ',', '.').($fundAccount ? " (via {$fundAccount->name})" : ''),
-            "🧾 *No. Referensi*: `{$refNumber}`",
-        ];
-
-        return response()->json([
-            'status' => true,
-            'material' => $updatedMaterial,
-            'movement' => $movement,
-            'message' => implode("\n", $msg),
-        ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => '⚠️ Gagal mencatat setoran pajak: '.$e->getMessage(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan sistem: '.$e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -3178,7 +2346,7 @@ class WebhookTransactionController extends Controller
             $ratePerPoint = (float) $employee->rate_per_point;
             $statusText = 'Belum Dibayar (Draft)';
             $refText = '';
-            
+
             // Simpan Draft ke database agar saat di-approve, data kehadiran tidak hilang.
             $existingPayroll = EmployeePayroll::updateOrCreate(
                 [
@@ -3333,9 +2501,9 @@ class WebhookTransactionController extends Controller
         $action = strtolower(trim((string) ($request->input('action') ?? '')));
         $tailorQuery = trim((string) ($request->input('tailor_name') ?? $request->input('query') ?? $request->input('name') ?? ''));
 
-        // Action: Cek Tarif Jasa HPP (Direct Labor)
+        // Action: Cek Tarif Jasa Standar (Direct Labor)
         if ($action === 'rates' || str_contains($tailorQuery, 'tarif') || str_contains($tailorQuery, 'harga')) {
-            $laborMaterials = Material::where('category', 'direct_labor')->orderBy('code')->get();
+            $laborMaterials = TailorPayroll::getLaborRates();
             $lines = ['🪡 *Daftar Tarif Upah Penjahit di HPP (Direct Labor):*', ''];
             foreach ($laborMaterials as $lm) {
                 $lines[] = "• *{$lm->name}* (`{$lm->code}`)";
@@ -3418,8 +2586,8 @@ class WebhookTransactionController extends Controller
         }
 
         // Action: Hitung / Buat Slip Upah Penjahit Baru
-        $laborRates = Material::where('category', 'direct_labor')->pluck('standard_cost', 'code')->toArray();
-        $laborIds = Material::where('category', 'direct_labor')->pluck('id', 'code')->toArray();
+        $laborRates = collect(TailorPayroll::STANDARD_RATES)->pluck('standard_cost', 'code')->toArray();
+        $laborIds = [];
 
         $tailorName = ! empty($tailorQuery) ? $tailorQuery : 'Penjahit Adriana';
         if (! str_starts_with(strtolower($tailorName), 'penjahit')) {

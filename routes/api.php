@@ -42,17 +42,9 @@ Route::middleware('webhook.secret')->group(function () {
     Route::match(['get', 'post'], '/webhook/balance', [WebhookTransactionController::class, 'balance']);
     Route::match(['get', 'post'], '/webhook/summary', [WebhookTransactionController::class, 'summary']);
 
-    // Retail Clothing & Stock Endpoints for n8n / Telegram
-    Route::get('/webhook/retail/stock', [WebhookTransactionController::class, 'checkRetailStock']);
-    Route::post('/webhook/retail/sale', [WebhookTransactionController::class, 'recordRetailSale']);
+    // Tax (PPh Final UMKM 0.5%) Endpoints for Telegram / Hermes / n8n
+    Route::match(['get', 'post'], '/webhook/tax', [WebhookTransactionController::class, 'taxSummary']);
+    Route::match(['get', 'post'], '/webhook/tax/summary', [WebhookTransactionController::class, 'taxSummary']);
+    Route::post('/webhook/tax/pay', [WebhookTransactionController::class, 'recordTaxPayment']);
 
-    // Custom Suit Tailoring & AI Estimation Endpoints for n8n / Telegram
-    Route::post('/webhook/custom-suit/estimate', [WebhookTransactionController::class, 'estimateSuit']);
-    Route::post('/webhook/custom-suit/order', [WebhookTransactionController::class, 'orderCustomSuit']);
-    Route::get('/webhook/custom-suit/status', [WebhookTransactionController::class, 'trackCustomSuit']);
-    Route::post('/webhook/custom-suit/update-status', [WebhookTransactionController::class, 'updateCustomSuitStatus']);
-
-    // Raw Materials & Warehouse Monitoring Endpoints for n8n / Telegram
-    Route::get('/webhook/materials/stock', [WebhookTransactionController::class, 'checkMaterialStock']);
-    Route::post('/webhook/materials/restock', [WebhookTransactionController::class, 'recordMaterialRestock']);
 });

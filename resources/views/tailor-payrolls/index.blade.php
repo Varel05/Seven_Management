@@ -113,13 +113,12 @@
                 <div class="flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
                     <h2 class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                        Tarif Standar Upah Penjahit di HPP (Direct Labor)
+                        Tarif Standar Upah Penjahit Borongan
                     </h2>
                 </div>
-                <a href="{{ route('materials.index') }}" class="text-xs font-semibold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1">
-                    <span>Kelola di Bahan Baku & HPP</span>
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                </a>
+                <span class="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Standar Acuan Output
+                </span>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
                 @foreach ($laborMaterials as $lm)

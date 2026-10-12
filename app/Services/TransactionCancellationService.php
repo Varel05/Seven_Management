@@ -2,14 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\CustomSuitOrder;
 use App\Models\Employee;
 use App\Models\EmployeePayroll;
 use App\Models\EmployeePointLog;
 use App\Models\JournalEntry;
-use App\Models\MaterialStockMovement;
 use App\Models\RecurringTransaction;
-use App\Models\RetailSale;
 use App\Models\TailorPayroll;
 use Illuminate\Support\Facades\DB;
 
@@ -33,48 +30,6 @@ class TransactionCancellationService
         return DB::transaction(function () use ($journalEntry, $reason, $actor) {
             $rolledBack = [];
             $reasonText = $reason && trim($reason) !== '' ? trim($reason) : 'Kesalahan input transaksi';
-
-            // 1. Rollback Penjualan Retail / Sewa (kembalikan stok pakaian jadi)
-            $retailSale = RetailSale::where('journal_entry_id', $journalEntry->id)
-                ->orWhere('invoice_number', $journalEntry->reference)
-                ->first();
-
-            if ($retailSale) {
-                foreach ($retailSale->items as $item) {
-                    if ($item->product) {
-                        $item->product->increment('stock', $item->quantity);
-                        $rolledBack['retail_stock'][] = [
-                            'product' => $item->product->name,
-                            'quantity' => $item->quantity,
-                        ];
-                    }
-                }
-                $retailSale->update([
-                    'notes' => "[DIBATALKAN: {$reasonText}] ".($retailSale->notes ?? ''),
-                ]);
-            }
-
-            // 2. Rollback Restock Material Gudang (kurangi kembali stok bahan baku fisik)
-            $movement = MaterialStockMovement::where('reference_number', $journalEntry->reference)->first();
-            if ($movement && $movement->type === 'in' && $movement->material) {
-                $material = $movement->material;
-                $material->decrement('stock', $movement->quantity);
-
-                MaterialStockMovement::create([
-                    'material_id' => $material->id,
-                    'type' => 'out',
-                    'quantity' => $movement->quantity,
-                    'unit_cost' => $movement->unit_cost,
-                    'reference_type' => 'adjustment',
-                    'reference_number' => 'VOID-'.$journalEntry->reference,
-                    'notes' => "Pembatalan restock {$journalEntry->reference}: {$reasonText}",
-                ]);
-
-                $rolledBack['material_stock'] = [
-                    'material' => $material->name,
-                    'deducted_quantity' => $movement->quantity,
-                ];
-            }
 
             // 3. Rollback Employee Payroll (Slip Gaji Karyawan)
             $payroll = EmployeePayroll::where('journal_entry_id', $journalEntry->id)->first();
@@ -138,18 +93,6 @@ class TransactionCancellationService
                     'period' => $tailorPayroll->payroll_date?->format('d/m/Y'),
                 ];
                 $tailorPayroll->delete();
-            }
-
-            // 5. Rollback Custom Suit Order (Pesanan Jas Jahit)
-            $customOrder = CustomSuitOrder::where('journal_entry_id', $journalEntry->id)
-                ->orWhere('order_number', $journalEntry->reference)
-                ->first();
-            if ($customOrder) {
-                $customOrder->update([
-                    'status' => 'cancelled',
-                    'notes' => "[DIBATALKAN: {$reasonText}] ".($customOrder->notes ?? ''),
-                ]);
-                $rolledBack['custom_suit_order'] = $customOrder->order_number;
             }
 
             // 6. Rollback Recurring Transaction (Pengeluaran Rutin)

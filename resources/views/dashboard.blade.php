@@ -126,6 +126,7 @@
                 verifiedCount: {{ $verifiedCount ?? 0 }}
             },
             accountsData: {{ Js::from($accounts) }},
+            taxData: {{ Js::from($currentTax) }},
             formatRupiah(val) {
                 if (typeof val === 'string' && val.trim().startsWith('Rp')) return val;
                 const num = Number(val) || 0;
@@ -215,6 +216,10 @@
 
                         if (data.chartData) {
                             window.dispatchEvent(new CustomEvent('chart-data-updated', { detail: data.chartData }));
+                        }
+
+                        if (data.tax) {
+                            this.taxData = data.tax;
                         }
 
                         if (data.new_transaction) {
@@ -455,6 +460,29 @@
         closeDeleteRecurringModal() {
             this.showDeleteRecurringModal = false;
             this.recurringToDelete = null;
+        },
+        showTaxPayModal: false,
+        taxPayForm: {
+            year: {{ $currentTax['year'] ?? now()->year }},
+            month: {{ $currentTax['month'] ?? now()->month }},
+            amount: {{ $currentTax['tax_amount'] ?? 0 }},
+            account_code: '1001',
+            ntpn: '',
+            notes: ''
+        },
+        openTaxPayModal() {
+            this.taxPayForm = {
+                year: this.taxData ? this.taxData.year : {{ $currentTax['year'] ?? now()->year }},
+                month: this.taxData ? this.taxData.month : {{ $currentTax['month'] ?? now()->month }},
+                amount: this.taxData ? this.taxData.tax_amount : {{ $currentTax['tax_amount'] ?? 0 }},
+                account_code: '1001',
+                ntpn: '',
+                notes: ''
+            };
+            this.showTaxPayModal = true;
+        },
+        closeTaxPayModal() {
+            this.showTaxPayModal = false;
         }
     }">
     <div class="max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 space-y-8">
@@ -1010,6 +1038,141 @@
                         </button>
                     </div>
                 @endif
+            </div>
+
+            <!-- TAX SUMMARY WIDGET (PPH FINAL UMKM 0,5% BADAN USAHA - PP 55/2022) -->
+            <div id="tax-summary" class="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm scroll-mt-20">
+                <!-- Header -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-100 dark:border-slate-800 gap-4">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-md shadow-blue-600/20 shrink-0">
+                            <!-- Tax / Bank Landmark Icon -->
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h2 class="text-base font-bold text-slate-900 dark:text-slate-100">
+                                    Ringkasan Pajak PPh Final UMKM
+                                </h2>
+                                <span class="px-2.5 py-0.5 text-[11px] font-bold rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                    Badan Usaha (0,5% PP 55/2022)
+                                </span>
+                                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                    Masa: {{ $currentTax['period'] ?? now()->translatedFormat('F Y') }}
+                                </span>
+                            </div>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Pajak penghasilan final badan dari akumulasi omzet bruto pendapatan usaha
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Action / Status Badge -->
+                    <div class="flex items-center gap-2.5">
+                        @if($currentTax['is_paid'] ?? false)
+                            <div class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
+                                <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                <span>Pajak Lunas Disetor</span>
+                            </div>
+                        @else
+                            <button 
+                                type="button" 
+                                @click="openTaxPayModal()"
+                                class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                                <span>Catat Setor Pajak</span>
+                            </button>
+                        @endif
+                    </div>
+                </div>
+
+                <!-- 4 Metrics Cards (Solid Colors, No Gradients) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
+                    <!-- 1. Omzet Bruto -->
+                    <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            <span>Omzet Bruto Bulan Ini</span>
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        </div>
+                        <div class="text-lg xl:text-xl font-extrabold font-mono text-slate-900 dark:text-slate-100 mt-2">
+                            {{ $currentTax['formatted_gross_revenue'] ?? 'Rp 0' }}
+                        </div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            Akun Pendapatan (4001, 4002, 4003)
+                        </div>
+                    </div>
+
+                    <!-- 2. PPh Terutang 0.5% -->
+                    <div class="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60">
+                        <div class="flex items-center justify-between text-xs font-semibold text-blue-800 dark:text-blue-300">
+                            <span>PPh Terutang (Tarif 0,5%)</span>
+                            <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                        </div>
+                        <div class="text-lg xl:text-xl font-extrabold font-mono text-blue-700 dark:text-blue-300 mt-2">
+                            {{ $currentTax['formatted_tax_amount'] ?? 'Rp 0' }}
+                        </div>
+                        <div class="text-[11px] text-blue-700/80 dark:text-blue-400/80 mt-1">
+                            Badan (Tanpa Potongan Rp 500 Juta)
+                        </div>
+                    </div>
+
+                    <!-- 3. Batas Waktu Setor -->
+                    <div class="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60">
+                        <div class="flex items-center justify-between text-xs font-semibold text-amber-800 dark:text-amber-300">
+                            <span>Batas Akhir Penyetoran</span>
+                            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                        </div>
+                        <div class="text-lg xl:text-xl font-extrabold text-amber-800 dark:text-amber-300 mt-2">
+                            {{ $currentTax['formatted_due_date'] ?? '-' }}
+                        </div>
+                        <div class="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-1">
+                            Tgl 15 bulan berikutnya
+                        </div>
+                    </div>
+
+                    <!-- 4. Kode Billing DJP -->
+                    <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            <span>Kode Billing DJP</span>
+                            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                        </div>
+                        <div class="text-lg xl:text-xl font-extrabold font-mono text-slate-900 dark:text-slate-100 mt-2">
+                            {{ $currentTax['kap'] ?? '411128' }} / {{ $currentTax['kjs'] ?? '420' }}
+                        </div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            KAP PPh Final / KJS UMKM Badan
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Detail / Breakdown Info Strip -->
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600 dark:text-slate-400">
+                        <span class="font-bold text-slate-700 dark:text-slate-300">Rincian Omzet:</span>
+                        @forelse($currentTax['revenue_breakdown'] ?? [] as $rev)
+                            <span>{{ $rev['name'] }}: <strong class="font-mono text-slate-800 dark:text-slate-200">{{ $rev['formatted_amount'] }}</strong></span>
+                        @empty
+                            <span class="italic text-slate-400">Belum ada mutasi pendapatan pada periode ini</span>
+                        @endforelse
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        @if($currentTax['is_paid'] ?? false)
+                            <div class="text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 font-medium">
+                                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <span>Disetor: {{ $currentTax['payment_info']['paid_date'] ?? '-' }} (Ref: {{ $currentTax['payment_info']['reference'] ?? '-' }})</span>
+                            </div>
+                        @else
+                            <div class="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                                <span>Setor via e-Billing & konfirmasi via bot Telegram <code class="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-[11px]">/setorpajak</code></span>
+                            </div>
+                        @endif
+                    </div>
+                </div>
             </div>
 
             <!-- RECURRING EXPENSES & SUBSCRIPTIONS SECTION -->
@@ -2181,6 +2344,157 @@
                             </form>
                         </template>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. MODAL CATAT PENYETORAN PPH FINAL UMKM -->
+        <div 
+            x-show="showTaxPayModal" 
+            x-cloak 
+            class="fixed inset-0 z-50 overflow-y-auto" 
+            style="display: none;"
+        >
+            <!-- Backdrop -->
+            <div 
+                x-show="showTaxPayModal" 
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                @click="closeTaxPayModal()" 
+                class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            ></div>
+
+            <!-- Modal Panel -->
+            <div class="min-h-full flex items-center justify-center p-4">
+                <div 
+                    x-show="showTaxPayModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="relative bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 transition-all text-slate-800 dark:text-slate-100"
+                >
+                    <!-- Header -->
+                    <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-md shadow-blue-600/20">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-base font-extrabold text-slate-900 dark:text-white">Catat Setoran PPh Final</h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Rekam jurnal penyetoran pajak ke akun 5005 Beban Pajak</p>
+                            </div>
+                        </div>
+
+                        <button @click="closeTaxPayModal()" type="button" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    <!-- Form -->
+                    <form action="{{ route('tax.pay') }}" method="POST" class="mt-5 space-y-4">
+                        @csrf
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tahun Pajak</label>
+                                <input 
+                                    type="number" 
+                                    name="year" 
+                                    x-model="taxPayForm.year" 
+                                    required 
+                                    min="2020" 
+                                    max="2099" 
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                >
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Masa Pajak (Bulan)</label>
+                                <select 
+                                    name="month" 
+                                    x-model="taxPayForm.month" 
+                                    required 
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                >
+                                    @for($m = 1; $m <= 12; $m++)
+                                        <option value="{{ $m }}">{{ \Carbon\Carbon::create(2026, $m, 1)->translatedFormat('F') }}</option>
+                                    @endfor
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nominal Pajak Disetor (Rp)</label>
+                            <input 
+                                type="number" 
+                                name="amount" 
+                                x-model="taxPayForm.amount" 
+                                required 
+                                min="1" 
+                                step="1" 
+                                placeholder="Contoh: 27575" 
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            >
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Sumber Rekening Pembayaran</label>
+                            <select 
+                                name="account_code" 
+                                x-model="taxPayForm.account_code" 
+                                required 
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            >
+                                @foreach($assetAccounts as $assetAcc)
+                                    <option value="{{ $assetAcc->code }}">{{ $assetAcc->code }} - {{ $assetAcc->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nomor Transaksi Penerimaan Negara (NTPN) <span class="text-slate-400 font-normal">(Opsional)</span></label>
+                            <input 
+                                type="text" 
+                                name="ntpn" 
+                                x-model="taxPayForm.ntpn" 
+                                placeholder="Contoh: 1A2B3C4D5E6F7G8H" 
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono uppercase focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            >
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Catatan Tambahan <span class="text-slate-400 font-normal">(Opsional)</span></label>
+                            <input 
+                                type="text" 
+                                name="notes" 
+                                x-model="taxPayForm.notes" 
+                                placeholder="Misal: Dibayarkan via m-BCA" 
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            >
+                        </div>
+
+                        <!-- Footer Actions -->
+                        <div class="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <button 
+                                @click="closeTaxPayModal()" 
+                                type="button" 
+                                class="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+                            >
+                                Batal
+                            </button>
+                            <button 
+                                type="submit" 
+                                class="px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                            >
+                                Simpan Penyetoran Pajak
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

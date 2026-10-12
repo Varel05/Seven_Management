@@ -125,4 +125,32 @@ class WebhookTransactionCategorizationTest extends TestCase
             'credit' => 1200000,
         ]);
     }
+
+    public function test_pengeluaran_bahan_baku_mengkredit_kas_operasional_bukan_persediaan(): void
+    {
+        // Siapkan akun Persediaan Bahan Baku (1004)
+        Account::create(['code' => '1004', 'name' => 'Persediaan Bahan Baku & Pembantu', 'type' => 'asset']);
+
+        $response = $this->postJson('/api/webhook/transaction', [
+            'description' => 'Belanja 30 meter Kain Sunport @Rp 40.000 - Majar Batik',
+            'amount' => 1200000,
+            'type' => 'expense',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertStatus(201);
+
+        // Kas Operasional (1001) WAJIB dikredit, BUKAN Persediaan Bahan Baku (1004)
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'account_id' => Account::where('code', '1001')->first()->id,
+            'debit' => 0,
+            'credit' => 1200000,
+        ]);
+
+        $this->assertDatabaseMissing('journal_entry_lines', [
+            'account_id' => Account::where('code', '1004')->first()->id,
+            'credit' => 1200000,
+        ]);
+    }
 }

@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Account;
-use App\Models\Material;
 use App\Models\TailorPayroll;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,23 +28,6 @@ class TailorPayrollTest extends TestCase
         Account::firstOrCreate(['code' => '1005'], ['name' => 'Piutang Kasbon Karyawan & Penjahit', 'type' => 'asset']);
         Account::firstOrCreate(['code' => '5002'], ['name' => 'Beban Gaji', 'type' => 'expense']);
 
-        // Siapkan Komponen Biaya Tenaga Kerja HPP (Direct Labor)
-        Material::firstOrCreate(
-            ['code' => 'LAB-JHT-REG'],
-            ['name' => 'Upah Penjahit Jas Reguler', 'category' => 'direct_labor', 'unit' => 'pcs', 'standard_cost' => 50000, 'stock' => 0, 'min_stock' => 0]
-        );
-        Material::firstOrCreate(
-            ['code' => 'LAB-JHT-VST'],
-            ['name' => 'Upah Penjahit Rompi / Vest', 'category' => 'direct_labor', 'unit' => 'pcs', 'standard_cost' => 37000, 'stock' => 0, 'min_stock' => 0]
-        );
-        Material::firstOrCreate(
-            ['code' => 'LAB-JHT-PRM'],
-            ['name' => 'Upah Penjahit Jas Premium', 'category' => 'direct_labor', 'unit' => 'pcs', 'standard_cost' => 150000, 'stock' => 0, 'min_stock' => 0]
-        );
-        Material::firstOrCreate(
-            ['code' => 'LAB-JHT-REV'],
-            ['name' => 'Upah Revisi / Perbaikan Jahitan', 'category' => 'direct_labor', 'unit' => 'pcs', 'standard_cost' => 0, 'stock' => 0, 'min_stock' => 0]
-        );
     }
 
     public function test_tailor_payroll_index_page_can_be_rendered(): void
@@ -71,9 +53,6 @@ class TailorPayrollTest extends TestCase
 
     public function test_can_create_tailor_payroll_with_hpp_rates_and_bon_deduction(): void
     {
-        $reguler = Material::where('code', 'LAB-JHT-REG')->first();
-        $vest = Material::where('code', 'LAB-JHT-VST')->first();
-
         $payload = [
             'tailor_name' => 'Penjahit Adriana',
             'payroll_date' => '2026-10-01',
@@ -81,13 +60,13 @@ class TailorPayrollTest extends TestCase
             'payment_method' => 'Tunai',
             'items' => [
                 [
-                    'material_id' => $reguler->id,
+                    'material_id' => null,
                     'item_name' => 'Jas Reguler',
                     'quantity' => 10,
                     'rate_per_piece' => 50000, // Subtotal 500.000
                 ],
                 [
-                    'material_id' => $vest->id,
+                    'material_id' => null,
                     'item_name' => 'Vest',
                     'quantity' => 5,
                     'rate_per_piece' => 37000, // Subtotal 185.000
@@ -131,8 +110,6 @@ class TailorPayrollTest extends TestCase
 
     public function test_creating_tailor_payroll_automatically_generates_balanced_journal_entry(): void
     {
-        $reguler = Material::where('code', 'LAB-JHT-REG')->first();
-
         $payload = [
             'tailor_name' => 'Penjahit Adriana',
             'payroll_date' => '2026-10-01',
@@ -140,7 +117,7 @@ class TailorPayrollTest extends TestCase
             'payment_method' => 'Transfer (Bank BCA)',
             'items' => [
                 [
-                    'material_id' => $reguler->id,
+                    'material_id' => null,
                     'item_name' => 'Jas Reguler',
                     'quantity' => 4,
                     'rate_per_piece' => 50000, // Total 200.000
@@ -203,15 +180,13 @@ class TailorPayrollTest extends TestCase
 
     public function test_can_delete_tailor_payroll_and_its_journal_entry(): void
     {
-        $reguler = Material::where('code', 'LAB-JHT-REG')->first();
-
         $responsePost = $this->actingAs($this->user)->post(route('tailor-payrolls.store'), [
             'tailor_name' => 'Penjahit Budi',
             'payroll_date' => '2026-10-01',
             'payment_method' => 'Tunai',
             'items' => [
                 [
-                    'material_id' => $reguler->id,
+                    'material_id' => null,
                     'item_name' => 'Jas Reguler',
                     'quantity' => 1,
                     'rate_per_piece' => 50000,

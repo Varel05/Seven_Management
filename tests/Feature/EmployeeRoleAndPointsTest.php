@@ -6,7 +6,6 @@ use App\Enums\EmployeeRole;
 use App\Models\Account;
 use App\Models\Employee;
 use App\Models\EmployeePointLog;
-use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -189,97 +188,6 @@ class EmployeeRoleAndPointsTest extends TestCase
             'category' => EmployeePointLog::CATEGORY_REVIEW,
             'notes' => 'Review bintang 5 dari pelanggan di Google Maps',
             'actor' => 'Pak Owner (owner)',
-        ]);
-    }
-
-    public function test_retail_sale_automatically_awards_points_to_cs_with_item_qty_and_cod(): void
-    {
-        $product = Product::create([
-            'code' => 'JAS-001',
-            'name' => 'Jas Pria Formal Slim Fit',
-            'category' => 'jas_blazer_pria',
-            'selling_price' => 750000,
-            'cost_price' => 450000,
-            'stock' => 10,
-        ]);
-
-        $payload = [
-            'product_id' => $product->id,
-            'product_code' => $product->code,
-            'quantity' => 3,
-            'customer_name' => 'Pelanggan Budi',
-            'payment_method' => 'cod',
-            'sender_phone' => $this->csEmployee->phone,
-        ];
-
-        $response = $this->postJson('/api/webhook/retail/sale', $payload, [
-            'X-Webhook-Secret' => 'test_secret_key',
-        ]);
-
-        $response->assertStatus(200);
-
-        // Point calculation:
-        // Jas (jas_blazer_pria): 15 pt
-        // Quantity bonus (3 item x 1 pt): 3 pt
-        // COD bonus: 1 pt
-        // Total = 19 pt
-        $this->assertEquals(19, $this->csEmployee->fresh()->current_points);
-
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->csEmployee->id,
-            'category' => EmployeePointLog::CATEGORY_ITEM_SALE,
-            'points' => 15,
-        ]);
-
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->csEmployee->id,
-            'category' => EmployeePointLog::CATEGORY_QUANTITY,
-            'points' => 3,
-        ]);
-
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->csEmployee->id,
-            'category' => EmployeePointLog::CATEGORY_COD,
-            'points' => 1,
-        ]);
-
-        // Verify retail_sales has employee_id set
-        $this->assertDatabaseHas('retail_sales', [
-            'employee_id' => $this->csEmployee->id,
-            'customer_name' => 'Pelanggan Budi',
-        ]);
-    }
-
-    public function test_custom_suit_order_awards_points_to_cs(): void
-    {
-        $payload = [
-            'customer_name' => 'Ahmad Suhendra',
-            'customer_phone' => '081234567890',
-            'suit_type' => 'jas_blazer_pria',
-            'fabric_type' => 'Wool Premium',
-            'total_price' => 3500000,
-            'down_payment' => 1500000,
-            'sender_phone' => $this->csEmployee->phone,
-        ];
-
-        $response = $this->postJson('/api/webhook/custom-suit/order', $payload, [
-            'X-Webhook-Secret' => 'test_secret_key',
-        ]);
-
-        $response->assertStatus(200);
-
-        // Custom suit awards 25 points
-        $this->assertEquals(25, $this->csEmployee->fresh()->current_points);
-
-        $this->assertDatabaseHas('employee_point_logs', [
-            'employee_id' => $this->csEmployee->id,
-            'category' => EmployeePointLog::CATEGORY_ITEM_SALE,
-            'points' => 25,
-        ]);
-
-        $this->assertDatabaseHas('custom_suit_orders', [
-            'employee_id' => $this->csEmployee->id,
-            'customer_name' => 'Ahmad Suhendra',
         ]);
     }
 
@@ -573,37 +481,5 @@ class EmployeeRoleAndPointsTest extends TestCase
         $response->assertJsonPath('status', true);
         $response->assertJsonPath('employee.name', 'Rina CS');
         $response->assertJsonPath('current_points', 50);
-    }
-
-    public function test_retail_sale_awards_points_to_cs_identified_by_mobile_phone(): void
-    {
-        $product = Product::create([
-            'code' => 'JAS-009',
-            'name' => 'Classic Black Suit',
-            'category' => 'jas_blazer_pria',
-            'selling_price' => 1000000,
-            'cost_price' => 500000,
-            'stock' => 5,
-            'point_reward' => 20,
-        ]);
-
-        $initialPoints = $this->csEmployee->current_points;
-
-        $response = $this->withHeader('X-Webhook-Secret', 'test_secret_key')
-            ->postJson('/api/webhook/retail/sale', [
-                'product_code' => 'JAS-009',
-                'quantity' => 1,
-                'payment_method' => 'cash',
-                'sender_phone' => '081233333333',
-            ]);
-
-        $response->assertOk();
-        $response->assertJsonPath('status', true);
-
-        // Verify points were awarded to Rina CS (20 pt item + 1 pt qty)
-        $this->assertEquals($initialPoints + 21, $this->csEmployee->fresh()->current_points);
-        $this->assertDatabaseHas('retail_sales', [
-            'employee_id' => $this->csEmployee->id,
-        ]);
     }
 }
