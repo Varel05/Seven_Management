@@ -941,7 +941,7 @@
                 </div>
 
                 @if(isset($accounts) && $accounts->count() > 0)
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3.5 mt-5">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-3.5 mt-5">
                         @foreach($accounts as $acc)
                             @php
                                 $typeConfigs = [
@@ -1101,7 +1101,7 @@
                             {{ $currentTax['formatted_gross_revenue'] ?? 'Rp 0' }}
                         </div>
                         <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                            Akun Pendapatan (4001, 4002, 4003)
+                            Akun Pendapatan Usaha (4001)
                         </div>
                     </div>
 

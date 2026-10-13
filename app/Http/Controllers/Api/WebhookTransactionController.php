@@ -529,7 +529,7 @@ class WebhookTransactionController extends Controller
         }
 
         // HANYA akun kas & bank (likuid) yang dapat dipilih otomatis sebagai sumber dana pembayaran / penerimaan.
-        // Akun persediaan (1003, 1004), piutang (1005), dan aset tetap BUKAN akun kas/bank!
+        // Akun piutang (1005) dan aset tetap BUKAN akun kas/bank!
         $liquidAccounts = $assetAccounts->filter(function ($acc) {
             $nameLower = strtolower($acc->name);
 
@@ -1565,9 +1565,9 @@ class WebhookTransactionController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        // Secara default menggunakan Beban Operasional (5000) dan Kas Operasional (1001)
+        // Secara default menggunakan Beban Operasional (5001) dan Kas Operasional (1001)
         $expenseAccount = Account::firstOrCreate(
-            ['code' => '5000'],
+            ['code' => '5001'],
             ['name' => 'Beban Operasional', 'type' => 'expense']
         );
         $assetAccount = Account::firstOrCreate(
