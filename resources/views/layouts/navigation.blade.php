@@ -34,8 +34,52 @@
             </a>
         </div>
 
+        <!-- Bagian Tengah: Navigasi Menu Utama di Header (Desktop & Tablet) -->
+        <nav class="hidden md:flex items-center gap-1 lg:gap-1.5 xl:gap-2 mx-2 lg:mx-4">
+            <!-- 1. Ikhtisar Keuangan -->
+            <a href="{{ route('dashboard') }}" 
+               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors {{ request()->routeIs('dashboard') ? 'bg-emerald-800/90 text-white font-bold border border-emerald-600/50 shadow-xs dark:bg-slate-800 dark:text-emerald-400' : 'text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium' }}"
+               title="Ikhtisar Keuangan & Transaksi">
+                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                <span>Ikhtisar Keuangan</span>
+            </a>
+
+            <!-- 2. Pajak PPh Final -->
+            <a href="{{ route('dashboard') }}#tax-summary" 
+               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium"
+               title="Ringkasan Pajak PPh Final (0,5%)">
+                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <span>Pajak PPh Final</span>
+                <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">0,5%</span>
+            </a>
+
+            <!-- 3. Gaji Karyawan -->
+            <a href="{{ route('employees.index') }}" 
+               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors {{ request()->routeIs('employees.*') ? 'bg-emerald-800/90 text-white font-bold border border-emerald-600/50 shadow-xs dark:bg-slate-800 dark:text-emerald-400' : 'text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium' }}"
+               title="Manajemen Gaji Karyawan & Payroll">
+                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>Gaji Karyawan</span>
+            </a>
+
+            <!-- 4. Upah Penjahit -->
+            <a href="{{ route('tailor-payrolls.index') }}" 
+               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors {{ request()->routeIs('tailor-payrolls.*') ? 'bg-emerald-800/90 text-white font-bold border border-emerald-600/50 shadow-xs dark:bg-slate-800 dark:text-emerald-400' : 'text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium' }}"
+               title="Sistem Upah Buruh Borongan & Slip">
+                <svg class="w-4 h-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+                <span>Upah Penjahit</span>
+            </a>
+        </nav>
+
         <!-- Sisi Kanan: Status AI Agent, Mode Gelap, Profil Pengguna & Logout -->
-        <div class="flex items-center gap-2 sm:gap-3">
+        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
             <!-- Status AI Agent -->
             <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-900/40 dark:bg-slate-800/80 border border-emerald-700/30 dark:border-slate-700/60 text-xs">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -112,70 +156,38 @@
                 </button>
             </div>
 
-            <nav class="px-2 space-y-5">
+            <nav class="px-2 space-y-1.5">
+                <!-- 1. Ikhtisar Keuangan & Transaksi -->
+                <x-sidebar-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" title="Ikhtisar Keuangan & Transaksi">
+                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Ikhtisar Keuangan</span>
+                </x-sidebar-link>
 
-                <!-- ============================================================= -->
-                <!-- KELOMPOK 1: KEUANGAN & PAJAK -->
-                <!-- ============================================================= -->
-                <div class="space-y-1">
-                    <!-- Heading Kategori Keuangan -->
-                    <div class="px-2 py-1 flex items-center justify-between md:justify-center sidebar-category-header" :class="sidebarOpen ? 'justify-between' : 'md:justify-center justify-between'">
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label text-[10px] font-black uppercase tracking-wider text-emerald-400 dark:text-emerald-500 truncate">
-                            Keuangan & Pajak
-                        </span>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                        <!-- Mini Divider ketika sidebar ciut -->
-                        <div :class="sidebarOpen ? 'md:hidden' : 'md:block'" class="hidden md:block sidebar-mini-divider w-6 h-0.5 bg-emerald-700/50 rounded-full my-1.5" title="Keuangan & Pajak"></div>
-                    </div>
+                <!-- 2. Pajak PPh Final UMKM -->
+                <x-sidebar-link :href="route('dashboard').'#tax-summary'" :active="false" title="Pajak PPh Final (0,5%)">
+                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Pajak PPh Final (0,5%)</span>
+                </x-sidebar-link>
 
-                    <!-- 1. Ikhtisar Keuangan & Transaksi -->
-                    <x-sidebar-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" title="Ikhtisar Keuangan & Transaksi">
-                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                        </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Ikhtisar Keuangan</span>
-                    </x-sidebar-link>
+                <!-- 3. Karyawan & Payroll -->
+                <x-sidebar-link :href="route('employees.index')" :active="request()->routeIs('employees.*')" title="Gaji Karyawan (Payroll)">
+                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Gaji Karyawan</span>
+                </x-sidebar-link>
 
-                    <!-- 2. Pajak PPh Final UMKM -->
-                    <x-sidebar-link :href="route('dashboard').'#tax-summary'" :active="false" title="Pajak PPh Final (0,5%)">
-                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Pajak PPh Final</span>
-                    </x-sidebar-link>
-                </div>
-
-                <!-- ============================================================= -->
-                <!-- KELOMPOK 2: PENGGAJIAN & BURUH -->
-                <!-- ============================================================= -->
-                <div class="space-y-1">
-                    <!-- Heading Kategori Penggajian -->
-                    <div class="px-2 py-1 flex items-center justify-between md:justify-center sidebar-category-header" :class="sidebarOpen ? 'justify-between' : 'md:justify-center justify-between'">
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label text-[10px] font-black uppercase tracking-wider text-amber-400 dark:text-amber-500 truncate">
-                            Penggajian & Buruh
-                        </span>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
-                        <!-- Mini Divider ketika sidebar ciut -->
-                        <div :class="sidebarOpen ? 'md:hidden' : 'md:block'" class="hidden md:block sidebar-mini-divider w-6 h-0.5 bg-amber-500/50 rounded-full my-1.5" title="Penggajian & Buruh"></div>
-                    </div>
-
-                    <!-- 3. Karyawan & Payroll -->
-                    <x-sidebar-link :href="route('employees.index')" :active="request()->routeIs('employees.*')" title="Gaji Karyawan (Payroll)">
-                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Gaji Karyawan</span>
-                    </x-sidebar-link>
-
-                    <!-- 4. Upah Penjahit (Borongan & Kasbon) -->
-                    <x-sidebar-link :href="route('tailor-payrolls.index')" :active="request()->routeIs('tailor-payrolls.*')" title="Upah Penjahit (Borongan)">
-                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                        <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Upah Penjahit</span>
-                    </x-sidebar-link>
-                </div>
-
+                <!-- 4. Upah Penjahit (Borongan & Kasbon) -->
+                <x-sidebar-link :href="route('tailor-payrolls.index')" :active="request()->routeIs('tailor-payrolls.*')" title="Upah Penjahit (Borongan)">
+                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                    <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Upah Penjahit</span>
+                </x-sidebar-link>
             </nav>
         </div>
 

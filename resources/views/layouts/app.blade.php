@@ -34,8 +34,6 @@
                 html.sidebar-expanded aside#app-sidebar { width: 16rem !important; }
                 html.sidebar-expanded #app-main-content { padding-left: 16rem !important; }
                 html.sidebar-expanded aside#app-sidebar .sidebar-text-label { display: block !important; }
-                html.sidebar-expanded aside#app-sidebar .sidebar-mini-divider { display: none !important; }
-                html.sidebar-expanded aside#app-sidebar .sidebar-category-header { justify-content: space-between !important; }
                 html.sidebar-expanded aside#app-sidebar .sidebar-link-btn { justify-content: flex-start !important; padding-left: 0.875rem !important; padding-right: 0.875rem !important; gap: 0.75rem !important; }
                 html.sidebar-expanded aside#app-sidebar .sidebar-toggle-btn { justify-content: flex-start !important; gap: 0.625rem !important; }
                 html.sidebar-expanded aside#app-sidebar .sidebar-toggle-icon { transform: rotate(0deg) !important; }
