@@ -1,18 +1,19 @@
 <div>
     <!-- ========================================================================= -->
-    <!-- TOP HEADER BAR (Navbar Atas: Nama Aplikasi, Trigger, Status AI, Tema, Profil & Logout) -->
+    <!-- TOP HEADER BAR (Navbar Utama: Logo, Navigasi Menu, AI, Tema, Profil & Logout) -->
     <!-- ========================================================================= -->
-    <header class="fixed top-0 inset-x-0 h-16 z-40 bg-emerald-950  border-b border-emerald-800/60 dark:border-slate-800 shadow-md backdrop-blur-md px-3 sm:px-6 flex items-center justify-between">
+    <header class="fixed top-0 inset-x-0 h-16 z-40 bg-emerald-950 border-b border-emerald-800/60 dark:border-slate-800 shadow-md backdrop-blur-md px-3 sm:px-6 flex items-center justify-between">
         
-        <!-- Sisi Kiri: Tombol Trigger + Brand Logo & Nama Aplikasi -->
-        <div class="flex items-center gap-3 sm:gap-4">
-            <!-- Tombol Trigger Buka / Tutup / Ciutkan Sidebar -->
-            <button @click="if (window.innerWidth < 768) { mobileSidebarOpen = !mobileSidebarOpen } else { toggleSidebar() }" 
+        <!-- Sisi Kiri: Tombol Menu Mobile (< 768px) + Brand Logo & Nama Aplikasi -->
+        <div class="flex items-center gap-3">
+            <!-- Tombol Toggle Menu Mobile (Hanya Tampil di Layar HP) -->
+            <button @click="mobileMenuOpen = !mobileMenuOpen" 
                     type="button" 
-                    class="p-2 rounded-xl text-emerald-200 hover:text-white hover:bg-emerald-800/50 dark:hover:bg-slate-800 transition-colors cursor-pointer border border-emerald-700/30 dark:border-slate-700/50 shadow-xs"
-                    title="Buka / Ciutkan Sidebar">
+                    class="md:hidden p-2 rounded-xl text-emerald-200 hover:text-white hover:bg-emerald-800/50 dark:hover:bg-slate-800 transition-colors cursor-pointer border border-emerald-700/30 dark:border-slate-700/50 shadow-xs"
+                    title="Menu Navigasi Mobile">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    <path :class="mobileMenuOpen ? 'hidden' : 'block'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    <path :class="mobileMenuOpen ? 'block' : 'hidden'" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
 
@@ -49,12 +50,11 @@
             <!-- 2. Pajak PPh Final -->
             <a href="{{ route('dashboard') }}#tax-summary" 
                class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium"
-               title="Ringkasan Pajak PPh Final (0,5%)">
+               title="Ringkasan Pajak PPh Final">
                 <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
                 <span>Pajak PPh Final</span>
-                <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">0,5%</span>
             </a>
 
             <!-- 3. Gaji Karyawan -->
@@ -78,15 +78,8 @@
             </a>
         </nav>
 
-        <!-- Sisi Kanan: Status AI Agent, Mode Gelap, Profil Pengguna & Logout -->
+        <!-- Sisi Kanan: Mode Gelap, Profil Pengguna & Logout -->
         <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-            <!-- Status AI Agent -->
-            <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-900/40 dark:bg-slate-800/80 border border-emerald-700/30 dark:border-slate-700/60 text-xs">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span class="font-semibold text-emerald-200 dark:text-emerald-400 text-xs">AI Agent</span>
-                <span class="text-[9px] font-mono text-emerald-300/80 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800/50">n8n</span>
-            </div>
-
             <!-- Tombol Toggle Tema Gelap / Terang -->
             <button @click="toggleDarkMode()" 
                     type="button" 
@@ -121,89 +114,58 @@
         </div>
     </header>
 
-    <!-- Backdrop Layar untuk Sidebar Mobile -->
-    <div x-show="mobileSidebarOpen" 
+    <!-- ========================================================================= -->
+    <!-- MENU NAVIGASI MOBILE (Drop-down Menu Layar Kecil / Smartphone) -->
+    <!-- ========================================================================= -->
+    <div x-show="mobileMenuOpen" 
          x-cloak 
-         @click="mobileSidebarOpen = false" 
-         x-transition:enter="transition-opacity ease-linear duration-300"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition-opacity ease-linear duration-300"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 md:hidden">
-    </div>
-
-    <!-- ========================================================================= -->
-    <!-- SIDEBAR NAVIGASI (Fixed di Samping Bawah Top Header) -->
-    <!-- Mode Lebar: w-64 (Icon + Teks) | Mode Ciut: w-16 (Hanya Icon) -->
-    <!-- ========================================================================= -->
-    <aside id="app-sidebar"
-           :class="[
-               mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
-               sidebarOpen ? 'md:w-64' : 'md:w-16'
-           ]"
-           class="fixed top-16 bottom-0 left-0 z-40 w-64 md:w-16 bg-emerald-950  border-r border-emerald-800/50 dark:border-slate-800 shadow-2xl flex flex-col justify-between transition-all duration-300 ease-in-out">
+         @click.away="mobileMenuOpen = false"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 -translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 -translate-y-2"
+         class="fixed top-16 inset-x-0 z-30 md:hidden bg-emerald-950/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-emerald-800/60 dark:border-slate-800 p-3 space-y-1 shadow-2xl">
         
-        <!-- Bagian Navigasi Menu Terkategori -->
-        <div class="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar py-3">
-            
-            <!-- Mobile Close Button Header -->
-            <div class="px-4 pb-2 flex items-center justify-between md:hidden border-b border-emerald-800/40 mb-2">
-                <span class="text-xs font-bold text-emerald-300">Menu Navigasi</span>
-                <button @click="mobileSidebarOpen = false" type="button" class="p-1 rounded-lg text-emerald-300 hover:text-white hover:bg-emerald-800/50">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
+        <!-- 1. Ikhtisar Keuangan -->
+        <a href="{{ route('dashboard') }}" 
+           @click="mobileMenuOpen = false"
+           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors {{ request()->routeIs('dashboard') ? 'bg-emerald-800 text-white font-bold' : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium' }}">
+            <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            </svg>
+            <span>Ikhtisar Keuangan</span>
+        </a>
 
-            <nav class="px-2 space-y-1.5">
-                <!-- 1. Ikhtisar Keuangan & Transaksi -->
-                <x-sidebar-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" title="Ikhtisar Keuangan & Transaksi">
-                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                    </svg>
-                    <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Ikhtisar Keuangan</span>
-                </x-sidebar-link>
+        <!-- 2. Pajak PPh Final -->
+        <a href="{{ route('dashboard') }}#tax-summary" 
+           @click="mobileMenuOpen = false"
+           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium">
+            <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <span>Pajak PPh Final</span>
+        </a>
 
-                <!-- 2. Pajak PPh Final UMKM -->
-                <x-sidebar-link :href="route('dashboard').'#tax-summary'" :active="false" title="Pajak PPh Final (0,5%)">
-                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Pajak PPh Final (0,5%)</span>
-                </x-sidebar-link>
+        <!-- 3. Gaji Karyawan -->
+        <a href="{{ route('employees.index') }}" 
+           @click="mobileMenuOpen = false"
+           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors {{ request()->routeIs('employees.*') ? 'bg-emerald-800 text-white font-bold' : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium' }}">
+            <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <span>Gaji Karyawan</span>
+        </a>
 
-                <!-- 3. Karyawan & Payroll -->
-                <x-sidebar-link :href="route('employees.index')" :active="request()->routeIs('employees.*')" title="Gaji Karyawan (Payroll)">
-                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                    <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Gaji Karyawan</span>
-                </x-sidebar-link>
-
-                <!-- 4. Upah Penjahit (Borongan & Kasbon) -->
-                <x-sidebar-link :href="route('tailor-payrolls.index')" :active="request()->routeIs('tailor-payrolls.*')" title="Upah Penjahit (Borongan)">
-                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                    </svg>
-                    <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label truncate">Upah Penjahit</span>
-                </x-sidebar-link>
-            </nav>
-        </div>
-
-        <!-- Bagian Bawah: Tombol Perkecil / Perluas Sidebar di Desktop -->
-        <div class="p-2 border-t border-emerald-800/40 dark:border-slate-800/60 bg-emerald-950/40 dark:bg-slate-950/40 hidden md:block">
-            <button @click="toggleSidebar()" 
-                    type="button" 
-                    class="w-full flex items-center rounded-xl text-xs font-semibold text-emerald-200 hover:text-white hover:bg-emerald-800/40 dark:hover:bg-slate-800 transition-colors p-2.5 cursor-pointer justify-center sidebar-toggle-btn"
-                    :class="sidebarOpen ? 'justify-start gap-2.5' : 'justify-center'"
-                    :title="sidebarOpen ? 'Ciutkan Sidebar' : 'Perluas Sidebar'">
-                <svg :class="sidebarOpen ? '' : 'rotate-180'" class="w-4 h-4 transition-transform duration-300 text-emerald-400 shrink-0 rotate-180 sidebar-toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                </svg>
-                <span :class="sidebarOpen ? 'md:block' : 'md:hidden'" class="block md:hidden sidebar-text-label text-[11px] font-bold tracking-tight truncate">Ciutkan Menu</span>
-            </button>
-        </div>
-
-    </aside>
+        <!-- 4. Upah Penjahit -->
+        <a href="{{ route('tailor-payrolls.index') }}" 
+           @click="mobileMenuOpen = false"
+           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors {{ request()->routeIs('tailor-payrolls.*') ? 'bg-emerald-800 text-white font-bold' : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium' }}">
+            <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+            <span>Upah Penjahit</span>
+        </a>
+    </div>
 </div>

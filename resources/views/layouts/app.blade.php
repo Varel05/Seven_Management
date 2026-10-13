@@ -13,32 +13,14 @@
 
         <meta name="color-scheme" content="light dark">
 
-        <!-- Zero-FOUC Theme & Sidebar Initializer (Default Sidebar: Closed) -->
+        <!-- Zero-FOUC Theme Initializer -->
         <script>
             if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
             } else {
                 document.documentElement.classList.remove('dark');
             }
-
-            if (localStorage.getItem('sidebar_open') === 'true') {
-                document.documentElement.classList.add('sidebar-expanded');
-            } else {
-                document.documentElement.classList.remove('sidebar-expanded');
-            }
         </script>
-
-        <style>
-            /* Instant zero-FOUC styles when user explicitly has sidebar opened */
-            @media (min-width: 768px) {
-                html.sidebar-expanded aside#app-sidebar { width: 16rem !important; }
-                html.sidebar-expanded #app-main-content { padding-left: 16rem !important; }
-                html.sidebar-expanded aside#app-sidebar .sidebar-text-label { display: block !important; }
-                html.sidebar-expanded aside#app-sidebar .sidebar-link-btn { justify-content: flex-start !important; padding-left: 0.875rem !important; padding-right: 0.875rem !important; gap: 0.75rem !important; }
-                html.sidebar-expanded aside#app-sidebar .sidebar-toggle-btn { justify-content: flex-start !important; gap: 0.625rem !important; }
-                html.sidebar-expanded aside#app-sidebar .sidebar-toggle-icon { transform: rotate(0deg) !important; }
-            }
-        </style>
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -48,18 +30,8 @@
     </head>
     <body 
         x-data="{ 
-            sidebarOpen: localStorage.getItem('sidebar_open') === 'true',
-            mobileSidebarOpen: false, 
+            mobileMenuOpen: false, 
             darkMode: localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches),
-            toggleSidebar() {
-                this.sidebarOpen = !this.sidebarOpen;
-                localStorage.setItem('sidebar_open', this.sidebarOpen);
-                if (this.sidebarOpen) {
-                    document.documentElement.classList.add('sidebar-expanded');
-                } else {
-                    document.documentElement.classList.remove('sidebar-expanded');
-                }
-            },
             toggleDarkMode() {
                 this.darkMode = !this.darkMode;
                 if (this.darkMode) {
@@ -80,11 +52,10 @@
         <div class="min-h-screen bg-transparent">
             @include('layouts.navigation')
 
-            <div id="app-main-content" :class="sidebarOpen ? 'md:pl-64' : 'md:pl-16'" class="flex flex-col min-h-screen pt-16 md:pl-16 transition-all duration-300">
+            <div id="app-main-content" class="flex flex-col min-h-screen pt-16 w-full">
                 <!-- Page Heading (Deep Emerald Banner) -->
                 @isset($header)
                     <header class="relative bg-emerald-950 dark:bg-slate-900 border-b border-emerald-900/80 dark:border-slate-800 shadow-md text-white overflow-hidden transition-colors">
-                        <!-- Ambient subtle glowing accents removed for solid look -->
                         <div class="max-w-[1800px] w-full mx-auto py-5 px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
                             {{ $header }}
                         </div>
