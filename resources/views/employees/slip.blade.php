@@ -180,23 +180,18 @@
                     </tbody>
                 </table>
 
-                <!-- Footer Tanda Tangan & Note -->
-                <div class="grid grid-cols-2 gap-4 pt-2 border border-black p-3">
-                    <div>
-                        <div class="text-[11px] text-slate-600">
-                            Yogyakarta, {{ $payroll->paid_at ? $payroll->paid_at->format('Y-m-d') : now()->format('Y-m-d') }}
+                <!-- Footer Note & Dokumen (Tanpa tanda tangan, nama terang, dan cap) -->
+                <div class="border border-black p-3">
+                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 text-xs">
+                        <div class="flex-1">
+                            <span class="font-bold text-[10px] text-slate-700 uppercase">Note / Catatan :</span>
+                            <div class="text-[11px] italic text-slate-800 mt-0.5">
+                                {{ $payroll->notes ?: '-' }}
+                            </div>
                         </div>
-                        <div class="h-14"></div>
-                        <div class="font-bold underline text-xs">{{ $payroll->hrd_name ?: 'Ari Husbana' }}</div>
-                        <div class="text-[10px] text-slate-600 font-semibold">HRD Seven Management</div>
-                    </div>
-                    <div class="border border-black p-2 min-h-[90px] flex flex-col justify-between">
-                        <span class="font-bold text-[10px] text-slate-700">Note :</span>
-                        <div class="text-[11px] italic text-slate-800">
-                            {{ $payroll->notes ?: '-' }}
-                        </div>
-                        <div class="text-[9px] text-slate-500 font-mono text-right">
-                            Ref: {{ $payroll->journalEntry?->reference ?? '-' }}
+                        <div class="text-right text-[10px] text-slate-600 font-mono shrink-0 space-y-0.5">
+                            <div>Yogyakarta, {{ $payroll->paid_at ? $payroll->paid_at->format('Y-m-d') : now()->format('Y-m-d') }}</div>
+                            <div>Ref: {{ $payroll->journalEntry?->reference ?? '-' }}</div>
                         </div>
                     </div>
                 </div>

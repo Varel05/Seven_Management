@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,15 +11,12 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
-        <meta name="color-scheme" content="light dark">
+        <meta name="color-scheme" content="dark">
 
-        <!-- Zero-FOUC Theme Initializer -->
+        <!-- Permanent Dark Mode Initializer -->
         <script>
-            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            } else {
-                document.documentElement.classList.remove('dark');
-            }
+            document.documentElement.classList.add('dark');
+            localStorage.theme = 'dark';
         </script>
 
         <!-- Scripts -->
@@ -30,22 +27,11 @@
     </head>
     <body 
         x-data="{ 
-            mobileMenuOpen: false, 
-            darkMode: localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches),
-            toggleDarkMode() {
-                this.darkMode = !this.darkMode;
-                if (this.darkMode) {
-                    document.documentElement.classList.add('dark');
-                    localStorage.theme = 'dark';
-                } else {
-                    document.documentElement.classList.remove('dark');
-                    localStorage.theme = 'light';
-                }
-            }
+            mobileMenuOpen: false
         }"
-        class="font-sans antialiased bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 relative selection:bg-emerald-500 selection:text-white"
+        class="font-sans antialiased bg-slate-950 text-slate-100 transition-colors duration-150 relative selection:bg-emerald-500 selection:text-white"
     >
-        <!-- Ambient Color Lighting for Light & Dark Mode -->
+        <!-- Ambient Color Lighting for Dark Mode -->
         <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         </div>
 

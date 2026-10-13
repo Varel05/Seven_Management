@@ -596,11 +596,10 @@
                         <thead>
                             <tr class="bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200/90 dark:border-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                                 <th class="px-2.5 py-2.5 min-w-[140px]">Karyawan</th>
-                                <th class="px-2 py-2.5 whitespace-nowrap">Gaji Pokok</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap">Gaji Pokok / Shift</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Tunjangan</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Poin Kinerja</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Bonus Poin</th>
-                                <th class="px-2 py-2.5 whitespace-nowrap text-right">Total Gaji</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap text-center">Jatuh Tempo</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Akun Bayar</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap text-center">Aksi</th>
@@ -648,9 +647,9 @@
                                         </div>
                                     </td>
 
-                                    <!-- Gaji Pokok -->
+                                    <!-- Gaji Pokok / Shift -->
                                     <td class="px-2 py-2 whitespace-nowrap font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
-                                        {{ $emp->formatted_base_salary }}
+                                        Rp {{ number_format($emp->effective_daily_rate, 0, ',', '.') }}<span class="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-normal"> / shift</span>
                                     </td>
 
                                     <!-- Tunjangan -->
@@ -702,12 +701,6 @@
                                         {{ $emp->formatted_bonus_salary }}
                                     </td>
 
-                                    <!-- Total Gaji -->
-                                    <td class="px-2 py-2 whitespace-nowrap text-right font-mono font-extrabold text-xs">
-                                        <span class="inline-block px-1.5 py-0.5 rounded-md text-emerald-700 dark:text-emerald-400 bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 shadow-2xs text-[11px]">
-                                            {{ $emp->formatted_total_salary }}
-                                        </span>
-                                    </td>
 
                                     <!-- Jatuh Tempo -->
                                     <td class="px-2 py-2 whitespace-nowrap text-center text-xs">
@@ -816,7 +809,7 @@
                             @empty
                                 <!-- Kasus 1: Database Kosong -->
                                 <tr>
-                                    <td colspan="9" class="px-6 py-14 text-center">
+                                    <td colspan="8" class="px-6 py-14 text-center">
                                         <div class="max-w-md mx-auto flex flex-col items-center">
                                             <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3.5 border border-amber-200/80 dark:border-amber-800/60 shadow-xs">
                                                 <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
@@ -841,7 +834,7 @@
                             <!-- Kasus 2: Data Ada di Database, tetapi Tidak Ditemukan pada Filter / Pencarian Tertentu -->
                             @if($employees->isNotEmpty())
                                 <tr x-show="visibleCount === 0" x-cloak>
-                                    <td colspan="9" class="px-6 py-12 text-center">
+                                    <td colspan="8" class="px-6 py-12 text-center">
                                         <div class="max-w-md mx-auto flex flex-col items-center">
                                             <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-700 shadow-xs">
                                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1272,22 +1265,22 @@
                                 </div>
 
                                 <!-- Ringkasan THP & Jurnal Akuntansi -->
-                                <div class="p-4 rounded-2xl bg-emerald-500  border-2 border-emerald-500/30 dark:border-emerald-500/40 space-y-2">
+                                <div class="p-4 rounded-2xl bg-slate-900/90 dark:bg-slate-950 border border-emerald-500/50 space-y-2.5 shadow-sm">
                                     <div class="flex items-center justify-between">
                                         <div>
-                                            <span class="text-xs uppercase font-extrabold tracking-wider text-emerald-900 dark:text-emerald-300">Total Take Home Pay (THP)</span>
-                                            <div class="text-[10px] text-slate-500 dark:text-slate-400">Total yang akan diterima karyawan & dibukukan</div>
+                                            <span class="text-xs uppercase font-extrabold tracking-wider text-emerald-400">Total Take Home Pay (THP)</span>
+                                            <div class="text-[11px] text-slate-300 dark:text-slate-400 mt-0.5">Total yang akan diterima karyawan & dibukukan</div>
                                         </div>
                                         <div class="text-right">
-                                            <span class="text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400" x-text="'Rp ' + calculatePayTHP().toLocaleString('id-ID')"></span>
+                                            <span class="text-xl sm:text-2xl font-black font-mono text-emerald-400" x-text="'Rp ' + calculatePayTHP().toLocaleString('id-ID')"></span>
                                         </div>
                                     </div>
 
-                                    <div class="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 gap-2">
+                                    <div class="pt-2.5 border-t border-slate-800 flex flex-wrap items-center justify-between text-[11px] text-slate-300 dark:text-slate-400 gap-2">
                                         <div class="flex items-center gap-2">
-                                            <span>📋 <strong>Debit:</strong> Akun 5002 - Beban Gaji</span>
-                                            <span>•</span>
-                                            <span>💳 <strong>Kredit:</strong> <span x-text="employeeToPay.asset_account ? employeeToPay.asset_account.name : 'Kas Operasional'"></span></span>
+                                            <span>📋 <strong class="text-white">Debit:</strong> Akun 5002 - Beban Gaji</span>
+                                            <span class="text-slate-600">•</span>
+                                            <span>💳 <strong class="text-white">Kredit:</strong> <span class="font-semibold text-emerald-300" x-text="employeeToPay.asset_account ? employeeToPay.asset_account.name : 'Kas Operasional'"></span></span>
                                         </div>
                                     </div>
                                 </div>

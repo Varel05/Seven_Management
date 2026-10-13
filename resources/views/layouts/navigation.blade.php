@@ -1,6 +1,6 @@
 <div>
     <!-- ========================================================================= -->
-    <!-- TOP HEADER BAR (Navbar Utama: Logo, Navigasi Menu, AI, Tema, Profil & Logout) -->
+    <!-- TOP HEADER BAR (Navbar Utama: Logo, Navigasi Menu, Tema, Profil & Logout) -->
     <!-- ========================================================================= -->
     <header class="fixed top-0 inset-x-0 h-16 z-40 bg-emerald-950 border-b border-emerald-800/60 dark:border-slate-800 shadow-md backdrop-blur-md px-3 sm:px-6 flex items-center justify-between">
         
@@ -36,12 +36,12 @@
         </div>
 
         <!-- Bagian Tengah: Navigasi Menu Utama di Header (Desktop & Tablet) -->
-        <nav class="hidden md:flex items-center gap-1 lg:gap-1.5 xl:gap-2 mx-2 lg:mx-4">
+        <nav class="hidden md:flex items-center gap-1 lg:gap-2 mx-2 lg:mx-4 h-full">
             <!-- 1. Ikhtisar Keuangan -->
             <a href="{{ route('dashboard') }}" 
-               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors {{ request()->routeIs('dashboard') ? 'bg-emerald-800/90 text-white font-bold border border-emerald-600/50 shadow-xs dark:bg-slate-800 dark:text-emerald-400' : 'text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium' }}"
+               class="h-full flex items-center gap-2 px-3 text-xs tracking-wide transition-colors border-b-2 {{ request()->routeIs('dashboard') ? 'border-emerald-400 text-white font-bold' : 'border-transparent text-emerald-200/70 hover:text-white hover:border-emerald-400/40 font-medium' }}"
                title="Ikhtisar Keuangan & Transaksi">
-                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('dashboard') ? 'text-emerald-400' : 'text-emerald-400/70' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                 </svg>
                 <span>Ikhtisar Keuangan</span>
@@ -49,9 +49,9 @@
 
             <!-- 2. Pajak PPh Final -->
             <a href="{{ route('taxes.index') }}" 
-               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors {{ request()->routeIs('taxes.*') ? 'bg-emerald-800/90 text-white font-bold border border-emerald-600/50 shadow-xs dark:bg-slate-800 dark:text-emerald-400' : 'text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium' }}"
+               class="h-full flex items-center gap-2 px-3 text-xs tracking-wide transition-colors border-b-2 {{ request()->routeIs('taxes.*') ? 'border-emerald-400 text-white font-bold' : 'border-transparent text-emerald-200/70 hover:text-white hover:border-emerald-400/40 font-medium' }}"
                title="Perhitungan & Pelaporan Pajak PPh Final">
-                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('taxes.*') ? 'text-emerald-400' : 'text-emerald-400/70' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
                 <span>Pajak PPh Final</span>
@@ -59,9 +59,9 @@
 
             <!-- 3. Gaji Karyawan -->
             <a href="{{ route('employees.index') }}" 
-               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors {{ request()->routeIs('employees.*') ? 'bg-emerald-800/90 text-white font-bold border border-emerald-600/50 shadow-xs dark:bg-slate-800 dark:text-emerald-400' : 'text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium' }}"
+               class="h-full flex items-center gap-2 px-3 text-xs tracking-wide transition-colors border-b-2 {{ request()->routeIs('employees.*') ? 'border-emerald-400 text-white font-bold' : 'border-transparent text-emerald-200/70 hover:text-white hover:border-emerald-400/40 font-medium' }}"
                title="Manajemen Gaji Karyawan & Payroll">
-                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('employees.*') ? 'text-emerald-400' : 'text-emerald-400/70' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
                 <span>Gaji Karyawan</span>
@@ -69,26 +69,17 @@
 
             <!-- 4. Upah Penjahit -->
             <a href="{{ route('tailor-payrolls.index') }}" 
-               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors {{ request()->routeIs('tailor-payrolls.*') ? 'bg-emerald-800/90 text-white font-bold border border-emerald-600/50 shadow-xs dark:bg-slate-800 dark:text-emerald-400' : 'text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium' }}"
+               class="h-full flex items-center gap-2 px-3 text-xs tracking-wide transition-colors border-b-2 {{ request()->routeIs('tailor-payrolls.*') ? 'border-emerald-400 text-white font-bold' : 'border-transparent text-emerald-200/70 hover:text-white hover:border-emerald-400/40 font-medium' }}"
                title="Sistem Upah Buruh Borongan & Slip">
-                <svg class="w-4 h-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('tailor-payrolls.*') ? 'text-emerald-400' : 'text-emerald-400/70' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                 </svg>
                 <span>Upah Penjahit</span>
             </a>
         </nav>
 
-        <!-- Sisi Kanan: Mode Gelap, Profil Pengguna & Logout -->
+        <!-- Sisi Kanan: Profil Pengguna & Logout -->
         <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-            <!-- Tombol Toggle Tema Gelap / Terang -->
-            <button @click="toggleDarkMode()" 
-                    type="button" 
-                    class="p-2 rounded-xl text-emerald-200 hover:text-white dark:text-slate-300 hover:bg-emerald-800/50 dark:hover:bg-slate-800 transition-colors cursor-pointer border border-emerald-700/30 dark:border-slate-700/50"
-                    title="Beralih Mode Gelap / Terang">
-                <svg x-show="darkMode" x-cloak class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                <svg x-show="!darkMode" class="w-4 h-4 text-emerald-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-            </button>
-
             <!-- Profil User & Pengaturan -->
             <a href="{{ route('profile.edit') }}" 
                class="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-emerald-800/40 dark:hover:bg-slate-800/60 transition-colors group border border-transparent hover:border-emerald-700/30"
@@ -131,7 +122,7 @@
         <!-- 1. Ikhtisar Keuangan -->
         <a href="{{ route('dashboard') }}" 
            @click="mobileMenuOpen = false"
-           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors {{ request()->routeIs('dashboard') ? 'bg-emerald-800 text-white font-bold' : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium' }}">
+           class="flex items-center gap-3 px-3 py-2.5 text-xs transition-colors border-b-2 {{ request()->routeIs('dashboard') ? 'border-emerald-400 text-white font-bold' : 'border-transparent text-emerald-100 hover:text-white font-medium' }}">
             <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
             </svg>
@@ -141,7 +132,7 @@
         <!-- 2. Pajak PPh Final -->
         <a href="{{ route('taxes.index') }}" 
            @click="mobileMenuOpen = false"
-           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors {{ request()->routeIs('taxes.*') ? 'bg-emerald-800 text-white font-bold' : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium' }}">
+           class="flex items-center gap-3 px-3 py-2.5 text-xs transition-colors border-b-2 {{ request()->routeIs('taxes.*') ? 'border-emerald-400 text-white font-bold' : 'border-transparent text-emerald-100 hover:text-white font-medium' }}">
             <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
@@ -151,7 +142,7 @@
         <!-- 3. Gaji Karyawan -->
         <a href="{{ route('employees.index') }}" 
            @click="mobileMenuOpen = false"
-           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors {{ request()->routeIs('employees.*') ? 'bg-emerald-800 text-white font-bold' : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium' }}">
+           class="flex items-center gap-3 px-3 py-2.5 text-xs transition-colors border-b-2 {{ request()->routeIs('employees.*') ? 'border-emerald-400 text-white font-bold' : 'border-transparent text-emerald-100 hover:text-white font-medium' }}">
             <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
@@ -161,8 +152,8 @@
         <!-- 4. Upah Penjahit -->
         <a href="{{ route('tailor-payrolls.index') }}" 
            @click="mobileMenuOpen = false"
-           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors {{ request()->routeIs('tailor-payrolls.*') ? 'bg-emerald-800 text-white font-bold' : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium' }}">
-            <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+           class="flex items-center gap-3 px-3 py-2.5 text-xs transition-colors border-b-2 {{ request()->routeIs('tailor-payrolls.*') ? 'border-emerald-400 text-white font-bold' : 'border-transparent text-emerald-100 hover:text-white font-medium' }}">
+            <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
             </svg>
             <span>Upah Penjahit</span>
