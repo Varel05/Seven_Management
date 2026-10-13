@@ -194,4 +194,35 @@ class TaxCalculationTest extends TestCase
             'reference' => 'TAX-DASHBOARDNTPN123',
         ]);
     }
+
+    public function test_dedicated_tax_page_loads_and_handles_payment(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/taxes');
+        $response->assertStatus(200);
+        $response->assertSee('Pajak PPh Final UMKM');
+        $response->assertSee('Badan Usaha (0,5% PP 55/2022)');
+        $response->assertSee('Rekapitulasi PPh Final Tahun');
+
+        // Test POST /taxes/pay
+        $payResponse = $this->actingAs($user)->post('/taxes/pay', [
+            'year' => now()->year,
+            'month' => now()->month,
+            'amount' => 50000,
+            'account_code' => '1001',
+            'ntpn' => 'NTPNTESTTAXPAGE99',
+            'notes' => 'Pembayaran via halaman khusus pajak',
+        ]);
+
+        $payResponse->assertRedirect(route('taxes.index', [
+            'year' => now()->year,
+            'month' => now()->month,
+        ]));
+        $payResponse->assertSessionHas('success');
+
+        $this->assertDatabaseHas('journal_entries', [
+            'reference' => 'TAX-NTPNTESTTAXPAGE99',
+        ]);
+    }
 }

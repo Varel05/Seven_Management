@@ -8,6 +8,7 @@ use App\Http\Controllers\JournalExportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
 use App\Http\Controllers\TailorPayrollController;
+use App\Http\Controllers\TaxController;
 use App\Models\JournalEntry;
 use App\Services\TransactionCancellationService;
 use Illuminate\Http\Request;
@@ -83,6 +84,10 @@ Route::middleware('auth')->group(function () {
 
     // Upah Penjahit (Borongan) & Cetak Slip Upah HPP
     Route::resource('tailor-payrolls', TailorPayrollController::class);
+
+    // Manajemen & Pelaporan Pajak PPh Final UMKM (Halaman Khusus)
+    Route::get('/taxes', [TaxController::class, 'index'])->name('taxes.index');
+    Route::post('/taxes/pay', [TaxController::class, 'recordPayment'])->name('taxes.pay');
 });
 
 require __DIR__.'/auth.php';

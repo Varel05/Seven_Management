@@ -48,9 +48,9 @@
             </a>
 
             <!-- 2. Pajak PPh Final -->
-            <a href="{{ route('dashboard') }}#tax-summary" 
-               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium"
-               title="Ringkasan Pajak PPh Final">
+            <a href="{{ route('taxes.index') }}" 
+               class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition-colors {{ request()->routeIs('taxes.*') ? 'bg-emerald-800/90 text-white font-bold border border-emerald-600/50 shadow-xs dark:bg-slate-800 dark:text-emerald-400' : 'text-emerald-200/80 hover:text-white hover:bg-emerald-800/40 dark:text-slate-300 dark:hover:bg-slate-800/50 font-medium' }}"
+               title="Perhitungan & Pelaporan Pajak PPh Final">
                 <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
@@ -139,9 +139,9 @@
         </a>
 
         <!-- 2. Pajak PPh Final -->
-        <a href="{{ route('dashboard') }}#tax-summary" 
+        <a href="{{ route('taxes.index') }}" 
            @click="mobileMenuOpen = false"
-           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium">
+           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors {{ request()->routeIs('taxes.*') ? 'bg-emerald-800 text-white font-bold' : 'text-emerald-100 hover:bg-emerald-800/50 hover:text-white font-medium' }}">
             <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
