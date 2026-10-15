@@ -35,7 +35,7 @@ return new class extends Migration
         Schema::create('tailor_payroll_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tailor_payroll_id')->constrained('tailor_payrolls')->cascadeOnDelete();
-            $table->foreignId('material_id')->nullable()->constrained('materials')->nullOnDelete(); // Terhubung ke komponen direct_labor HPP
+            $table->unsignedBigInteger('material_id')->nullable(); // Terhubung ke komponen direct_labor HPP
             $table->string('item_name'); // Jas Reguler, Vest, Jas Premium, Revisi, dsb
             $table->integer('quantity')->default(0); // Jumlah pcs
             $table->decimal('rate_per_piece', 15, 2)->default(0); // Biaya per pcs dari HPP

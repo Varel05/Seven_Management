@@ -12,6 +12,7 @@ use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\RecurringTransaction;
 use App\Models\TailorPayroll;
+use App\Services\AttendanceSyncService;
 use App\Services\TaxService;
 use App\Services\TransactionCancellationService;
 use Illuminate\Http\Request;
@@ -2326,13 +2327,24 @@ class WebhookTransactionController extends Controller
         } else {
             $isFinal = false;
             $periodLabel = $period;
-            $periodStart = now()->subMonth()->setDay(26)->translatedFormat('d M');
-            $periodEnd = now()->setDay(25)->translatedFormat('d M Y');
-            $totalShifts = (int) ($request->input('total_shifts') ?? 27);
-            $totalPresent = (int) ($request->input('total_present') ?? 27);
-            $lateCount = (int) ($request->input('late_count') ?? 0);
-            $disciplinePresent = (int) ($request->input('discipline_present') ?? max(0, $totalPresent - $lateCount));
-            $holidayShifts = (int) ($request->input('holiday_shifts') ?? 0);
+            $periodStart = now()->startOfMonth()->translatedFormat('d M');
+            $periodEnd = now()->endOfMonth()->translatedFormat('d M Y');
+            $syncService = app(AttendanceSyncService::class);
+            $startDateStr = now()->startOfMonth()->toDateString();
+            $endDateStr = now()->endOfMonth()->toDateString();
+            $att = $syncService->getAttendanceForEmployee($employee, $startDateStr, $endDateStr);
+
+            $defaultShifts = ($att['success'] && isset($att['data']['total_shifts'])) ? (int) $att['data']['total_shifts'] : 26;
+            $defaultPresent = ($att['success'] && isset($att['data']['total_present'])) ? (int) $att['data']['total_present'] : $defaultShifts;
+            $defaultLate = ($att['success'] && isset($att['data']['late_count'])) ? (int) $att['data']['late_count'] : 0;
+            $defaultDiscipline = ($att['success'] && isset($att['data']['discipline_present'])) ? (int) $att['data']['discipline_present'] : max(0, $defaultPresent - $defaultLate);
+            $defaultHoliday = ($att['success'] && isset($att['data']['holiday_shifts'])) ? (int) $att['data']['holiday_shifts'] : 0;
+
+            $totalShifts = (int) ($request->input('total_shifts') ?? $defaultShifts);
+            $totalPresent = (int) ($request->input('total_present') ?? $defaultPresent);
+            $lateCount = (int) ($request->input('late_count') ?? $defaultLate);
+            $disciplinePresent = (int) ($request->input('discipline_present') ?? $defaultDiscipline);
+            $holidayShifts = (int) ($request->input('holiday_shifts') ?? $defaultHoliday);
             $dailyRate = $employee->effective_daily_rate;
             $disciplineRate = $employee->effective_discipline_rate;
             $holidayRate = $employee->effective_holiday_rate;
@@ -2355,8 +2367,8 @@ class WebhookTransactionController extends Controller
                     'journal_entry_id' => null, // Cari yang statusnya masih draft
                 ],
                 [
-                    'period_start' => now()->subMonth()->setDay(26)->toDateString(),
-                    'period_end' => now()->setDay(25)->toDateString(),
+                    'period_start' => now()->startOfMonth()->toDateString(),
+                    'period_end' => now()->endOfMonth()->toDateString(),
                     'payment_method' => 'Transfer',
                     'total_shifts' => $totalShifts,
                     'total_present' => $totalPresent,
@@ -2419,8 +2431,10 @@ class WebhookTransactionController extends Controller
         $lines[] = "Periode               : *{$periodLabel}*";
         $lines[] = "Nama                  : *{$employee->name}*";
         $lines[] = 'Metode Pembayaran     : Transfer';
-        $lines[] = "Jumlah Closing        : {$closingPoints} poin = {$closingPcs} pcs ({$closingMultiplierText})";
-        $lines[] = "(SD = {$sd} pcs, FC = {$fc} pcs, JK= {$jk} pcs, INA = {$ina} pcs, BJ = {$bj} pcs, LM = {$lm} pcs)";
+        if ($employee->isCs()) {
+            $lines[] = "Jumlah Closing        : {$closingPoints} poin = {$closingPcs} pcs ({$closingMultiplierText})";
+            $lines[] = "(SD = {$sd} pcs, FC = {$fc} pcs, JK= {$jk} pcs, INA = {$ina} pcs, BJ = {$bj} pcs, LM = {$lm} pcs)";
+        }
         $lines[] = '────────────────────────────────────────';
         $lines[] = "Total Shift ({$periodStart} - {$periodEnd}) : *{$totalShifts}*";
         $lines[] = "Terlambat                             : *{$lateCount}*";

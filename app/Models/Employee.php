@@ -193,7 +193,20 @@ class Employee extends Model
 
     public function isCs(): bool
     {
-        return $this->role === EmployeeRole::Cs || $this->role_value === EmployeeRole::Cs->value;
+        if ($this->role === EmployeeRole::Cs || $this->role_value === EmployeeRole::Cs->value) {
+            return true;
+        }
+
+        $pos = strtolower((string) ($this->position ?? ''));
+        if (str_contains($pos, 'customer service') || preg_match('/\bcs\b/i', $pos)) {
+            return true;
+        }
+
+        if (! empty($this->nip) && str_starts_with($this->nip, 'CS/')) {
+            return true;
+        }
+
+        return false;
     }
 
     public function getRoleLabelAttribute(): string
@@ -523,7 +536,7 @@ class Employee extends Model
     {
         return DB::transaction(function () use ($customAmount, $source, $payrollData) {
             $period = $payrollData['period'] ?? now()->translatedFormat('F Y');
-            
+
             // Cari draft terbaru yang belum dibayar, abaikan perbedaan penulisan periode dari AI
             $draftPayroll = EmployeePayroll::where('employee_id', $this->id)
                 ->whereNull('journal_entry_id')
@@ -544,8 +557,14 @@ class Employee extends Model
                 ['name' => 'Beban Gaji', 'type' => 'expense']
             );
 
-            // Akun kas/bank pembayaran (default ke Kas Operasional 1001 jika belum diisi)
-            $assetAccount = $this->assetAccount
+            // Akun kas/bank pembayaran (prioritaskan pilihan akun dari modal slip gaji -> akun default karyawan -> Kas Operasional 1001)
+            $chosenAssetAccount = null;
+            if (! empty($payrollData['asset_account_id'])) {
+                $chosenAssetAccount = Account::find($payrollData['asset_account_id']);
+            }
+
+            $assetAccount = $chosenAssetAccount
+                ?? $this->assetAccount
                 ?? Account::where('code', '1001')->first()
                 ?? Account::where('type', 'asset')->first();
 
@@ -576,7 +595,7 @@ class Employee extends Model
             $bonusText = $this->bonus_salary > 0
                 ? ', Bonus: '.$this->formatted_bonus_salary." ({$this->tier_points_to_deduct} poin)"
                 : '';
-                
+
             $mainSalaryBase = $draftPayroll ? $draftPayroll->main_salary : ($payrollData['main_salary'] ?? $this->base_salary);
 
             // 1. Debit Akun Beban Gaji (5002)
@@ -596,8 +615,6 @@ class Employee extends Model
                 'debit' => 0,
                 'credit' => $finalAmount,
             ]);
-
-
 
             if ($draftPayroll) {
                 // Gunakan data dari draft yang sudah diisi oleh webhook generatePayrollSlip
@@ -627,11 +644,11 @@ class Employee extends Model
                 $lateCount = (int) ($payrollData['late_count'] ?? 0);
                 $disciplinePresent = (int) ($payrollData['discipline_present'] ?? max(0, $totalPresent - $lateCount));
                 $holidayShifts = (int) ($payrollData['holiday_shifts'] ?? 0);
-    
+
                 $dailyRate = (float) ($payrollData['daily_rate'] ?? $this->effective_daily_rate);
                 $disciplineRate = (float) ($payrollData['discipline_rate'] ?? $this->effective_discipline_rate);
                 $holidayRate = (float) ($payrollData['holiday_rate'] ?? $this->effective_holiday_rate);
-    
+
                 $mainSalary = (float) ($payrollData['main_salary'] ?? ($totalPresent * $dailyRate));
                 $disciplineBonus = (float) ($payrollData['discipline_bonus'] ?? ($disciplinePresent * $disciplineRate));
                 $salesBonus = (float) ($payrollData['sales_bonus'] ?? $this->bonus_salary);
@@ -639,34 +656,34 @@ class Employee extends Model
                 $allowanceTotal = (float) ($payrollData['allowance_total'] ?? $this->total_allowance);
 
                 EmployeePayroll::create([
-                'employee_id' => $this->id,
-                'journal_entry_id' => $journalEntry->id,
-                'period' => $period,
-                'period_start' => $payrollData['period_start'] ?? now()->subMonth()->setDay(26)->toDateString(),
-                'period_end' => $payrollData['period_end'] ?? now()->setDay(25)->toDateString(),
-                'payment_method' => $payrollData['payment_method'] ?? 'Transfer',
-                'total_shifts' => $totalShifts,
-                'total_present' => $totalPresent,
-                'late_count' => $lateCount,
-                'discipline_present' => $disciplinePresent,
-                'holiday_shifts' => $holidayShifts,
-                'daily_rate' => $dailyRate,
-                'discipline_rate' => $disciplineRate,
-                'holiday_rate' => $holidayRate,
-                'closing_points' => (int) ($payrollData['closing_points'] ?? $this->current_points),
-                'closing_pcs' => (int) ($payrollData['closing_pcs'] ?? 0),
-                'rate_per_point' => (float) ($payrollData['rate_per_point'] ?? $this->rate_per_point),
-                'closing_breakdown' => $payrollData['closing_breakdown'] ?? null,
-                'main_salary' => $mainSalary,
-                'discipline_bonus' => $disciplineBonus,
-                'sales_bonus' => $salesBonus,
-                'holiday_bonus' => $holidayBonus,
-                'allowance_total' => $allowanceTotal,
-                'take_home_pay' => $finalAmount,
-                'notes' => $payrollData['notes'] ?? null,
-                'hrd_name' => $payrollData['hrd_name'] ?? 'Ari Husbana',
-                'paid_at' => now(),
-            ]);
+                    'employee_id' => $this->id,
+                    'journal_entry_id' => $journalEntry->id,
+                    'period' => $period,
+                    'period_start' => $payrollData['period_start'] ?? now()->startOfMonth()->toDateString(),
+                    'period_end' => $payrollData['period_end'] ?? now()->endOfMonth()->toDateString(),
+                    'payment_method' => $payrollData['payment_method'] ?? 'Transfer',
+                    'total_shifts' => $totalShifts,
+                    'total_present' => $totalPresent,
+                    'late_count' => $lateCount,
+                    'discipline_present' => $disciplinePresent,
+                    'holiday_shifts' => $holidayShifts,
+                    'daily_rate' => $dailyRate,
+                    'discipline_rate' => $disciplineRate,
+                    'holiday_rate' => $holidayRate,
+                    'closing_points' => (int) ($payrollData['closing_points'] ?? $this->current_points),
+                    'closing_pcs' => (int) ($payrollData['closing_pcs'] ?? 0),
+                    'rate_per_point' => (float) ($payrollData['rate_per_point'] ?? $this->rate_per_point),
+                    'closing_breakdown' => $payrollData['closing_breakdown'] ?? null,
+                    'main_salary' => $mainSalary,
+                    'discipline_bonus' => $disciplineBonus,
+                    'sales_bonus' => $salesBonus,
+                    'holiday_bonus' => $holidayBonus,
+                    'allowance_total' => $allowanceTotal,
+                    'take_home_pay' => $finalAmount,
+                    'notes' => $payrollData['notes'] ?? null,
+                    'hrd_name' => $payrollData['hrd_name'] ?? 'Ari Husbana',
+                    'paid_at' => now(),
+                ]);
             }
 
             // 4. Kurangi poin terakumulasi sebesar besar poin tier jika mengambil bonus gaji

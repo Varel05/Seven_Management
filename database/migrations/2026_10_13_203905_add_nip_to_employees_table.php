@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('custom_suit_orders', function (Blueprint $table) {
-            $table->decimal('overhead_cost', 15, 2)->default(0)->after('labor_cost');
+        Schema::table('employees', function (Blueprint $table) {
+            $table->string('nip', 50)->nullable()->unique()->after('name');
         });
     }
 
@@ -21,8 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('custom_suit_orders', function (Blueprint $table) {
-            $table->dropColumn('overhead_cost');
+        Schema::table('employees', function (Blueprint $table) {
+            $table->dropColumn('nip');
         });
     }
 };

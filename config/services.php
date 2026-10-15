@@ -43,6 +43,12 @@ return [
         'custom_suit_webhook_url' => env('N8N_CUSTOM_SUIT_WEBHOOK_URL', 'http://localhost:5678/webhook/custom-suit-ai'),
     ],
 
+    'karyawan' => [
+        'api_url' => env('KARYAWAN_API_URL', 'http://localhost:8080'),
+        'api_key' => env('KARYAWAN_API_KEY', 'kunci-rahasia-seven-2026'),
+        'timeout' => (int) env('KARYAWAN_API_TIMEOUT', 15),
+    ],
+
     'telegram' => [
         'owner_ids' => array_filter(array_map('trim', explode(',', env('TELEGRAM_OWNER_IDS', env('TELEGRAM_ADMIN_IDS', ''))))),
         'akuntan_ids' => array_filter(array_map('trim', explode(',', env('TELEGRAM_AKUNTAN_IDS', '')))),

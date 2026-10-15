@@ -41,9 +41,24 @@ class EmployeePayroll extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    public function isCs(): bool
+    {
+        return (bool) $this->employee?->isCs();
+    }
+
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function assetAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'asset_account_id');
+    }
+
+    public function isPaid(): bool
+    {
+        return ! empty($this->journal_entry_id) || ! empty($this->paid_at);
     }
 
     public function getFormattedMainSalaryAttribute(): string

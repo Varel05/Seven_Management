@@ -7,6 +7,7 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\JournalExportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
+use App\Http\Controllers\TailorController;
 use App\Http\Controllers\TailorPayrollController;
 use App\Http\Controllers\TaxController;
 use App\Models\JournalEntry;
@@ -69,12 +70,18 @@ Route::middleware('auth')->group(function () {
     Route::get('/employees', [EmployeeController::class, 'index'])->name('employees.index');
     Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
     Route::put('/employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
+    Route::patch('/employees/{employee}/salary', [EmployeeController::class, 'updateSalary'])->name('employees.salary');
     Route::patch('/employees/{employee}/points', [EmployeeController::class, 'updatePoints'])->name('employees.points');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
     Route::post('/employees/{employee}/pay', [EmployeeController::class, 'pay'])->name('employees.pay');
+    Route::post('/employees/{employee}/generate-slip', [EmployeeController::class, 'generateSlip'])->name('employees.generate-slip');
     Route::get('/employees/payroll/{payroll}/slip', [EmployeeController::class, 'showSlip'])->name('employees.payroll.slip');
+    Route::post('/employees/payroll/{payroll}/post-transaction', [EmployeeController::class, 'postTransaction'])->name('employees.payroll.post-transaction');
     Route::get('/employees/payroll/{payroll}/pdf', [EmployeeController::class, 'downloadPdf'])->name('employees.payroll.pdf');
     Route::get('/employees/{employee}/slip-preview', [EmployeeController::class, 'previewSlip'])->name('employees.slip.preview');
+    Route::get('/employees/attendance-list', [EmployeeController::class, 'attendanceList'])->name('employees.attendance-list');
+    Route::get('/employees/{employee}/fetch-attendance', [EmployeeController::class, 'fetchAttendance'])->name('employees.fetch-attendance');
+    Route::post('/employees/sync-api', [EmployeeController::class, 'syncFromApi'])->name('employees.sync-api');
 
     // Manajemen Tunjangan Pegawai
     Route::post('/allowances', [AllowanceController::class, 'store'])->name('allowances.store');
@@ -82,7 +89,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/allowances/{allowance}/toggle', [AllowanceController::class, 'toggle'])->name('allowances.toggle');
     Route::delete('/allowances/{allowance}', [AllowanceController::class, 'destroy'])->name('allowances.destroy');
 
-    // Upah Penjahit (Borongan) & Cetak Slip Upah HPP
+    // Data Penjahit & Upah Penjahit (Borongan)
+    Route::post('/tailors', [TailorController::class, 'store'])->name('tailors.store');
+    Route::put('/tailors/{tailor}', [TailorController::class, 'update'])->name('tailors.update');
+    Route::delete('/tailors/{tailor}', [TailorController::class, 'destroy'])->name('tailors.destroy');
     Route::resource('tailor-payrolls', TailorPayrollController::class);
 
     // Manajemen & Pelaporan Pajak PPh Final UMKM (Halaman Khusus)

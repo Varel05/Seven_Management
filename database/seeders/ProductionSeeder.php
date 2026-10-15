@@ -60,6 +60,9 @@ class ProductionSeeder extends Seeder
 
             // 3. Konfigurasi Standar Poin Insentif Pelayanan CS
             PointSetting::seedDefaultsIfEmpty();
+
+            // 4. Data Master Penjahit Standar
+            $this->call(TailorSeeder::class);
         });
     }
 }

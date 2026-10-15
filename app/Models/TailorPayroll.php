@@ -23,6 +23,11 @@ class TailorPayroll extends Model
         'take_home_pay' => 'decimal:2',
     ];
 
+    public function tailor(): BelongsTo
+    {
+        return $this->belongsTo(Tailor::class);
+    }
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);

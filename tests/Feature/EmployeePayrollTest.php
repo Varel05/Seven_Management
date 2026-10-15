@@ -44,7 +44,7 @@ class EmployeePayrollTest extends TestCase
         Employee::create([
             'name' => 'Budi Santoso',
             'position' => 'Senior Developer',
-            'base_salary' => 8000000,
+            'daily_rate' => 200000,
             'current_points' => 10,
             'rate_per_point' => 50000,
             'pay_day' => 25,
@@ -57,7 +57,9 @@ class EmployeePayrollTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Budi Santoso');
         $response->assertSee('Senior Developer');
-        $response->assertSee('Rp 8.000.000');
+        $response->assertSee('Rp 200.000');
+        $response->assertSee('/ shift');
+        $response->assertSee('Gaji per Shift');
         $response->assertSee('Batas:');
         $response->assertSee('Cari staf, jabatan, akun...');
         $response->assertSee('Lunas Bulan Ini');
@@ -733,5 +735,503 @@ class EmployeePayrollTest extends TestCase
         // Verifikasi route download/generate PDF otomatis
         $pdfResponse = $this->actingAs($user)->get("/employees/payroll/{$payroll->id}/pdf");
         $pdfResponse->assertRedirect(route('employees.payroll.slip', ['payroll' => $payroll, 'auto_pdf' => 1]));
+    }
+
+    public function test_slip_gaji_differentiates_between_cs_and_non_cs(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Karyawan CS
+        $csEmployee = Employee::create([
+            'name' => 'Salsabilla CS',
+            'position' => 'Customer Service (CS)',
+            'nip' => 'CS/15-05-2026',
+            'base_salary' => 2500000,
+            'daily_rate' => 100000,
+            'pay_day' => 25,
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
+        ]);
+
+        $csPayroll = EmployeePayroll::create([
+            'employee_id' => $csEmployee->id,
+            'period' => 'Oktober 2026',
+            'period_start' => '2026-09-26',
+            'period_end' => '2026-10-25',
+            'payment_method' => 'Transfer',
+            'total_shifts' => 27,
+            'total_present' => 27,
+            'late_count' => 0,
+            'discipline_present' => 27,
+            'holiday_shifts' => 0,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'closing_points' => 10,
+            'closing_pcs' => 10,
+            'rate_per_point' => 1400,
+            'closing_breakdown' => ['SD' => 2, 'FC' => 3, 'JK' => 1, 'INA' => 2, 'BJ' => 1, 'LM' => 1],
+            'main_salary' => 2700000,
+            'discipline_bonus' => 270000,
+            'sales_bonus' => 14000,
+            'holiday_bonus' => 0,
+            'take_home_pay' => 2984000,
+            'paid_at' => now(),
+        ]);
+
+        // 2. Karyawan Non-CS (HRD)
+        $nonCsEmployee = Employee::create([
+            'name' => 'Ari Setia HRD',
+            'position' => 'HRD / Personalia',
+            'nip' => 'HRD/27-03-2013',
+            'base_salary' => 3500000,
+            'daily_rate' => 130000,
+            'pay_day' => 25,
+            'asset_account_id' => $this->assetAccount->id,
+            'status' => 'active',
+        ]);
+
+        $nonCsPayroll = EmployeePayroll::create([
+            'employee_id' => $nonCsEmployee->id,
+            'period' => 'Oktober 2026',
+            'period_start' => '2026-09-26',
+            'period_end' => '2026-10-25',
+            'payment_method' => 'Transfer',
+            'total_shifts' => 27,
+            'total_present' => 27,
+            'late_count' => 0,
+            'discipline_present' => 27,
+            'holiday_shifts' => 0,
+            'daily_rate' => 130000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'closing_points' => 0,
+            'closing_pcs' => 0,
+            'rate_per_point' => 0,
+            'closing_breakdown' => null,
+            'main_salary' => 3510000,
+            'discipline_bonus' => 270000,
+            'sales_bonus' => 0,
+            'holiday_bonus' => 0,
+            'take_home_pay' => 3780000,
+            'paid_at' => now(),
+        ]);
+
+        // Cek slip CS: harus menampilkan Jumlah Closing dan rincian produk SD, FC, dll.
+        $csResponse = $this->actingAs($user)->get("/employees/payroll/{$csPayroll->id}/slip");
+        $csResponse->assertOk();
+        $csResponse->assertSee('Jumlah Closing');
+        $csResponse->assertSee('(SD = 2 pcs, FC = 3 pcs, JK= 1 pcs, INA = 2 pcs, BJ = 1 pcs, LM = 1 pcs)');
+
+        // Cek slip Non-CS: TIDAK boleh menampilkan Jumlah Closing dan rincian produk
+        $nonCsResponse = $this->actingAs($user)->get("/employees/payroll/{$nonCsPayroll->id}/slip");
+        $nonCsResponse->assertOk();
+        $nonCsResponse->assertDontSee('Jumlah Closing');
+        $nonCsResponse->assertDontSee('(SD =');
+    }
+
+    public function test_user_can_create_employee_without_asset_account_id(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->post('/employees', [
+            'name' => 'Karyawan Tanpa Akun Kas',
+            'role' => 'staff',
+            'position' => 'Staff Operasional',
+            'phone' => '085566778899',
+            'status' => 'active',
+            'pay_day' => 25,
+        ]);
+
+        $response->assertRedirect('/employees');
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseHas('employees', [
+            'name' => 'Karyawan Tanpa Akun Kas',
+            'asset_account_id' => null,
+        ]);
+    }
+
+    public function test_user_can_choose_asset_account_when_paying_salary_slip(): void
+    {
+        $user = User::factory()->create();
+
+        $bankMandiri = Account::create([
+            'code' => '1003',
+            'name' => 'Bank Mandiri',
+            'type' => 'asset',
+        ]);
+
+        $employee = Employee::create([
+            'name' => 'Doni Salman',
+            'role' => 'staff',
+            'position' => 'Staff Gudang',
+            'base_salary' => 3000000,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'status' => 'active',
+            'pay_day' => 25,
+            'asset_account_id' => null, // Karyawan tidak memiliki akun kas default
+        ]);
+
+        // Bayar slip gaji dan pilih Bank Mandiri sebagai akun kas/bank pencairan
+        $response = $this->actingAs($user)->post("/employees/{$employee->id}/pay", [
+            'period' => 'Oktober 2026',
+            'period_start' => '2026-10-01',
+            'period_end' => '2026-10-31',
+            'payment_method' => 'Transfer',
+            'asset_account_id' => $bankMandiri->id,
+            'total_shifts' => 27,
+            'total_present' => 27,
+            'late_count' => 0,
+            'discipline_present' => 27,
+            'holiday_shifts' => 0,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'notes' => 'Gaji via Mandiri',
+        ]);
+
+        $response->assertSessionHas('success');
+
+        // Pastikan Jurnal Entri terbit dengan kredit ke Bank Mandiri
+        $journal = JournalEntry::where('source', 'website')->latest()->first();
+        $this->assertNotNull($journal);
+
+        // Debit Beban Gaji (5002)
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'journal_entry_id' => $journal->id,
+            'account_id' => $this->salaryExpenseAccount->id,
+            'debit' => 2970000, // (27 * 100000) + (27 * 10000)
+            'credit' => 0,
+        ]);
+
+        // Kredit Bank Mandiri (1003) yang dipilih dari slip gaji
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'journal_entry_id' => $journal->id,
+            'account_id' => $bankMandiri->id,
+            'debit' => 0,
+            'credit' => 2970000,
+        ]);
+
+        // Pastikan slip gaji menampilkan metode pembayaran via Bank Mandiri
+        $payroll = EmployeePayroll::where('journal_entry_id', $journal->id)->first();
+        $this->assertNotNull($payroll);
+
+        $slipResponse = $this->actingAs($user)->get("/employees/payroll/{$payroll->id}/slip");
+        $slipResponse->assertOk();
+        $slipResponse->assertSee('Bank Mandiri');
+    }
+
+    public function test_user_can_update_employee_salary_rates_directly_from_table(): void
+    {
+        $user = User::factory()->create();
+
+        $employee = Employee::create([
+            'name' => 'Fajar Pratama',
+            'role' => 'staff',
+            'position' => 'Staff IT',
+            'base_salary' => 2700000,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'status' => 'active',
+            'pay_day' => 25,
+        ]);
+
+        $response = $this->actingAs($user)->patch("/employees/{$employee->id}/salary", [
+            'daily_rate' => 125000,
+            'discipline_rate' => 15000,
+            'holiday_rate' => 60000,
+        ]);
+
+        $response->assertRedirect('/employees');
+        $response->assertSessionHas('success');
+
+        $fresh = $employee->fresh();
+        $this->assertEquals(125000, (float) $fresh->daily_rate);
+        $this->assertEquals(3375000, (float) $fresh->base_salary);
+        $this->assertEquals(15000, (float) $fresh->discipline_rate);
+        $this->assertEquals(60000, (float) $fresh->holiday_rate);
+
+        // Halaman employees harus menampilkan nominal upah shift baru dan label per shift
+        $viewResponse = $this->actingAs($user)->get('/employees');
+        $viewResponse->assertOk();
+        $viewResponse->assertSee('125.000');
+        $viewResponse->assertSee('Atur Upah per Shift');
+        $viewResponse->assertSee('Gaji per Shift');
+    }
+
+    public function test_user_can_generate_slip_without_immediate_journal_entry(): void
+    {
+        $user = User::factory()->create();
+
+        $employee = Employee::create([
+            'name' => 'Dimas Anggara',
+            'role' => 'staff',
+            'position' => 'Staff Operasional',
+            'base_salary' => 2700000,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'status' => 'active',
+            'pay_day' => 25,
+            'asset_account_id' => $this->assetAccount->id,
+        ]);
+
+        $response = $this->actingAs($user)->post("/employees/{$employee->id}/generate-slip", [
+            'period' => 'Oktober 2026',
+            'period_start' => '2026-10-01',
+            'period_end' => '2026-10-31',
+            'payment_method' => 'Transfer',
+            'asset_account_id' => $this->assetAccount->id,
+            'total_shifts' => 27,
+            'total_present' => 25,
+            'late_count' => 1,
+            'discipline_present' => 24,
+            'holiday_shifts' => 1,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'notes' => 'Draft Slip Oktober',
+        ]);
+
+        $payroll = EmployeePayroll::where('employee_id', $employee->id)->where('period', 'Oktober 2026')->first();
+        $this->assertNotNull($payroll);
+        $this->assertNull($payroll->journal_entry_id);
+        $this->assertNull($payroll->paid_at);
+        // (25 * 100000) + (24 * 10000) + (1 * 50000) = 2500000 + 240000 + 50000 = 2790000
+        $this->assertEquals(2790000, (float) $payroll->take_home_pay);
+
+        // Jurnal keuangan belum boleh dibuat pada tahap generate slip
+        $this->assertEquals(0, JournalEntry::count());
+
+        // Redirect langsung ke halaman slip tanpa query auto_pdf
+        $response->assertRedirect(route('employees.payroll.slip', $payroll));
+        $this->assertFalse(str_contains($response->headers->get('Location'), 'auto_pdf=1'));
+
+        // Cek halaman slip menampilkan status Draft dan tombol Bukukan
+        $slipResponse = $this->actingAs($user)->get(route('employees.payroll.slip', $payroll));
+        $slipResponse->assertOk();
+        $slipResponse->assertSee('Slip Gaji Status Draft (Belum Dicatat ke Transaksi)');
+        $slipResponse->assertSee('Bukukan Transaksi Keuangan');
+    }
+
+    public function test_user_can_edit_existing_draft_slip_before_posting_transaction(): void
+    {
+        $user = User::factory()->create();
+
+        $employee = Employee::create([
+            'name' => 'Mega Utami',
+            'role' => 'staff',
+            'position' => 'Staff Admin',
+            'base_salary' => 2700000,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'status' => 'active',
+            'pay_day' => 25,
+            'asset_account_id' => $this->assetAccount->id,
+        ]);
+
+        // Slip awal (hadir 20 hari)
+        $draftPayroll = EmployeePayroll::create([
+            'employee_id' => $employee->id,
+            'period' => 'September 2026',
+            'period_start' => '2026-09-01',
+            'period_end' => '2026-09-30',
+            'payment_method' => 'Transfer',
+            'asset_account_id' => $this->assetAccount->id,
+            'total_shifts' => 27,
+            'total_present' => 20,
+            'late_count' => 0,
+            'discipline_present' => 20,
+            'holiday_shifts' => 0,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'main_salary' => 2000000,
+            'discipline_bonus' => 200000,
+            'sales_bonus' => 0,
+            'holiday_bonus' => 0,
+            'allowance_total' => 0,
+            'take_home_pay' => 2200000,
+            'notes' => 'Draft Awal',
+        ]);
+
+        // User mengedit slip bulan September dengan revisi absensi (hadir 25 hari)
+        $response = $this->actingAs($user)->post("/employees/{$employee->id}/generate-slip", [
+            'period' => 'September 2026',
+            'period_start' => '2026-09-01',
+            'period_end' => '2026-09-30',
+            'payment_method' => 'Transfer',
+            'asset_account_id' => $this->assetAccount->id,
+            'total_shifts' => 27,
+            'total_present' => 25,
+            'late_count' => 0,
+            'discipline_present' => 25,
+            'holiday_shifts' => 0,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'notes' => 'Draft Revisi September',
+        ]);
+
+        $response->assertRedirect(route('employees.payroll.slip', $draftPayroll));
+
+        // Pastikan tidak ada duplikasi record (tetap 1 baris di employee_payrolls)
+        $this->assertEquals(1, EmployeePayroll::where('employee_id', $employee->id)->count());
+
+        $fresh = $draftPayroll->fresh();
+        $this->assertEquals(25, $fresh->total_present);
+        $this->assertEquals(2750000, (float) $fresh->take_home_pay); // (25*100000) + (25*10000)
+        $this->assertEquals('Draft Revisi September', $fresh->notes);
+        $this->assertNull($fresh->journal_entry_id);
+    }
+
+    public function test_user_cannot_edit_slip_that_has_been_posted_to_transaction(): void
+    {
+        $user = User::factory()->create();
+
+        $employee = Employee::create([
+            'name' => 'Rudi Salim',
+            'role' => 'staff',
+            'position' => 'Logistik',
+            'base_salary' => 2700000,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'status' => 'active',
+            'pay_day' => 25,
+            'asset_account_id' => $this->assetAccount->id,
+        ]);
+
+        $journal = JournalEntry::create([
+            'reference' => 'PAY-PAID01',
+            'description' => 'Gaji Rudi',
+            'date' => now(),
+            'source' => 'website',
+            'status' => 'verified',
+        ]);
+
+        $paidPayroll = EmployeePayroll::create([
+            'employee_id' => $employee->id,
+            'journal_entry_id' => $journal->id,
+            'period' => 'Agustus 2026',
+            'period_start' => '2026-08-01',
+            'period_end' => '2026-08-31',
+            'payment_method' => 'Transfer',
+            'asset_account_id' => $this->assetAccount->id,
+            'total_shifts' => 27,
+            'total_present' => 27,
+            'late_count' => 0,
+            'discipline_present' => 27,
+            'holiday_shifts' => 0,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'main_salary' => 2700000,
+            'discipline_bonus' => 270000,
+            'sales_bonus' => 0,
+            'holiday_bonus' => 0,
+            'allowance_total' => 0,
+            'take_home_pay' => 2970000,
+            'paid_at' => now(),
+        ]);
+
+        // Coba edit slip yang sudah terbukukan
+        $response = $this->actingAs($user)->post("/employees/{$employee->id}/generate-slip", [
+            'period' => 'Agustus 2026',
+            'period_start' => '2026-08-01',
+            'period_end' => '2026-08-31',
+            'total_present' => 20,
+        ]);
+
+        $response->assertRedirect(route('employees.payroll.slip', $paidPayroll));
+        $response->assertSessionHas('warning');
+
+        // Pastikan total_present tidak berubah
+        $this->assertEquals(27, $paidPayroll->fresh()->total_present);
+    }
+
+    public function test_user_can_post_transaction_from_slip_page(): void
+    {
+        $user = User::factory()->create();
+
+        $bankBca = $this->assetAccount;
+        $bankMandiri = Account::create([
+            'code' => '1003',
+            'name' => 'Bank Mandiri',
+            'type' => 'asset',
+        ]);
+
+        $employee = Employee::create([
+            'name' => 'Indah Permata',
+            'role' => 'staff',
+            'position' => 'Staff Desain',
+            'base_salary' => 2700000,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'status' => 'active',
+            'pay_day' => 25,
+            'asset_account_id' => $bankBca->id,
+        ]);
+
+        $draftPayroll = EmployeePayroll::create([
+            'employee_id' => $employee->id,
+            'period' => 'Oktober 2026',
+            'period_start' => '2026-10-01',
+            'period_end' => '2026-10-31',
+            'payment_method' => 'Transfer',
+            'asset_account_id' => $bankBca->id,
+            'total_shifts' => 27,
+            'total_present' => 27,
+            'late_count' => 0,
+            'discipline_present' => 27,
+            'holiday_shifts' => 0,
+            'daily_rate' => 100000,
+            'discipline_rate' => 10000,
+            'holiday_rate' => 50000,
+            'main_salary' => 2700000,
+            'discipline_bonus' => 270000,
+            'sales_bonus' => 0,
+            'holiday_bonus' => 0,
+            'allowance_total' => 0,
+            'take_home_pay' => 2970000,
+        ]);
+
+        // User membukukan transaksi dengan memilih Bank Mandiri
+        $response = $this->actingAs($user)->post(route('employees.payroll.post-transaction', $draftPayroll), [
+            'asset_account_id' => $bankMandiri->id,
+        ]);
+
+        $response->assertRedirect(route('employees.payroll.slip', $draftPayroll));
+        $response->assertSessionHas('success');
+
+        $fresh = $draftPayroll->fresh();
+        $this->assertNotNull($fresh->journal_entry_id);
+        $this->assertNotNull($fresh->paid_at);
+        $this->assertEquals($bankMandiri->id, $fresh->asset_account_id);
+
+        $journal = $fresh->journalEntry;
+        $this->assertNotNull($journal);
+
+        // Debit Beban Gaji 5002
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'journal_entry_id' => $journal->id,
+            'account_id' => $this->salaryExpenseAccount->id,
+            'debit' => 2970000,
+            'credit' => 0,
+        ]);
+
+        // Kredit Bank Mandiri 1003
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'journal_entry_id' => $journal->id,
+            'account_id' => $bankMandiri->id,
+            'debit' => 0,
+            'credit' => 2970000,
+        ]);
     }
 }

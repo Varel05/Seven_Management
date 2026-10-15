@@ -35,15 +35,19 @@
                     <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
                     <span>Kelola Tunjangan ({{ $allowances->count() }})</span>
                 </button>
-                <button 
-                    type="button" 
-                    @click="$dispatch('open-add-employee')"
-                    onclick="window.dispatchEvent(new CustomEvent('open-add-employee'))"
-                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:brightness-110 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
-                    <span>Tambah Karyawan</span>
-                </button>
+                <form action="{{ route('employees.sync-api') }}" method="POST" class="inline">
+                    @csrf
+                    <input type="hidden" name="start_date" value="{{ $startDate }}">
+                    <input type="hidden" name="end_date" value="{{ $endDate }}">
+                    <button 
+                        type="submit" 
+                        class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                        title="Tarik & sinkronkan data karyawan serta absensi dari Web Karyawan (CI4)"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Sinkronkan REST API</span>
+                    </button>
+                </form>
             </div>
         </div>
     </x-slot>
@@ -55,14 +59,16 @@
         currentPage: 1,
         items: {{ Js::from($employees->map(function($e) {
             return [
-                'id'        => $e->id,
-                'name'      => $e->name,
-                'position'  => $e->position,
-                'phone'     => $e->phone ?? '',
-                'status'    => $e->status,
-                'is_due'    => $e->isDueToday(),
-                'is_paid'   => (bool) $e->isPaidThisMonth(),
-                'search'    => strtolower($e->name . ' ' . $e->position . ' ' . ($e->phone ?? '') . ' ' . ($e->assetAccount->name ?? '')),
+                'id'             => $e->id,
+                'name'           => $e->name,
+                'position'       => $e->position,
+                'nip'            => $e->nip ?? '',
+                'phone'          => $e->phone ?? '',
+                'status'         => $e->status,
+                'is_due'         => $e->isDueToday(),
+                'is_paid'        => (bool) $e->isPaidThisMonth(),
+                'api_attendance' => $e->api_attendance,
+                'search'         => strtolower($e->name . ' ' . $e->position . ' ' . ($e->nip ?? '') . ' ' . ($e->phone ?? '') . ' ' . ($e->assetAccount->name ?? '')),
             ];
         })) }},
         get filteredItems() {
@@ -149,15 +155,83 @@
 
         showModal: false,
         isEdit: false,
+        assetAccounts: {{ Js::from($assetAccounts->map(fn($a) => ['id' => $a->id, 'name' => $a->name, 'code' => $a->code])) }},
         form: {
             id: null,
             name: '',
+            nip: '',
             role: 'staff',
             position: '',
             phone: '',
             pay_day: 25,
-            asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
             status: 'active'
+        },
+        isSyncingAttendance: false,
+        syncMessage: '',
+        syncSuccess: false,
+        availableAttendanceList: [],
+        isLoadingAttendanceList: false,
+        async loadAvailableAttendanceList() {
+            this.isLoadingAttendanceList = true;
+            try {
+                const res = await fetch('{{ route("employees.attendance-list") }}');
+                const json = await res.json();
+                if (json.success && json.data) {
+                    this.availableAttendanceList = json.data;
+                }
+            } catch (e) {
+                console.error('Failed to load attendance list:', e);
+            } finally {
+                this.isLoadingAttendanceList = false;
+            }
+        },
+        async syncAttendance() {
+            if (!this.employeeToPay) return;
+            if (!this.employeeToPay.nip) {
+                this.syncSuccess = false;
+                this.syncMessage = 'Karyawan ' + this.employeeToPay.name + ' belum memiliki NIP. Silakan isi NIP karyawan di menu Edit Karyawan terlebih dahulu.';
+                return;
+            }
+
+            this.isSyncingAttendance = true;
+            this.syncMessage = '';
+
+            try {
+                const url = `{{ url('employees') }}/${this.employeeToPay.id}/fetch-attendance?start_date=${encodeURIComponent(this.payForm.period_start)}&end_date=${encodeURIComponent(this.payForm.period_end)}`;
+                const res = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                const result = await res.json();
+
+                if (result.success && result.data) {
+                    this.payForm.total_shifts = (result.data.total_shifts !== undefined && result.data.total_shifts !== null) ? Number(result.data.total_shifts) : (Number(result.data.total_present) || 0);
+                    this.payForm.total_present = Number(result.data.total_present) || 0;
+                    this.payForm.late_count = Number(result.data.late_count) || 0;
+                    this.payForm.discipline_present = Number(result.data.discipline_present) || Math.max(0, this.payForm.total_present - this.payForm.late_count);
+                    this.payForm.holiday_shifts = Number(result.data.holiday_shifts) || 0;
+
+                    this.syncSuccess = true;
+                    this.syncMessage = `Sinkronisasi berhasil! Hadir: ${result.data.total_present} shift, Terlambat: ${result.data.late_count}, Disiplin: ${result.data.discipline_present}`;
+                } else {
+                    this.syncSuccess = false;
+                    this.syncMessage = result.message || 'Gagal mengambil data dari server presensi.';
+                }
+            } catch (err) {
+                this.syncSuccess = false;
+                this.syncMessage = 'Terjadi kesalahan jaringan saat memanggil server presensi: ' + err.message;
+            } finally {
+                this.isSyncingAttendance = false;
+            }
+        },
+        showSalaryModal: false,
+        selectedEmployeeForSalary: null,
+        salaryForm: {
+            daily_rate: 100000,
+            discipline_rate: 10000,
+            holiday_rate: 50000
         },
         showPointsModal: false,
         selectedEmployeeForPoints: null,
@@ -167,11 +241,15 @@
         },
         showPayModal: false,
         employeeToPay: null,
+        existingSlip: null,
+        isExistingPaid: false,
         payForm: {
+            month_picker: '{{ now()->format("Y-m") }}',
             period: '{{ now()->translatedFormat("F Y") }}',
-            period_start: '{{ now()->subMonth()->setDay(26)->format("Y-m-d") }}',
-            period_end: '{{ now()->setDay(25)->format("Y-m-d") }}',
+            period_start: '{{ now()->startOfMonth()->format("Y-m-d") }}',
+            period_end: '{{ now()->endOfMonth()->format("Y-m-d") }}',
             payment_method: 'Transfer',
+            asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}',
             total_shifts: 27,
             late_count: 0,
             total_present: 27,
@@ -190,6 +268,99 @@
             let late = Number(this.payForm.late_count) || 0;
             this.payForm.discipline_present = Math.max(0, present - late);
         },
+        onMonthChange() {
+            if (!this.payForm.month_picker) return;
+            const parts = this.payForm.month_picker.split('-');
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10);
+            if (isNaN(year) || isNaN(month)) return;
+
+            const lastDay = new Date(year, month, 0).getDate();
+            const mm = String(month).padStart(2, '0');
+            this.payForm.period_start = `${year}-${mm}-01`;
+            this.payForm.period_end = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`;
+
+            const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+            this.payForm.period = `${monthNames[month - 1]} ${year}`;
+
+            this.detectSlipForPeriod();
+        },
+        detectSlipForPeriod() {
+            if (!this.employeeToPay || !this.payForm.month_picker) {
+                this.existingSlip = null;
+                this.isExistingPaid = false;
+                return;
+            }
+            const ym = this.payForm.month_picker;
+            const payrolls = this.employeeToPay.payrolls || [];
+
+            const found = payrolls.find(p => {
+                if (p.period_start && String(p.period_start).substring(0, 7) === ym) return true;
+                if (p.period_end && String(p.period_end).substring(0, 7) === ym) return true;
+                const [year, month] = ym.split('-');
+                const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+                const mLabel = monthNames[parseInt(month, 10) - 1] + ' ' + year;
+                return p.period === mLabel;
+            });
+
+            if (found) {
+                this.existingSlip = found;
+                this.isExistingPaid = Boolean(found.journal_entry_id || found.paid_at);
+
+                this.payForm.total_shifts = (found.total_shifts !== undefined && found.total_shifts !== null) ? Number(found.total_shifts) : 27;
+                this.payForm.total_present = (found.total_present !== undefined && found.total_present !== null) ? Number(found.total_present) : 27;
+                this.payForm.late_count = Number(found.late_count) || 0;
+                this.payForm.discipline_present = (found.discipline_present !== undefined && found.discipline_present !== null) ? Number(found.discipline_present) : Math.max(0, this.payForm.total_present - this.payForm.late_count);
+                this.payForm.holiday_shifts = Number(found.holiday_shifts) || 0;
+                this.payForm.daily_rate = Number(found.daily_rate) || Number(this.employeeToPay.effective_daily_rate) || 100000;
+                this.payForm.discipline_rate = Number(found.discipline_rate) || Number(this.employeeToPay.effective_discipline_rate) || 10000;
+                this.payForm.holiday_rate = Number(found.holiday_rate) || Number(this.employeeToPay.effective_holiday_rate) || 50000;
+                this.payForm.closing_points = Number(found.closing_points) || 0;
+                this.payForm.closing_pcs = Number(found.closing_pcs) || 0;
+                this.payForm.sales_bonus = Number(found.sales_bonus) || 0;
+                this.payForm.payment_method = found.payment_method || 'Transfer';
+                if (found.asset_account_id) {
+                    this.payForm.asset_account_id = found.asset_account_id;
+                } else if (this.employeeToPay.asset_account_id) {
+                    this.payForm.asset_account_id = this.employeeToPay.asset_account_id;
+                }
+                this.payForm.notes = found.notes || '';
+            } else {
+                this.existingSlip = null;
+                this.isExistingPaid = false;
+
+                let emp = this.employeeToPay;
+                this.payForm.daily_rate = Number(emp.daily_rate) > 0 ? Number(emp.daily_rate) : (Number(emp.effective_daily_rate) || 100000);
+                this.payForm.discipline_rate = Number(emp.discipline_rate) > 0 ? Number(emp.discipline_rate) : (Number(emp.effective_discipline_rate) || 10000);
+                this.payForm.holiday_rate = Number(emp.holiday_rate) > 0 ? Number(emp.holiday_rate) : (Number(emp.effective_holiday_rate) || 50000);
+                this.payForm.closing_points = Number(emp.current_points) || 0;
+                this.payForm.closing_pcs = Number(emp.current_points) || 0;
+                this.payForm.sales_bonus = emp.claim_bonus ? Number(emp.bonus_salary) : 0;
+                this.payForm.payment_method = 'Transfer';
+                this.payForm.asset_account_id = emp.asset_account_id || (this.assetAccounts.length > 0 ? this.assetAccounts[0].id : '');
+                this.payForm.notes = `Slip Gaji Periode ${this.payForm.period}`;
+
+                let att = emp.api_attendance || {};
+                let curYm = '{{ now()->format("Y-m") }}';
+                if (ym === curYm && att && (att.total_shifts !== undefined || att.total_present !== undefined)) {
+                    this.payForm.total_shifts = (att.total_shifts !== undefined && att.total_shifts !== null) ? Number(att.total_shifts) : (Number(att.total_present) || 0);
+                    this.payForm.total_present = (att.total_present !== undefined && att.total_present !== null) ? Number(att.total_present) : 0;
+                    this.payForm.late_count = Number(att.late_count) || 0;
+                    this.payForm.discipline_present = Number(att.discipline_present) || Math.max(0, this.payForm.total_present - this.payForm.late_count);
+                    this.payForm.holiday_shifts = Number(att.holiday_shifts) || 0;
+                } else {
+                    if (emp.nip) {
+                        this.syncAttendance();
+                    } else {
+                        this.payForm.total_shifts = 27;
+                        this.payForm.total_present = 27;
+                        this.payForm.late_count = 0;
+                        this.payForm.discipline_present = 27;
+                        this.payForm.holiday_shifts = 0;
+                    }
+                }
+            }
+        },
         calculateMainSalary() {
             return (Number(this.payForm.total_present) || 0) * (Number(this.payForm.daily_rate) || 0);
         },
@@ -206,6 +377,10 @@
             let hol = this.calculateHolidayBonus();
             let alw = this.employeeToPay ? (Number(this.employeeToPay.total_allowance) || 0) : 0;
             return main + disc + sales + hol + alw;
+        },
+        getSelectedAccountName() {
+            const acc = this.assetAccounts.find(a => a.id == this.payForm.asset_account_id);
+            return acc ? acc.name : (this.employeeToPay?.asset_account ? this.employeeToPay.asset_account.name : 'Kas Operasional');
         },
         showDeleteModal: false,
         employeeToDelete: null,
@@ -319,12 +494,12 @@
             this.form = {
                 id: null,
                 name: '',
+                nip: '',
                 role: 'staff',
                 position: '',
                 phone: '',
                 status: 'active',
-                pay_day: 25,
-                asset_account_id: '{{ $assetAccounts->first()->id ?? '' }}'
+                pay_day: 25
             };
             this.showModal = true;
         },
@@ -333,14 +508,32 @@
             this.form = {
                 id: emp.id,
                 name: emp.name,
+                nip: emp.nip || '',
                 role: emp.role_value || (emp.role && emp.role.value ? emp.role.value : (emp.role || 'staff')),
                 position: emp.position,
                 phone: emp.phone || '',
                 status: emp.status,
-                pay_day: emp.pay_day,
-                asset_account_id: emp.asset_account_id || '{{ $assetAccounts->first()->id ?? '' }}'
+                pay_day: emp.pay_day
             };
             this.showModal = true;
+        },
+        openSalaryModal(emp) {
+            this.selectedEmployeeForSalary = emp;
+            let daily = Number(emp.daily_rate) > 0 ? Number(emp.daily_rate) : (Number(emp.effective_daily_rate) || 100000);
+            let disc = Number(emp.discipline_rate) > 0 ? Number(emp.discipline_rate) : (Number(emp.effective_discipline_rate) || 10000);
+            let hol = Number(emp.holiday_rate) > 0 ? Number(emp.holiday_rate) : (Number(emp.effective_holiday_rate) || 50000);
+
+            this.salaryForm = {
+                daily_rate: daily,
+                discipline_rate: disc,
+                holiday_rate: hol
+            };
+            this.showSalaryModal = true;
+        },
+        calculateSalaryPreviewTotal() {
+            let daily = Number(this.salaryForm.daily_rate) || 0;
+            let disc = Number(this.salaryForm.discipline_rate) || 0;
+            return daily + disc;
         },
         openPointsModal(emp) {
             this.selectedEmployeeForPoints = emp;
@@ -349,29 +542,20 @@
         },
         openPayModal(emp) {
             this.employeeToPay = emp;
-            let dailyRate = Number(emp.daily_rate) > 0 ? Number(emp.daily_rate) : (Number(emp.effective_daily_rate) || 100000);
-            let discRate = Number(emp.discipline_rate) > 0 ? Number(emp.discipline_rate) : (Number(emp.effective_discipline_rate) || 10000);
-            let holRate = Number(emp.holiday_rate) > 0 ? Number(emp.holiday_rate) : (Number(emp.effective_holiday_rate) || 50000);
-            let salesBonus = emp.claim_bonus ? Number(emp.bonus_salary) : 0;
+            this.syncMessage = '';
+            this.syncSuccess = false;
 
-            this.payForm = {
-                period: '{{ now()->translatedFormat("F Y") }}',
-                period_start: '{{ now()->subMonth()->setDay(26)->format("Y-m-d") }}',
-                period_end: '{{ now()->setDay(25)->format("Y-m-d") }}',
-                payment_method: 'Transfer',
-                total_shifts: 27,
-                late_count: 0,
-                total_present: 27,
-                discipline_present: 27,
-                holiday_shifts: 0,
-                daily_rate: dailyRate,
-                discipline_rate: discRate,
-                holiday_rate: holRate,
-                closing_points: Number(emp.current_points) || 0,
-                closing_pcs: Number(emp.current_points) || 0,
-                sales_bonus: salesBonus,
-                notes: ''
-            };
+            let currentMonth = '{{ now()->format("Y-m") }}';
+            let currentPeriod = '{{ now()->translatedFormat("F Y") }}';
+            let periodStart = '{{ now()->startOfMonth()->format("Y-m-d") }}';
+            let periodEnd = '{{ now()->endOfMonth()->format("Y-m-d") }}';
+
+            this.payForm.month_picker = currentMonth;
+            this.payForm.period = currentPeriod;
+            this.payForm.period_start = periodStart;
+            this.payForm.period_end = periodEnd;
+
+            this.detectSlipForPeriod();
             this.showPayModal = true;
         },
         openDeleteModal(emp) {
@@ -404,6 +588,41 @@
                 </div>
             @endif
 
+            <!-- REST API Auto-Sync Banner -->
+            <div class="p-3.5 rounded-2xl bg-slate-900 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+                <div class="flex items-center gap-3">
+                    <span class="relative flex h-2.5 w-2.5 shrink-0">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <div>
+                        <div class="font-bold text-slate-100 flex items-center gap-2 flex-wrap">
+                            <span>Data Karyawan Tersinkronisasi Otomatis via REST API</span>
+                            <span class="px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 font-semibold text-[10px] border border-emerald-800">
+                                Terhubung
+                            </span>
+                        </div>
+                        <div class="text-[11px] text-slate-400 mt-0.5">
+                            Periode: <strong>{{ \Carbon\Carbon::parse($startDate)->translatedFormat('d M') }} - {{ \Carbon\Carbon::parse($endDate)->translatedFormat('d M Y') }}</strong> ({{ $employees->count() }} staf aktif terhubung)
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <form action="{{ route('employees.sync-api') }}" method="POST" class="inline">
+                        @csrf
+                        <input type="hidden" name="start_date" value="{{ $startDate }}">
+                        <input type="hidden" name="end_date" value="{{ $endDate }}">
+                        <button 
+                            type="submit" 
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold text-xs transition-all shadow-xs cursor-pointer"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            <span>Segarkan Sekarang</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
             <!-- 5 SUMMARY METRIC CARDS -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <!-- Card 1: Total Karyawan Aktif -->
@@ -426,22 +645,22 @@
                     </div>
                 </div>
 
-                <!-- Card 2: Total Gaji Pokok -->
+                <!-- Card 2: Rata-Rata Upah per Shift -->
                 <div class="relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-slate-700 transition-all group flex flex-col justify-between">
                     <div class="absolute top-0 left-0 right-0 h-1.5 bg-indigo-600 z-10" style="background: #4f46e5;"></div>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-slate-700 dark:text-indigo-300 uppercase tracking-wider">Total Gaji Pokok</span>
+                        <span class="text-xs font-bold text-slate-700 dark:text-indigo-300 uppercase tracking-wider">Rata-Rata Upah / Shift</span>
                         <div class="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-600 dark:text-white shadow-xs group-hover:scale-105 transition-transform">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         </div>
                     </div>
                     <div class="mt-3.5">
                         <div class="text-2xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white">
-                            Rp {{ number_format($totalBaseSalary, 0, ',', '.') }}
+                            Rp {{ number_format($averageDailyRate ?? 0, 0, ',', '.') }}
                         </div>
                         <div class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                            <span>Gaji pokok tetap bulanan</span>
+                            <span>Tarif dasar per shift staf aktif</span>
                         </div>
                     </div>
                 </div>
@@ -596,7 +815,8 @@
                         <thead>
                             <tr class="bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200/90 dark:border-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                                 <th class="px-2.5 py-2.5 min-w-[140px]">Karyawan</th>
-                                <th class="px-2 py-2.5 whitespace-nowrap">Gaji Pokok / Shift</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap">Gaji per Shift</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap text-center">Presensi Bulan Ini</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Tunjangan</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Poin Kinerja</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Bonus Poin</th>
@@ -623,12 +843,17 @@
                                                 {{ strtoupper(substr($emp->name, 0, 2)) }}
                                             </div>
                                             <div class="space-y-0.5">
-                                                <!-- Baris 1: Nama, ID & Role Badge -->
+                                                <!-- Baris 1: Nama, ID, NIP & Role Badge -->
                                                 <div class="font-bold text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5 flex-wrap leading-tight">
                                                     <span>{{ $emp->name }}</span>
                                                     <span class="font-mono text-[9px] font-bold px-1 py-0.2 rounded {{ $emp->status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700' }}">
                                                         #{{ $emp->id }}
                                                     </span>
+                                                    @if($emp->nip)
+                                                        <span class="font-mono text-[9px] font-semibold px-1 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800" title="NIP Web Presensi">
+                                                            {{ $emp->nip }}
+                                                        </span>
+                                                    @endif
                                                     <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border {{ $emp->role_badge_class }}">
                                                         {{ $emp->role_label }}
                                                     </span>
@@ -647,9 +872,47 @@
                                         </div>
                                     </td>
 
-                                    <!-- Gaji Pokok / Shift -->
-                                    <td class="px-2 py-2 whitespace-nowrap font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
-                                        Rp {{ number_format($emp->effective_daily_rate, 0, ',', '.') }}<span class="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-normal"> / shift</span>
+                                    <!-- Gaji per Shift -->
+                                    <td class="px-2 py-2 whitespace-nowrap text-xs">
+                                        <div class="inline-flex items-center gap-1.5 font-mono">
+                                            <span class="font-bold text-slate-900 dark:text-slate-100">
+                                                Rp {{ number_format($emp->effective_daily_rate, 0, ',', '.') }}
+                                            </span>
+                                            <span class="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-normal">/ shift</span>
+                                            <button 
+                                                type="button" 
+                                                @click="openSalaryModal({{ Js::from($emp) }})" 
+                                                class="p-1 rounded-md text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/50 transition-colors cursor-pointer" 
+                                                title="Ubah Tarif Gaji / Shift Karyawan Ini"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                            </button>
+                                        </div>
+                                        <div class="text-[9px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">
+                                            <span>Disiplin: {{ number_format($emp->effective_discipline_rate, 0, ',', '.') }}</span>
+                                            @if($emp->effective_holiday_rate > 0)
+                                                <span> • Libur: {{ number_format($emp->effective_holiday_rate, 0, ',', '.') }}</span>
+                                            @endif
+                                        </div>
+                                    </td>
+
+                                    <!-- Presensi (Cut-off) dari REST API -->
+                                    <td class="px-2 py-2 whitespace-nowrap text-center text-xs">
+                                        @if($emp->api_attendance)
+                                            <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold text-[11px] font-mono">
+                                                <span>{{ $emp->api_attendance['total_present'] }}</span>
+                                                <span class="text-slate-400 font-normal">/</span>
+                                                <span>{{ $emp->api_attendance['total_shifts'] }} Shift</span>
+                                            </div>
+                                            <div class="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center justify-center gap-1 font-mono">
+                                                <span>Disiplin: {{ $emp->api_attendance['discipline_present'] }}</span>
+                                                @if($emp->api_attendance['late_count'] > 0)
+                                                    <span class="text-rose-500 font-bold">• Telat: {{ $emp->api_attendance['late_count'] }}</span>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <span class="text-slate-400 font-mono text-[10px]">-</span>
+                                        @endif
                                     </td>
 
                                     <!-- Tunjangan -->
@@ -726,14 +989,22 @@
                                         </div>
                                     </td>
 
+                                    @php
+                                        $lastPaidAccountName = $emp->latestPayroll?->journalEntry?->lines?->firstWhere('credit', '>', 0)?->account?->name 
+                                            ?? $emp->assetAccount?->name 
+                                            ?? 'Kas Operasional';
+                                        $lastPaidAccountCode = $emp->latestPayroll?->journalEntry?->lines?->firstWhere('credit', '>', 0)?->account?->code 
+                                            ?? $emp->assetAccount?->code 
+                                            ?? '1001';
+                                    @endphp
                                     <!-- Akun Pembayaran -->
                                     <td class="px-2 py-2 whitespace-nowrap text-xs">
                                         <div class="inline-flex items-center gap-1 max-w-[110px]">
                                             <span class="font-mono text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
-                                                {{ $emp->assetAccount->code ?? '1001' }}
+                                                {{ $lastPaidAccountCode }}
                                             </span>
-                                            <span class="truncate text-slate-700 dark:text-slate-300 font-medium text-[11px]" title="{{ $emp->assetAccount->name ?? 'Kas Operasional' }}">
-                                                {{ $emp->assetAccount->name ?? 'Kas Operasional' }}
+                                            <span class="truncate text-slate-700 dark:text-slate-300 font-medium text-[11px]" title="{{ $lastPaidAccountName }}">
+                                                {{ $lastPaidAccountName }}
                                             </span>
                                         </div>
                                     </td>
@@ -742,6 +1013,15 @@
                                     <td class="px-2 py-2 whitespace-nowrap text-center text-xs">
                                         <div class="inline-flex flex-col items-center justify-center gap-1">
                                             <div class="flex items-center justify-center gap-1">
+                                                <button 
+                                                    type="button" 
+                                                    @click="openSalaryModal({{ Js::from($emp) }})" 
+                                                    class="inline-flex items-center justify-center w-6 h-6 rounded-md text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all shadow-2xs cursor-pointer"
+                                                    title="Atur Tarif Gaji & Shift"
+                                                >
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                </button>
+
                                                 <button 
                                                     type="button" 
                                                     @click="openEditModal({{ Js::from($emp) }})" 
@@ -766,19 +1046,19 @@
                                                     type="button" 
                                                     @click="openPayModal({{ Js::from($emp) }})" 
                                                     class="w-full inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-xs shadow-emerald-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                                                    title="Hitung Slip Gaji, Bayar & Buat PDF Otomatis"
+                                                    title="Hitung & Terbitkan Slip Gaji"
                                                 >
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                                     <span>Slip Gaji</span>
                                                 </button>
                                             @else
-                                                @if($emp->latestPayroll)
-                                                    <div class="flex items-center gap-1 w-full">
+                                                <div class="flex items-center gap-1 w-full">
+                                                    @if($emp->latestPayroll)
                                                         <a 
                                                             href="{{ route('employees.payroll.slip', $emp->latestPayroll) }}" 
                                                             target="_blank"
                                                             class="flex-1 inline-flex items-center justify-center gap-0.5 px-1 py-0.5 rounded-md text-[9px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 shadow-2xs hover:bg-teal-100 transition-all cursor-pointer"
-                                                            title="Lihat Lembar Slip Gaji Excel"
+                                                            title="Lihat Lembar Slip Gaji Excel Terakhir"
                                                         >
                                                             <span>Slip</span>
                                                         </a>
@@ -791,17 +1071,16 @@
                                                             <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                                             <span>PDF</span>
                                                         </a>
-                                                    </div>
-                                                @else
+                                                    @endif
                                                     <button 
                                                         type="button" 
                                                         @click="openPayModal({{ Js::from($emp) }})" 
-                                                        class="w-full inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-all cursor-pointer"
-                                                        title="Buat Lembar Slip Gaji Baru"
+                                                        class="inline-flex items-center justify-center w-5 h-5 rounded-md text-slate-500 hover:text-emerald-600 bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-emerald-950/50 border border-slate-200 dark:border-slate-700 shadow-2xs transition-all cursor-pointer"
+                                                        title="Generate / Edit Slip Gaji Periode Lain"
                                                     >
-                                                        <span>+ Slip Gaji</span>
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                                                     </button>
-                                                @endif
+                                                </div>
                                             @endif
                                         </div>
                                     </td>
@@ -809,7 +1088,7 @@
                             @empty
                                 <!-- Kasus 1: Database Kosong -->
                                 <tr>
-                                    <td colspan="8" class="px-6 py-14 text-center">
+                                    <td colspan="9" class="px-6 py-14 text-center">
                                         <div class="max-w-md mx-auto flex flex-col items-center">
                                             <div class="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3.5 border border-amber-200/80 dark:border-amber-800/60 shadow-xs">
                                                 <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
@@ -834,7 +1113,7 @@
                             <!-- Kasus 2: Data Ada di Database, tetapi Tidak Ditemukan pada Filter / Pencarian Tertentu -->
                             @if($employees->isNotEmpty())
                                 <tr x-show="visibleCount === 0" x-cloak>
-                                    <td colspan="8" class="px-6 py-12 text-center">
+                                    <td colspan="9" class="px-6 py-12 text-center">
                                         <div class="max-w-md mx-auto flex flex-col items-center">
                                             <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-700 shadow-xs">
                                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -987,6 +1266,34 @@
                                 </div>
 
                                 <div>
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">NIP (Web Presensi)</label>
+                                        <button 
+                                            type="button" 
+                                            @click="loadAvailableAttendanceList()" 
+                                            class="text-[10px] text-emerald-600 hover:text-emerald-500 font-semibold cursor-pointer"
+                                        >
+                                            <span x-show="!isLoadingAttendanceList">Lihat NIP Tersedia</span>
+                                            <span x-show="isLoadingAttendanceList">Memuat...</span>
+                                        </button>
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        name="nip" 
+                                        x-model="form.nip" 
+                                        list="availableNips"
+                                        class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" 
+                                        placeholder="Contoh: HRD/27-03-2013"
+                                    >
+                                    <datalist id="availableNips">
+                                        <template x-for="item in availableAttendanceList" :key="item.nip">
+                                            <option :value="item.nip" x-text="item.username ? (item.nip + ' (' + item.username + ')') : item.nip"></option>
+                                        </template>
+                                    </datalist>
+                                    <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">🔑 Kunci sinkronisasi absensi dari Web Karyawan (CI4)</span>
+                                </div>
+
+                                <div>
                                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">No. Kontak / WhatsApp</label>
                                     <input type="text" name="phone" x-model="form.phone" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="08123456789">
                                     <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">📱 Nomor HP aktif karyawan</span>
@@ -1005,15 +1312,6 @@
                                     <input type="number" min="1" max="31" name="pay_day" x-model="form.pay_day" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="25">
                                 </div>
 
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Akun Kas/Bank Transfer</label>
-                                    <select name="asset_account_id" x-model="form.asset_account_id" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                                        @foreach($assetAccounts as $acc)
-                                            <option value="{{ $acc->id }}">{{ $acc->name }} ({{ $acc->code }})</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
                                 <!-- Banner Penjelasan Fokus Non-Gaji & Integrasi Penuh Slip Gaji -->
                                 <div class="sm:col-span-2 p-3.5 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 text-xs space-y-1.5">
                                     <div class="flex items-center gap-2 font-bold text-emerald-900 dark:text-emerald-300">
@@ -1021,7 +1319,7 @@
                                         <span x-text="isEdit ? 'Fokus Data Profil & Integrasi Slip Gaji' : 'Mekanisme Gaji Ditangani Penuh Oleh Slip Gaji'"></span>
                                     </div>
                                     <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                                        Form ini khusus menangani data non-gaji (identitas, peran, penugasan, kontak, tanggal gajian, dan akun transfer). Seluruh mekanisme penggajian (gaji pokok, upah harian, bonus disiplin, bonus tanggal merah, bonus poin, pembukuan beban, hingga penerbitan slip & ekspor PDF otomatis) sepenuhnya dikelola melalui tombol <strong>Slip Gaji</strong> saat pembayaran payroll.
+                                        Form ini khusus menangani data profil karyawan (identitas, peran, penugasan, kontak, dan tanggal jatuh tempo gajian). Seluruh mekanisme penggajian (termasuk pemilihan <strong>Akun Kas/Bank Transfer</strong> untuk pencairan dana) sepenuhnya ditentukan secara fleksibel saat memproses pembayaran <strong>Slip Gaji</strong>.
                                     </p>
                                 </div>
                             </div>
@@ -1031,6 +1329,129 @@
                                 <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-transform active:scale-95" x-text="isEdit ? 'Simpan Perubahan' : 'Tambah Karyawan'"></button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL ATUR TARIF GAJI POKOK & SHIFT KARYAWAN -->
+            <div x-show="showSalaryModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+                <div class="min-h-screen px-4 text-center flex items-center justify-center">
+                    <div class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity" @click="showSalaryModal = false"></div>
+                    <div class="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl relative z-10">
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">Atur Upah per Shift</h3>
+                                    <p class="text-[10px] text-slate-400 dark:text-slate-500">Penyesuaian tarif upah kerja per shift & insentif karyawan</p>
+                                </div>
+                            </div>
+                            <button @click="showSalaryModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+
+                        <template x-if="selectedEmployeeForSalary">
+                            <form :action="'{{ url('employees') }}/' + selectedEmployeeForSalary.id + '/salary'" method="POST" class="mt-4 space-y-4">
+                                @csrf
+                                <input type="hidden" name="_method" value="PATCH">
+
+                                <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                                    <div>
+                                        <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Karyawan</div>
+                                        <div class="text-xs font-bold text-slate-900 dark:text-white" x-text="selectedEmployeeForSalary.name"></div>
+                                        <div class="text-[10px] text-slate-500 dark:text-slate-400" x-text="selectedEmployeeForSalary.position"></div>
+                                    </div>
+                                    <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-300 dark:border-emerald-800" x-text="'#' + selectedEmployeeForSalary.id"></span>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <!-- Upah Pokok Per Shift -->
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Upah Per Shift / Hari</label>
+                                        <div class="relative">
+                                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-slate-400 font-bold">Rp</span>
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                step="1000" 
+                                                name="daily_rate" 
+                                                x-model.number="salaryForm.daily_rate" 
+                                                required 
+                                                class="w-full text-xs font-mono font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-9 pr-3 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                                                placeholder="100000"
+                                            >
+                                        </div>
+                                        <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">Tarif pokok yang dikalikan dengan total kehadiran shift saat gajian.</span>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                        <!-- Insentif Disiplin Per Shift -->
+                                        <div>
+                                            <label class="block text-[11px] font-bold text-teal-700 dark:text-teal-400 uppercase mb-1">Insentif Disiplin / Shift</label>
+                                            <div class="relative">
+                                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-[11px] text-slate-400 font-bold">Rp</span>
+                                                <input 
+                                                    type="number" 
+                                                    min="0" 
+                                                    step="1000" 
+                                                    name="discipline_rate" 
+                                                    x-model.number="salaryForm.discipline_rate" 
+                                                    class="w-full text-xs font-mono font-semibold rounded-xl border border-teal-200 dark:border-teal-800/60 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-9 pr-2.5 py-2 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                                    placeholder="10000"
+                                                >
+                                            </div>
+                                            <span class="text-[9px] text-slate-400 mt-0.5 block">Hadir tepat waktu</span>
+                                        </div>
+
+                                        <!-- Bonus Libur Nasional / Tanggal Merah -->
+                                        <div>
+                                            <label class="block text-[11px] font-bold text-indigo-700 dark:text-indigo-400 uppercase mb-1">Shift Tgl Merah / Libur</label>
+                                            <div class="relative">
+                                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-[11px] text-slate-400 font-bold">Rp</span>
+                                                <input 
+                                                    type="number" 
+                                                    min="0" 
+                                                    step="1000" 
+                                                    name="holiday_rate" 
+                                                    x-model.number="salaryForm.holiday_rate" 
+                                                    class="w-full text-xs font-mono font-semibold rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-9 pr-2.5 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                    placeholder="50000"
+                                                >
+                                            </div>
+                                            <span class="text-[9px] text-slate-400 mt-0.5 block">Uang lembur libur</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Live Preview Tarif Upah Per Shift -->
+                                <div class="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/40 text-xs space-y-1.5 font-mono">
+                                    <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                        <span>Tarif Pokok / Shift:</span>
+                                        <span class="font-bold text-slate-800 dark:text-slate-200" x-text="'Rp ' + (Number(salaryForm.daily_rate) || 0).toLocaleString('id-ID')"></span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                        <span>Insentif Disiplin / Shift:</span>
+                                        <span class="font-bold text-teal-700 dark:text-teal-400" x-text="'+ Rp ' + (Number(salaryForm.discipline_rate) || 0).toLocaleString('id-ID')"></span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-slate-800 dark:text-slate-200 pt-1.5 border-t border-emerald-200/50 dark:border-emerald-800/40 font-bold">
+                                        <span>Total Hadir Disiplin / Shift:</span>
+                                        <span class="text-emerald-600 dark:text-emerald-400 text-sm font-black" x-text="'Rp ' + calculateSalaryPreviewTotal().toLocaleString('id-ID')"></span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-indigo-700 dark:text-indigo-400 pt-1 border-t border-dashed border-emerald-200/50 dark:border-emerald-800/40">
+                                        <span class="text-[11px]">Tarif Shift Libur / Tgl Merah:</span>
+                                        <span class="font-bold" x-text="'Rp ' + (Number(salaryForm.holiday_rate) || 0).toLocaleString('id-ID')"></span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <button type="button" @click="showSalaryModal = false" class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Batal</button>
+                                    <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer">Simpan Tarif Shift</button>
+                                </div>
+                            </form>
+                        </template>
                     </div>
                 </div>
             </div>
@@ -1112,11 +1533,11 @@
                                 </div>
                                 <div>
                                     <h3 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                                        <span>Penerbitan Slip Gaji & Pembayaran</span>
+                                        <span x-text="existingSlip ? (isExistingPaid ? 'Rincian Slip Gaji (Terkunci)' : 'Edit Slip Gaji Karyawan') : 'Penerbitan Slip Gaji Karyawan'"></span>
                                         <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-300/60" x-text="employeeToPay ? employeeToPay.name : ''"></span>
                                     </h3>
                                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                        Perhitungan slip gaji bulanan resmi (Cut-off 26 - 25). Sistem akan otomatis membukukan beban gaji dan membuat file slip PDF.
+                                        Hitung atau perbarui slip gaji bulanan karyawan. Pembukuan transaksi jurnal keuangan dan download PDF dapat dilakukan di halaman lembar slip gaji.
                                     </p>
                                 </div>
                             </div>
@@ -1126,26 +1547,65 @@
                         </div>
 
                         <template x-if="employeeToPay">
-                            <form :action="'{{ url('employees') }}/' + employeeToPay.id + '/pay'" method="POST" class="mt-4 space-y-4">
+                            <form :action="'{{ url('employees') }}/' + employeeToPay.id + '/generate-slip'" method="POST" class="mt-4 space-y-4">
                                 @csrf
+
+                                <!-- Banner Status Slip Periode Terpilih -->
+                                <div x-show="existingSlip && isExistingPaid" x-cloak class="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                                    <div class="flex items-center gap-2.5">
+                                        <svg class="w-5 h-5 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                        <div>
+                                            <strong class="block font-bold">Slip Periode Ini Telah Dibukukan & Terkunci</strong>
+                                            <span class="text-rose-700 dark:text-rose-300">
+                                                Slip gaji periode <span class="font-bold font-mono" x-text="payForm.period"></span> telah dicatat ke transaksi jurnal (Ref: <span class="font-bold font-mono" x-text="existingSlip?.journal_entry?.reference ?? existingSlip?.journal_entry_id ?? '-'"></span>).
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <a 
+                                        :href="'{{ url('employees/payroll') }}/' + (existingSlip ? existingSlip.id : '') + '/slip'" 
+                                        target="_blank" 
+                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shrink-0 shadow-xs transition-all"
+                                    >
+                                        <span>Buka Lembar Slip ↗</span>
+                                    </a>
+                                </div>
+
+                                <div x-show="existingSlip && !isExistingPaid" x-cloak class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between gap-3 shadow-xs">
+                                    <div class="flex items-center gap-2.5">
+                                        <svg class="w-5 h-5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                        <div>
+                                            <strong class="block font-bold">Mode Edit: Ditemukan Slip Gaji Status Draft</strong>
+                                            <span class="text-amber-800 dark:text-amber-300">
+                                                Slip gaji periode <span class="font-bold font-mono" x-text="payForm.period"></span> belum dibukukan. Anda dapat mengubah data absensi atau tarif sebelum dicatat ke transaksi.
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <span class="px-2 py-0.5 rounded-lg bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold text-[10px] shrink-0 uppercase tracking-wider">
+                                        Draft
+                                    </span>
+                                </div>
 
                                 <!-- Informasi Periode & Metode -->
                                 <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
                                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <!-- Periode Slip (Bulan & Tahun) -->
                                         <div>
-                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Periode Slip</label>
-                                            <input type="text" name="period" x-model="payForm.period" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-emerald-500">
+                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Periode Slip (Bulan & Tahun)</label>
+                                            <input 
+                                                type="month" 
+                                                x-model="payForm.month_picker" 
+                                                @change="onMonthChange()" 
+                                                required 
+                                                class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                                            >
+                                            <div class="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-medium truncate" x-text="payForm.period"></div>
+                                            <!-- Hidden inputs untuk backend controller -->
+                                            <input type="hidden" name="period" :value="payForm.period">
+                                            <input type="hidden" name="period_start" :value="payForm.period_start">
+                                            <input type="hidden" name="period_end" :value="payForm.period_end">
                                         </div>
-                                        <div>
-                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Tgl Cut-off Mulai</label>
-                                            <input type="date" name="period_start" x-model="payForm.period_start" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-emerald-500">
-                                        </div>
-                                        <div>
-                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Tgl Cut-off Akhir</label>
-                                            <input type="date" name="period_end" x-model="payForm.period_end" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-emerald-500">
-                                        </div>
-                                    </div>
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+
+                                        <!-- Metode Pembayaran -->
                                         <div>
                                             <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Metode Pembayaran</label>
                                             <select name="payment_method" x-model="payForm.payment_method" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
@@ -1153,21 +1613,45 @@
                                                 <option value="Tunai">Tunai (Cash)</option>
                                             </select>
                                         </div>
+
+                                        <!-- Akun Kas / Bank (Kredit) -->
                                         <div>
-                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Akun Kas / Bank (Kredit)</label>
-                                            <div class="text-xs font-semibold text-slate-800 dark:text-slate-200 py-2 px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 truncate" x-text="employeeToPay.asset_account ? employeeToPay.asset_account.name : 'Kas Operasional'"></div>
+                                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Akun Pembayaran (Kas/Bank)</label>
+                                            <select name="asset_account_id" x-model="payForm.asset_account_id" required class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+                                                <template x-for="acc in assetAccounts" :key="acc.id">
+                                                    <option :value="acc.id" x-text="acc.name + ' (' + acc.code + ')'"></option>
+                                                </template>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Bagian 1: Input Absensi Bulanan (MANUAL INPUT) -->
+                                <!-- Bagian 1: Input Absensi Bulanan -->
                                 <div class="p-3.5 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 space-y-3">
-                                    <div class="flex items-center justify-between">
+                                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div class="flex items-center gap-2">
                                             <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-                                            <span class="text-xs font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider">Rekap Absensi Bulanan (Input Manual)</span>
+                                            <span class="text-xs font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider">Rekap Absensi Bulanan</span>
+                                            <span x-show="employeeToPay && employeeToPay.nip" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800 font-semibold" x-text="'NIP: ' + employeeToPay.nip"></span>
                                         </div>
-                                        <span class="text-[10px] text-amber-700 dark:text-amber-400 italic">Diisi manual dari rekap absensi HRD</span>
+                                        <button 
+                                            type="button" 
+                                            @click="syncAttendance()" 
+                                            :disabled="isSyncingAttendance"
+                                            class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold shadow-xs shadow-emerald-600/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
+                                            title="Tarik rekapitulasi kehadiran otomatis dari Web Karyawan (CI4)"
+                                        >
+                                            <svg class="w-3.5 h-3.5" :class="isSyncingAttendance ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                            <span x-text="isSyncingAttendance ? 'Menarik Data...' : '⚡ Tarik dari Web Absensi'"></span>
+                                        </button>
+                                    </div>
+
+                                    <!-- Alert Status Sinkronisasi -->
+                                    <div x-show="syncMessage" x-cloak class="p-2.5 rounded-xl text-xs font-medium transition-all" :class="syncSuccess ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800' : 'bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300/80 dark:border-rose-800'">
+                                        <div class="flex items-center gap-2">
+                                            <span x-text="syncSuccess ? '✅' : '⚠️'"></span>
+                                            <span x-text="syncMessage" class="flex-1"></span>
+                                        </div>
                                     </div>
 
                                     <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
@@ -1280,7 +1764,7 @@
                                         <div class="flex items-center gap-2">
                                             <span>📋 <strong class="text-white">Debit:</strong> Akun 5002 - Beban Gaji</span>
                                             <span class="text-slate-600">•</span>
-                                            <span>💳 <strong class="text-white">Kredit:</strong> <span class="font-semibold text-emerald-300" x-text="employeeToPay.asset_account ? employeeToPay.asset_account.name : 'Kas Operasional'"></span></span>
+                                            <span>💳 <strong class="text-white">Kredit:</strong> <span class="font-semibold text-emerald-300" x-text="getSelectedAccountName()"></span></span>
                                         </div>
                                     </div>
                                 </div>
@@ -1291,23 +1775,42 @@
                                     <input type="text" name="notes" x-model="payForm.notes" placeholder="Contoh: Termasuk penyesuaian lembur & bonus penjualan" class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
                                 </div>
 
-                                <!-- Info Pembuatan Slip PDF Otomatis -->
-                                <div class="p-3 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 text-emerald-900 dark:text-emerald-300 text-xs flex items-center gap-2.5">
-                                    <div class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                <!-- Info Pemisahan Generate Slip & Pembukuan Transaksi -->
+                                <div class="p-3 rounded-2xl bg-teal-500/10 dark:bg-teal-950/40 border border-teal-500/30 text-teal-900 dark:text-teal-300 text-xs flex items-center gap-2.5">
+                                    <div class="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                     </div>
                                     <span class="leading-relaxed">
-                                        <strong>Slip PDF Otomatis:</strong> Setelah disimpan, sistem akan langsung membuka lembar slip gaji dan mengunduh berkas PDF slip gaji secara otomatis.
+                                        <strong>Alur 2 Tahap:</strong> Menyimpan formulir ini akan membuat/memperbarui lembar slip gaji (Draft). Pembukuan pengeluaran keuangan dan unduh PDF slip dapat dilakukan di halaman lembar slip setelah Anda memeriksa rinciannya.
                                     </span>
                                 </div>
 
                                 <!-- Action Buttons -->
                                 <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
                                     <button type="button" @click="showPayModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">Batal</button>
-                                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:brightness-110 text-white text-xs font-bold shadow-md shadow-emerald-950/20 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                                        <span>Bayar & Buat Slip PDF Otomatis</span>
-                                    </button>
+
+                                    <template x-if="isExistingPaid">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs text-rose-500 font-semibold">Terkunci (Sudah Dibukukan)</span>
+                                            <a 
+                                                :href="'{{ url('employees/payroll') }}/' + (existingSlip ? existingSlip.id : '') + '/slip'" 
+                                                target="_blank" 
+                                                class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all"
+                                            >
+                                                Buka Lembar Slip ↗
+                                            </a>
+                                        </div>
+                                    </template>
+
+                                    <template x-if="!isExistingPaid">
+                                        <button 
+                                            type="submit" 
+                                            class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:brightness-110 text-white text-xs font-bold shadow-md shadow-emerald-950/20 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                            <span x-text="existingSlip ? 'Perbarui Slip Gaji' : 'Generate Slip Gaji'"></span>
+                                        </button>
+                                    </template>
                                 </div>
                             </form>
                         </template>

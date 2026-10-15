@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Tailor;
 use App\Models\TailorPayroll;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -15,11 +16,73 @@ use Illuminate\Support\Str;
 class TailorPayrollController extends Controller
 {
     /**
-     * Tampilkan riwayat slip upah penjahit dan ringkasan biaya tenaga kerja borongan.
+     * Tampilkan data penjahit terdaftar, riwayat slip upah borongan, dan ringkasan biaya tenaga kerja.
      */
     public function index(Request $request)
     {
-        $query = TailorPayroll::with(['employee', 'items', 'advances', 'journalEntry'])
+        // 1. Data Penjahit Terdaftar
+        $tailorsQuery = Tailor::with(['latestPayroll'])->withCount('payrolls');
+
+        if ($request->filled('tailor_search')) {
+            $search = $request->input('tailor_search');
+            $tailorsQuery->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('payment_day', 'like', "%{$search}%")
+                    ->orWhere('bank_account_number', 'like', "%{$search}%");
+            });
+        }
+
+        $tailors = $tailorsQuery->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+            ->orderBy('name')
+            ->get();
+
+        $totalActiveTailors = Tailor::where('status', 'active')->count();
+        $totalRegisteredTailors = Tailor::count();
+
+        // 2. Data Statistik Bulan Ini
+        $thisMonth = now();
+        $monthlyPayrolls = TailorPayroll::whereYear('payroll_date', $thisMonth->year)
+            ->whereMonth('payroll_date', $thisMonth->month)
+            ->get();
+
+        $totalWagesThisMonth = $monthlyPayrolls->sum('total_wage');
+        $totalTakeHomePayThisMonth = $monthlyPayrolls->sum('take_home_pay');
+        $totalBonThisMonth = $monthlyPayrolls->sum('total_bon');
+        $totalPiecesThisMonth = $monthlyPayrolls->sum('total_pieces');
+
+        // Kalkulasi akumulasi bulanan per penjahit
+        $tailorMonthlyStats = [];
+        foreach ($monthlyPayrolls as $p) {
+            $keys = array_filter([$p->tailor_id, strtolower(trim($p->tailor_name))]);
+            foreach ($keys as $k) {
+                if (! isset($tailorMonthlyStats[$k])) {
+                    $tailorMonthlyStats[$k] = [
+                        'pieces' => 0,
+                        'take_home_pay' => 0,
+                        'slips_count' => 0,
+                        'latest_date' => null,
+                    ];
+                }
+                $tailorMonthlyStats[$k]['pieces'] += (int) $p->total_pieces;
+                $tailorMonthlyStats[$k]['take_home_pay'] += (float) $p->take_home_pay;
+                $tailorMonthlyStats[$k]['slips_count']++;
+                if (! $tailorMonthlyStats[$k]['latest_date'] || $p->payroll_date > $tailorMonthlyStats[$k]['latest_date']) {
+                    $tailorMonthlyStats[$k]['latest_date'] = $p->payroll_date;
+                }
+            }
+        }
+
+        foreach ($tailors as $t) {
+            $stat = $tailorMonthlyStats[$t->id] ?? $tailorMonthlyStats[strtolower(trim($t->name))] ?? null;
+            $t->month_pieces = $stat['pieces'] ?? 0;
+            $t->month_take_home_pay = $stat['take_home_pay'] ?? 0;
+            $t->month_slips_count = $stat['slips_count'] ?? 0;
+            $t->month_latest_date = $stat['latest_date'] ?? null;
+        }
+
+        // 3. Riwayat Slip Upah (Tab 2)
+        $query = TailorPayroll::with(['tailor', 'employee', 'items', 'advances', 'journalEntry'])
             ->latest('payroll_date');
 
         if ($request->filled('search')) {
@@ -38,36 +101,43 @@ class TailorPayrollController extends Controller
 
         $payrolls = $query->paginate(15)->withQueryString();
 
-        // Statistik
-        $thisMonth = now();
-        $monthlyPayrolls = TailorPayroll::whereYear('payroll_date', $thisMonth->year)
-            ->whereMonth('payroll_date', $thisMonth->month)
-            ->get();
-
-        $totalWagesThisMonth = $monthlyPayrolls->sum('total_wage');
-        $totalTakeHomePayThisMonth = $monthlyPayrolls->sum('take_home_pay');
-        $totalBonThisMonth = $monthlyPayrolls->sum('total_bon');
-        $totalPiecesThisMonth = $monthlyPayrolls->sum('total_pieces');
-
         // Master tarif upah penjahit standar (Direct Labor)
         $laborMaterials = TailorPayroll::getLaborRates();
 
+        // Tab yang aktif
+        $activeTab = $request->query('tab', ($request->filled('search') || $request->filled('month')) ? 'payrolls' : 'tailors');
+
         return view('tailor-payrolls.index', compact(
+            'tailors',
+            'totalActiveTailors',
+            'totalRegisteredTailors',
             'payrolls',
             'totalWagesThisMonth',
             'totalTakeHomePayThisMonth',
             'totalBonThisMonth',
             'totalPiecesThisMonth',
-            'laborMaterials'
+            'laborMaterials',
+            'activeTab'
         ));
     }
 
     /**
      * Tampilkan formulir pembuatan slip upah penjahit baru.
      */
-    public function create()
+    public function create(Request $request)
     {
-        // Ambil daftar karyawan (terutama penjahit / staff)
+        // Ambil daftar penjahit aktif
+        $tailors = Tailor::where('status', 'active')
+            ->orderBy('name')
+            ->get();
+
+        // Penjahit yang dipilih jika diarahkan dari tombol aksi tabel
+        $selectedTailor = null;
+        if ($request->filled('tailor_id')) {
+            $selectedTailor = Tailor::find($request->input('tailor_id'));
+        }
+
+        // Ambil daftar karyawan (jika relevan)
         $employees = Employee::where('status', 'active')
             ->orderBy('name')
             ->get();
@@ -86,6 +156,8 @@ class TailorPayrollController extends Controller
         $defaultPeriodLabel = $today->translatedFormat('l, j F Y');
 
         return view('tailor-payrolls.create', compact(
+            'tailors',
+            'selectedTailor',
             'employees',
             'laborMaterials',
             'paymentAccounts',
@@ -100,6 +172,7 @@ class TailorPayrollController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'tailor_id' => 'nullable|exists:tailors,id',
             'employee_id' => 'nullable|exists:employees,id',
             'tailor_name' => 'required|string|max:255',
             'payroll_date' => 'required|date',
@@ -174,6 +247,7 @@ class TailorPayrollController extends Controller
 
             // Buat Record Header Slip Upah
             $tailorPayroll = TailorPayroll::create([
+                'tailor_id' => $validated['tailor_id'] ?? null,
                 'employee_id' => $validated['employee_id'] ?? null,
                 'tailor_name' => trim($validated['tailor_name']),
                 'payroll_date' => $payrollDate->format('Y-m-d'),

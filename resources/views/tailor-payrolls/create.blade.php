@@ -1,11 +1,12 @@
 <x-app-layout>
     <div class="py-6 sm:py-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6"
          x-data="{
-             tailorName: 'Penjahit Adriana',
+             tailorId: '{{ $selectedTailor?->id ?? ($tailors->first()?->id ?? '') }}',
+             tailorName: '{{ $selectedTailor?->name ?? ($tailors->first()?->name ?? 'Penjahit Adriana') }}',
              selectedEmployeeId: '',
              payrollDate: '{{ $defaultDate }}',
              periodLabel: '{{ $defaultPeriodLabel }}',
-             paymentMethod: 'Tunai',
+             paymentMethod: '{{ $selectedTailor?->bank_name ? 'Transfer Bank ' . $selectedTailor->bank_name : 'Tunai' }}',
              accountId: '{{ $paymentAccounts->first()?->id }}',
              notes: '',
 
@@ -118,6 +119,18 @@
                  return new Intl.NumberFormat('id-ID').format(val || 0);
              },
 
+             onTailorSelect(event) {
+                 const opt = event.target.selectedOptions[0];
+                 if (opt && opt.value && opt.value !== 'custom') {
+                     this.tailorName = opt.dataset.name || '';
+                     if (opt.dataset.bank) {
+                         this.paymentMethod = 'Transfer ' + opt.dataset.bank;
+                     }
+                 } else if (opt && opt.value === 'custom') {
+                     this.tailorName = '';
+                 }
+             },
+
              onEmployeeSelect(event) {
                  const opt = event.target.selectedOptions[0];
                  if (opt && opt.value) {
@@ -131,9 +144,9 @@
         <div class="flex items-center justify-between">
             <div>
                 <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-1">
-                    <a href="{{ route('tailor-payrolls.index') }}" class="hover:text-amber-600">Upah Penjahit</a>
+                    <a href="{{ route('tailor-payrolls.index') }}" class="hover:text-emerald-400">Upah Penjahit</a>
                     <span>/</span>
-                    <span class="text-amber-600 font-semibold">Buat Slip Upah Baru</span>
+                    <span class="text-emerald-400 font-semibold">Buat Slip Upah Baru</span>
                 </div>
                 <h1 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                     Kalkulator & Form Slip Upah Penjahit
@@ -161,36 +174,42 @@
         <form method="POST" action="{{ route('tailor-payrolls.store') }}" class="space-y-6">
             @csrf
 
-            <!-- Form Kontrol Atas (Pilih Karyawan / Nama Penjahit & Tanggal) -->
+            <!-- Form Kontrol Atas (Pilih Penjahit Terdaftar / Nama Penjahit & Tanggal) -->
             <div class="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 shadow-xs">
                 <h2 class="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
                     Informasi Penjahit & Tanggal
                 </h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <!-- 1. Pilih Karyawan Terdaftar (Opsional) -->
+                    <!-- 1. Pilih Penjahit Terdaftar -->
                     <div>
                         <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Pilih Karyawan (Jika Ada)
+                            Pilih Penjahit Terdaftar <span class="text-rose-500">*</span>
                         </label>
                         <select 
-                            x-model="selectedEmployeeId"
-                            @change="onEmployeeSelect($event)"
-                            class="w-full text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-amber-500"
+                            x-model="tailorId"
+                            @change="onTailorSelect($event)"
+                            class="w-full text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-amber-500 font-medium"
                         >
-                            <option value="">-- Input Bebas (Borongan Luar) --</option>
-                            @foreach ($employees as $emp)
-                                <option value="{{ $emp->id }}" data-name="{{ $emp->name }}">
-                                    {{ $emp->name }} ({{ $emp->position }})
+                            <option value="">-- Pilih Penjahit --</option>
+                            @foreach ($tailors as $t)
+                                <option value="{{ $t->id }}" 
+                                    data-name="{{ $t->name }}"
+                                    data-bank="{{ $t->bank_name }}"
+                                    data-account="{{ $t->bank_account_number }}"
+                                    {{ (optional($selectedTailor)->id == $t->id) ? 'selected' : '' }}
+                                >
+                                    {{ $t->name }} ({{ $t->formatted_payment_schedule }})
                                 </option>
                             @endforeach
+                            <option value="custom">-- Penjahit Luar / Input Bebas --</option>
                         </select>
-                        <input type="hidden" name="employee_id" :value="selectedEmployeeId || ''">
+                        <input type="hidden" name="tailor_id" :value="tailorId && tailorId !== 'custom' ? tailorId : ''">
                     </div>
 
                     <!-- 2. Nama Penjahit (Muncul di Header Slip) -->
                     <div>
                         <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            Nama Penjahit <span class="text-rose-500">*</span>
+                            Nama Penjahit (di Slip) <span class="text-rose-500">*</span>
                         </label>
                         <input 
                             type="text" 
@@ -554,7 +573,7 @@
                     </div>
                     <button 
                         type="submit" 
-                        class="px-6 py-3 rounded-xl bg-amber-500 hover:brightness-110 text-white font-black text-sm shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        class="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                         <span>Simpan & Cetak Slip Upah</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
