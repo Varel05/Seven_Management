@@ -58,6 +58,72 @@
                      notes: tailor.notes || ''
                  };
                  this.showTailorModal = true;
+             },
+
+             showRatesModal: false,
+             rates: @js($laborMaterials->map(fn($lm) => [
+                 'id' => $lm->id ?? null,
+                 'code' => $lm->code,
+                 'name' => $lm->name,
+                 'unit' => $lm->unit ?? 'pcs',
+                 'standard_cost' => (float) $lm->standard_cost,
+             ])->values()),
+
+             addCustomRate() {
+                 const rnd = Math.floor(100 + Math.random() * 900);
+                 this.rates.push({
+                     id: null,
+                     code: 'LAB-JHT-ITEM' + rnd,
+                     name: 'Upah Penjahit ',
+                     unit: 'pcs',
+                     standard_cost: 0
+                 });
+             },
+
+             removeRate(index) {
+                 if (this.rates.length > 1) {
+                     this.rates.splice(index, 1);
+                 }
+             },
+
+             showProductRateModal: false,
+             isEditProductRate: false,
+             productRateModalTitle: 'Tambah Tarif Produk Baru',
+             productRateFormAction: '{{ route('tailor-labor-rates.store') }}',
+             productRateForm: {
+                 id: null,
+                 code: '',
+                 name: '',
+                 unit: 'pcs',
+                 standard_cost: 0
+             },
+
+             openCreateProductRate() {
+                 this.isEditProductRate = false;
+                 this.productRateModalTitle = 'Tambah Tarif Produk Baru';
+                 this.productRateFormAction = '{{ route('tailor-labor-rates.store') }}';
+                 this.productRateForm = {
+                     id: null,
+                     code: '',
+                     name: '',
+                     unit: 'pcs',
+                     standard_cost: 0
+                 };
+                 this.showProductRateModal = true;
+             },
+
+             openEditProductRate(rate) {
+                 this.isEditProductRate = true;
+                 this.productRateModalTitle = 'Edit Tarif Produk: ' + rate.name;
+                 this.productRateFormAction = '{{ url('tailor-labor-rates') }}/' + rate.id;
+                 this.productRateForm = {
+                     id: rate.id,
+                     code: rate.code,
+                     name: rate.name,
+                     unit: rate.unit || 'pcs',
+                     standard_cost: parseFloat(rate.standard_cost) || 0
+                 };
+                 this.showProductRateModal = true;
              }
          }">
 
@@ -194,25 +260,91 @@
                 <div class="flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
                     <h2 class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                        Tarif Standar Upah Penjahit Borongan (Acuan HPP)
+                        Tarif Standar Upah Penjahit Borongan per Produk (Acuan HPP)
                     </h2>
                 </div>
-                <span class="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Standar Ongkos Jahit per Potong (Pcs)
-                </span>
+                <div class="flex items-center gap-2">
+                    <button 
+                        type="button" 
+                        @click="openCreateProductRate()"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm shadow-emerald-950/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>+ Tambah Produk</span>
+                    </button>
+                    <button 
+                        type="button" 
+                        @click="showRatesModal = true"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        <span>Kelola Massal</span>
+                    </button>
+                </div>
             </div>
+
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
                 @foreach ($laborMaterials as $lm)
-                    <div class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/60 dark:border-slate-800 shadow-2xs">
-                        <span class="text-[10px] font-mono text-slate-400 block">{{ $lm->code }}</span>
-                        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 block truncate" title="{{ $lm->name }}">
-                            {{ str_replace(['Upah Penjahit ', 'Biaya '], '', $lm->name) }}
-                        </span>
-                        <span class="text-xs font-extrabold text-amber-600 dark:text-amber-400 mt-1 block">
-                            {{ $lm->formatted_standard_cost }} <span class="text-[9px] font-normal text-slate-400">/{{ $lm->unit }}</span>
-                        </span>
+                    <div class="group relative p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/60 dark:border-slate-800 shadow-2xs hover:border-amber-400 dark:hover:border-amber-500/50 transition-all flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between gap-1 mb-1">
+                                <span class="text-[10px] font-mono text-slate-400 truncate">{{ $lm->code }}</span>
+                                <div class="flex items-center gap-0.5 opacity-90 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        type="button" 
+                                        @click='openEditProductRate(@json($lm))'
+                                        class="p-1 rounded text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
+                                        title="Edit Tarif Produk Ini"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </button>
+                                    @if ($lm->id)
+                                        <form method="POST" action="{{ route('tailor-labor-rates.destroy', $lm->id) }}" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus / menonaktifkan tarif {{ $lm->name }}?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button 
+                                                type="submit" 
+                                                class="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                                title="Hapus Produk"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+                            </div>
+                            <span class="text-xs font-bold text-slate-800 dark:text-slate-100 block truncate" title="{{ $lm->name }}">
+                                {{ $lm->clean_name ?? str_replace(['Upah Penjahit ', 'Biaya '], '', $lm->name) }}
+                            </span>
+                        </div>
+                        <div class="mt-2 pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <span class="text-xs font-extrabold text-amber-600 dark:text-amber-400">
+                                {{ $lm->formatted_standard_cost }}
+                            </span>
+                            <span class="text-[9px] font-semibold text-slate-400">/{{ $lm->unit }}</span>
+                        </div>
                     </div>
                 @endforeach
+
+                <!-- Tombol Shortcut Tambah Produk di Grid -->
+                <button 
+                    type="button" 
+                    @click="openCreateProductRate()"
+                    class="p-2.5 rounded-xl border border-dashed border-amber-300/80 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-950/10 hover:bg-amber-100/50 dark:hover:bg-amber-950/30 text-amber-700 dark:text-amber-400 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all hover:scale-[1.02] cursor-pointer min-h-[75px]"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span class="text-[11px]">+ Tambah Produk</span>
+                </button>
             </div>
         </div>
 
@@ -822,6 +954,341 @@
                             </button>
                             <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer">
                                 <span x-text="isEditTailor ? 'Simpan Perubahan' : 'Daftarkan Penjahit'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL PENGATURAN TARIF STANDAR UPAH PENJAHIT (HARGA PER PCS) -->
+        <div 
+            x-show="showRatesModal" 
+            x-cloak
+            class="fixed inset-0 z-50 overflow-y-auto" 
+            aria-labelledby="modal-title" 
+            role="dialog" 
+            aria-modal="true"
+        >
+            <div class="flex items-center justify-center min-h-screen p-4 text-center sm:p-0">
+                <div 
+                    x-show="showRatesModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0"
+                    x-transition:enter-end="opacity-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0"
+                    class="fixed inset-0 bg-slate-950/80 backdrop-blur-xs transition-opacity" 
+                    @click="showRatesModal = false"
+                ></div>
+
+                <div 
+                    x-show="showRatesModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="relative bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-800 rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:max-w-2xl sm:w-full p-6 space-y-5"
+                >
+                    <!-- Header Modal -->
+                    <div class="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                        <div class="flex items-center gap-3">
+                            <span class="p-2.5 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </span>
+                            <div>
+                                <h3 class="text-base font-extrabold text-slate-900 dark:text-white">
+                                    Atur Tarif Standar Upah Penjahit (Harga per Pcs)
+                                </h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    Nilai ini akan otomatis terinput saat membuat lembar slip gaji baru (dapat tetap diedit per slip).
+                                </p>
+                            </div>
+                        </div>
+                        <button 
+                            type="button" 
+                            @click="showRatesModal = false" 
+                            class="p-1 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Form Pengaturan Tarif -->
+                    <form method="POST" action="{{ route('tailor-payrolls.labor-rates.update') }}" class="space-y-4">
+                        @csrf
+
+                        <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                            <template x-for="(rate, index) in rates" :key="index">
+                                <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                    <input type="hidden" :name="'rates[' + index + '][id]'" :value="rate.id">
+                                    
+                                    <!-- Kode Item -->
+                                    <div class="sm:w-36 shrink-0">
+                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Kode Item</label>
+                                        <input 
+                                            type="text" 
+                                            :name="'rates[' + index + '][code]'" 
+                                            x-model="rate.code" 
+                                            required 
+                                            class="w-full text-xs font-mono font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-2.5 py-1.5 focus:ring-amber-500"
+                                            placeholder="LAB-JHT-..."
+                                        >
+                                    </div>
+
+                                    <!-- Nama Item -->
+                                    <div class="flex-1">
+                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nama Pekerjaan / Jenis Pakaian</label>
+                                        <input 
+                                            type="text" 
+                                            :name="'rates[' + index + '][name]'" 
+                                            x-model="rate.name" 
+                                            required 
+                                            class="w-full text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-2.5 py-1.5 focus:ring-amber-500"
+                                            placeholder="Upah Penjahit ..."
+                                        >
+                                    </div>
+
+                                    <!-- Satuan -->
+                                    <div class="sm:w-16 shrink-0">
+                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Satuan</label>
+                                        <input 
+                                            type="text" 
+                                            :name="'rates[' + index + '][unit]'" 
+                                            x-model="rate.unit" 
+                                            required 
+                                            class="w-full text-xs text-center font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-2 py-1.5 focus:ring-amber-500"
+                                            placeholder="pcs"
+                                        >
+                                    </div>
+
+                                    <!-- Biaya / Tarif per Pcs -->
+                                    <div class="sm:w-44 shrink-0">
+                                        <label class="block text-[10px] font-bold text-amber-500 uppercase mb-1">Harga per Pcs (Rp)</label>
+                                        <div class="relative">
+                                            <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-xs text-amber-500 font-bold">Rp</span>
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                step="500" 
+                                                :name="'rates[' + index + '][standard_cost]'" 
+                                                x-model.number="rate.standard_cost" 
+                                                required 
+                                                class="w-full text-xs font-mono font-bold text-right pl-8 pr-2.5 py-1.5 rounded-xl border border-amber-300 dark:border-amber-600/50 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-amber-500"
+                                                placeholder="0"
+                                            >
+                                        </div>
+                                    </div>
+
+                                    <!-- Hapus Row -->
+                                    <div class="sm:pt-4 flex items-center justify-end">
+                                        <button 
+                                            type="button" 
+                                            @click="removeRate(index)" 
+                                            x-show="rates.length > 1"
+                                            class="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                                            title="Hapus Jenis Tarif"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Tombol Tambah Item Baru -->
+                        <div class="flex items-center justify-between pt-1">
+                            <button 
+                                type="button" 
+                                @click="addCustomRate()" 
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 hover:bg-amber-100 text-xs font-bold transition-colors cursor-pointer"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                                <span>+ Tambah Jenis Jahitan Baru</span>
+                            </button>
+                        </div>
+
+                        <!-- Footer Modal Buttons -->
+                        <div class="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <button 
+                                type="button" 
+                                @click="showRatesModal = false" 
+                                class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            >
+                                Batal
+                            </button>
+                            <button 
+                                type="submit" 
+                                class="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold shadow-md shadow-amber-900/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span>Simpan Perubahan Tarif</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL TAMBAH & EDIT TARIF STANDAR PRODUK -->
+        <div 
+            x-show="showProductRateModal" 
+            x-cloak
+            class="fixed inset-0 z-50 overflow-y-auto" 
+            aria-labelledby="modal-title" 
+            role="dialog" 
+            aria-modal="true"
+        >
+            <div class="flex items-center justify-center min-h-screen p-4 text-center sm:p-0">
+                <div 
+                    x-show="showProductRateModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0"
+                    x-transition:enter-end="opacity-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0"
+                    class="fixed inset-0 bg-slate-950/80 backdrop-blur-xs transition-opacity" 
+                    @click="showProductRateModal = false"
+                ></div>
+
+                <div 
+                    x-show="showProductRateModal"
+                    x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:max-w-md sm:w-full p-6 space-y-5"
+                >
+                    <!-- Header Modal -->
+                    <div class="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                        <div class="flex items-center gap-3">
+                            <span class="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                </svg>
+                            </span>
+                            <div>
+                                <h3 class="text-base font-extrabold text-slate-900 dark:text-white" x-text="productRateModalTitle"></h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    Standar upah borongan jahit per potong (pcs).
+                                </p>
+                            </div>
+                        </div>
+                        <button 
+                            type="button" 
+                            @click="showProductRateModal = false" 
+                            class="p-1 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Form Tambah/Edit Produk -->
+                    <form method="POST" :action="productRateFormAction" class="space-y-4">
+                        @csrf
+                        <template x-if="isEditProductRate">
+                            <input type="hidden" name="_method" value="PUT">
+                        </template>
+
+                        <!-- Kode Produk -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                                Kode Item / Produk
+                            </label>
+                            <input 
+                                type="text" 
+                                name="code" 
+                                x-model="productRateForm.code" 
+                                placeholder="Misal: LAB-JHT-GMS (Otomatis jika dikosongkan)" 
+                                class="w-full text-xs font-mono font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 focus:ring-emerald-500"
+                            >
+                        </div>
+
+                        <!-- Nama Produk -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                                Nama Produk / Jenis Jahitan <span class="text-rose-500">*</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                name="name" 
+                                x-model="productRateForm.name" 
+                                required
+                                placeholder="Misal: Upah Penjahit Gamis / Celana Kulot" 
+                                class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 focus:ring-emerald-500"
+                            >
+                        </div>
+
+                        <!-- Grid: Satuan & Tarif per Pcs -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                                    Satuan <span class="text-rose-500">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    name="unit" 
+                                    x-model="productRateForm.unit" 
+                                    required
+                                    placeholder="pcs" 
+                                    class="w-full text-xs text-center font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 focus:ring-emerald-500"
+                                >
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-amber-500 uppercase mb-1">
+                                    Tarif per Pcs (Rp) <span class="text-rose-500">*</span>
+                                </label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs text-amber-500 font-bold">Rp</span>
+                                    <input 
+                                        type="number" 
+                                        name="standard_cost" 
+                                        x-model.number="productRateForm.standard_cost" 
+                                        min="0"
+                                        step="500"
+                                        required
+                                        placeholder="0" 
+                                        class="w-full text-xs font-mono font-bold text-right pl-9 pr-3 py-2 rounded-xl border border-amber-300 dark:border-amber-600/50 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-amber-500"
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Footer Modal Buttons -->
+                        <div class="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <button 
+                                type="button" 
+                                @click="showProductRateModal = false" 
+                                class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            >
+                                Batal
+                            </button>
+                            <button 
+                                type="submit" 
+                                class="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span x-text="isEditProductRate ? 'Simpan Perubahan' : 'Tambahkan Produk'"></span>
                             </button>
                         </div>
                     </form>

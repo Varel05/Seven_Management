@@ -8,6 +8,7 @@ use App\Http\Controllers\JournalExportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
 use App\Http\Controllers\TailorController;
+use App\Http\Controllers\TailorLaborRateController;
 use App\Http\Controllers\TailorPayrollController;
 use App\Http\Controllers\TaxController;
 use App\Models\JournalEntry;
@@ -93,6 +94,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/tailors', [TailorController::class, 'store'])->name('tailors.store');
     Route::put('/tailors/{tailor}', [TailorController::class, 'update'])->name('tailors.update');
     Route::delete('/tailors/{tailor}', [TailorController::class, 'destroy'])->name('tailors.destroy');
+    Route::post('/tailor-labor-rates', [TailorLaborRateController::class, 'store'])->name('tailor-labor-rates.store');
+    Route::put('/tailor-labor-rates/{laborRate}', [TailorLaborRateController::class, 'update'])->name('tailor-labor-rates.update');
+    Route::delete('/tailor-labor-rates/{laborRate}', [TailorLaborRateController::class, 'destroy'])->name('tailor-labor-rates.destroy');
+    Route::post('/tailor-payrolls/labor-rates', [TailorPayrollController::class, 'updateLaborRates'])->name('tailor-payrolls.labor-rates.update');
     Route::resource('tailor-payrolls', TailorPayrollController::class);
 
     // Manajemen & Pelaporan Pajak PPh Final UMKM (Halaman Khusus)

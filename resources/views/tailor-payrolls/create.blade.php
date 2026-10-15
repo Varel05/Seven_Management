@@ -10,31 +10,31 @@
              accountId: '{{ $paymentAccounts->first()?->id }}',
              notes: '',
 
-             // Rincian Item Jahitan Standar
+             // Rincian Item Jahitan Standar (Otomatis terisi dari Tarif Standar, tetap dapat diedit per slip)
              items: [
                  {
-                     material_id: null,
+                     material_id: {{ json_encode($laborMaterials->firstWhere('code', 'LAB-JHT-REG')?->id ?? null) }},
                      item_name: 'Jas Reguler',
                      quantity: 0,
-                     rate_per_piece: {{ $laborMaterials->firstWhere('code', 'LAB-JHT-REG')?->standard_cost ?? 50000 }}
+                     rate_per_piece: {{ (float) ($laborMaterials->firstWhere('code', 'LAB-JHT-REG')?->standard_cost ?? 50000) }}
                  },
                  {
-                     material_id: null,
+                     material_id: {{ json_encode($laborMaterials->firstWhere('code', 'LAB-JHT-VST')?->id ?? null) }},
                      item_name: 'Vest',
                      quantity: 0,
-                     rate_per_piece: {{ $laborMaterials->firstWhere('code', 'LAB-JHT-VST')?->standard_cost ?? 37000 }}
+                     rate_per_piece: {{ (float) ($laborMaterials->firstWhere('code', 'LAB-JHT-VST')?->standard_cost ?? 37000) }}
                  },
                  {
-                     material_id: null,
+                     material_id: {{ json_encode($laborMaterials->firstWhere('code', 'LAB-JHT-PRM')?->id ?? null) }},
                      item_name: 'Jas Premium',
                      quantity: 0,
-                     rate_per_piece: {{ $laborMaterials->firstWhere('code', 'LAB-JHT-PRM')?->standard_cost ?? 150000 }}
+                     rate_per_piece: {{ (float) ($laborMaterials->firstWhere('code', 'LAB-JHT-PRM')?->standard_cost ?? 150000) }}
                  },
                  {
-                     material_id: null,
+                     material_id: {{ json_encode($laborMaterials->firstWhere('code', 'LAB-JHT-REV')?->id ?? null) }},
                      item_name: 'Revisi',
                      quantity: 0,
-                     rate_per_piece: {{ $laborMaterials->firstWhere('code', 'LAB-JHT-REV')?->standard_cost ?? 0 }}
+                     rate_per_piece: {{ (float) ($laborMaterials->firstWhere('code', 'LAB-JHT-REV')?->standard_cost ?? 0) }}
                  }
              ],
 
@@ -47,10 +47,10 @@
              addItemFromHpp(event) {
                  const select = event.target;
                  const opt = select.selectedOptions[0];
-                 if (!opt.value) return;
+                 if (!opt || !opt.dataset.name) return;
 
                  this.items.push({
-                     material_id: opt.value,
+                     material_id: opt.value ? parseInt(opt.value) || null : null,
                      item_name: opt.dataset.name,
                      quantity: 1,
                      rate_per_piece: parseFloat(opt.dataset.cost || 0)
@@ -391,7 +391,7 @@
                                 >
                                     <option value="">-- Pilih Item Tarif Standar --</option>
                                     @foreach ($laborMaterials as $lm)
-                                        <option value="" data-name="{{ str_replace(['Upah Penjahit ', 'Biaya '], '', $lm->name) }}" data-cost="{{ $lm->standard_cost }}">
+                                        <option value="{{ $lm->id ?? '' }}" data-name="{{ $lm->clean_name ?? str_replace(['Upah Penjahit ', 'Biaya '], '', $lm->name) }}" data-cost="{{ $lm->standard_cost }}">
                                             {{ $lm->name }} (Rp {{ number_format($lm->standard_cost, 0, ',', '.') }})
                                         </option>
                                     @endforeach

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class TailorPayroll extends Model
 {
@@ -112,11 +113,27 @@ class TailorPayroll extends Model
      */
     public static function getLaborRates(): Collection
     {
+        try {
+            if (Schema::hasTable('tailor_labor_rates')) {
+                $rates = TailorLaborRate::where('is_active', true)
+                    ->orderBy('order')
+                    ->orderBy('id')
+                    ->get();
+
+                if ($rates->isNotEmpty()) {
+                    return $rates;
+                }
+            }
+        } catch (\Throwable) {
+            // Gunakan fallback jika tabel belum siap
+        }
+
         return collect(self::STANDARD_RATES)->map(function ($r) {
             return (object) [
                 'id' => null,
                 'code' => $r['code'],
                 'name' => $r['name'],
+                'clean_name' => str_replace(['Upah Penjahit ', 'Biaya '], '', $r['name']),
                 'unit' => $r['unit'],
                 'standard_cost' => $r['standard_cost'],
                 'formatted_standard_cost' => 'Rp '.number_format($r['standard_cost'], 0, ',', '.'),

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\Tailor;
+use App\Models\TailorLaborRate;
 use App\Models\TailorPayroll;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -363,5 +364,121 @@ class TailorPayrollTest extends TestCase
         $this->assertEquals($tailor->id, $payroll->tailor_id);
         $this->assertEquals(300000, (float) $payroll->take_home_pay);
         $this->assertEquals('Penjahit Danang', $payroll->tailor->name);
+    }
+
+    public function test_can_update_tailor_standard_labor_rates(): void
+    {
+        $payload = [
+            'rates' => [
+                [
+                    'code' => 'LAB-JHT-REG',
+                    'name' => 'Upah Penjahit Jas Reguler',
+                    'unit' => 'pcs',
+                    'standard_cost' => 55000,
+                ],
+                [
+                    'code' => 'LAB-JHT-VST',
+                    'name' => 'Upah Penjahit Rompi / Vest',
+                    'unit' => 'pcs',
+                    'standard_cost' => 40000,
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($this->user)
+            ->post(route('tailor-payrolls.labor-rates.update'), $payload);
+
+        $response->assertRedirect(route('tailor-payrolls.index'));
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseHas('tailor_labor_rates', [
+            'code' => 'LAB-JHT-REG',
+            'standard_cost' => 55000,
+        ]);
+        $this->assertDatabaseHas('tailor_labor_rates', [
+            'code' => 'LAB-JHT-VST',
+            'standard_cost' => 40000,
+        ]);
+
+        // Halaman create harus otomatis memuat tarif baru
+        $createResponse = $this->actingAs($this->user)->get(route('tailor-payrolls.create'));
+        $createResponse->assertStatus(200);
+        $createResponse->assertSee('55000');
+    }
+
+    public function test_can_add_new_product_labor_rate(): void
+    {
+        $payload = [
+            'code' => 'LAB-JHT-GMS',
+            'name' => 'Upah Penjahit Gamis Exclusive',
+            'unit' => 'pcs',
+            'standard_cost' => 65000,
+        ];
+
+        $response = $this->actingAs($this->user)
+            ->post(route('tailor-labor-rates.store'), $payload);
+
+        $response->assertRedirect(route('tailor-payrolls.index'));
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseHas('tailor_labor_rates', [
+            'code' => 'LAB-JHT-GMS',
+            'name' => 'Upah Penjahit Gamis Exclusive',
+            'standard_cost' => 65000,
+        ]);
+    }
+
+    public function test_can_edit_existing_product_labor_rate(): void
+    {
+        $rate = TailorLaborRate::create([
+            'code' => 'LAB-JHT-TEST',
+            'name' => 'Upah Penjahit Kemeja',
+            'unit' => 'pcs',
+            'standard_cost' => 35000,
+            'order' => 10,
+            'is_active' => true,
+        ]);
+
+        $payload = [
+            'code' => 'LAB-JHT-TEST-2',
+            'name' => 'Upah Penjahit Kemeja Batik',
+            'unit' => 'pcs',
+            'standard_cost' => 45000,
+        ];
+
+        $response = $this->actingAs($this->user)
+            ->put(route('tailor-labor-rates.update', $rate), $payload);
+
+        $response->assertRedirect(route('tailor-payrolls.index'));
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseHas('tailor_labor_rates', [
+            'id' => $rate->id,
+            'code' => 'LAB-JHT-TEST-2',
+            'name' => 'Upah Penjahit Kemeja Batik',
+            'standard_cost' => 45000,
+        ]);
+    }
+
+    public function test_can_delete_unused_product_labor_rate(): void
+    {
+        $rate = TailorLaborRate::create([
+            'code' => 'LAB-JHT-DEL',
+            'name' => 'Upah Jahit Baju Hapus',
+            'unit' => 'pcs',
+            'standard_cost' => 20000,
+            'order' => 99,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->delete(route('tailor-labor-rates.destroy', $rate));
+
+        $response->assertRedirect(route('tailor-payrolls.index'));
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('tailor_labor_rates', [
+            'id' => $rate->id,
+        ]);
     }
 }

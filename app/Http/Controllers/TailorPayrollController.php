@@ -7,8 +7,10 @@ use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Tailor;
+use App\Models\TailorLaborRate;
 use App\Models\TailorPayroll;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -381,5 +383,39 @@ class TailorPayrollController extends Controller
 
         return redirect()->route('tailor-payrolls.index')
             ->with('success', 'Slip upah penjahit berhasil dihapus.');
+    }
+
+    /**
+     * Perbarui atau simpan tarif upah penjahit standar (acuan HPP per pcs).
+     */
+    public function updateLaborRates(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'rates' => 'required|array|min:1',
+            'rates.*.id' => 'nullable|integer',
+            'rates.*.code' => 'required|string|max:50',
+            'rates.*.name' => 'required|string|max:255',
+            'rates.*.unit' => 'nullable|string|max:20',
+            'rates.*.standard_cost' => 'required|numeric|min:0',
+        ]);
+
+        DB::transaction(function () use ($validated) {
+            foreach ($validated['rates'] as $index => $rateData) {
+                $code = strtoupper(trim($rateData['code']));
+                TailorLaborRate::updateOrCreate(
+                    ['code' => $code],
+                    [
+                        'name' => trim($rateData['name']),
+                        'unit' => ! empty($rateData['unit']) ? trim($rateData['unit']) : 'pcs',
+                        'standard_cost' => (float) $rateData['standard_cost'],
+                        'order' => $index + 1,
+                        'is_active' => true,
+                    ]
+                );
+            }
+        });
+
+        return redirect()->route('tailor-payrolls.index')
+            ->with('success', 'Tarif standar upah penjahit (harga per pcs) berhasil diperbarui.');
     }
 }
