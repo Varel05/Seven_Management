@@ -156,25 +156,18 @@
                 </div>
             </div>
 
-            <!-- Tanda Tangan & Keterangan Pengesahan -->
-            <div class="mt-12 pt-6 border-t border-slate-300 grid grid-cols-3 gap-4 text-center text-xs text-slate-800">
-                <div>
-                    <p class="font-bold text-slate-600 mb-14">Penerima (Penjahit)</p>
-                    <p class="font-extrabold text-slate-900 border-t border-slate-400 inline-block px-6 pt-1">
-                        {{ $tailorPayroll->tailor_name }}
-                    </p>
+            <!-- Tanggal Slip Dibuat (Tanpa Tanda Tangan) -->
+            <div class="mt-8 pt-4 border-t border-slate-300 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-700">
+                <div class="text-left text-slate-500">
+                    @if ($tailorPayroll->notes)
+                        <span>Catatan:</span> <span class="italic text-slate-800">{{ $tailorPayroll->notes }}</span>
+                    @endif
                 </div>
-                <div>
-                    <p class="font-bold text-slate-600 mb-14">Kasir / Keuangan</p>
-                    <p class="font-extrabold text-slate-900 border-t border-slate-400 inline-block px-6 pt-1">
-                        Maya Anggraini
-                    </p>
-                </div>
-                <div>
-                    <p class="font-bold text-slate-600 mb-14">Mengetahui (Owner)</p>
-                    <p class="font-extrabold text-slate-900 border-t border-slate-400 inline-block px-6 pt-1">
-                        Owner Seven Management
-                    </p>
+                <div class="text-right font-medium text-slate-800">
+                    <span>Tanggal Slip Dibuat:</span>
+                    <span class="font-bold text-slate-900 ml-1">
+                        {{ ($tailorPayroll->created_at ?? $tailorPayroll->payroll_date)->translatedFormat('d F Y') }}
+                    </span>
                 </div>
             </div>
 
@@ -187,7 +180,7 @@
                     @endif
                 </div>
                 <div>
-                    SevenLedger System • Dicetak pada {{ now()->format('d/m/Y H:i') }}
+                    Seven Accounting System • Dicetak pada {{ now()->format('d/m/Y H:i') }}
                 </div>
             </div>
         </div>

@@ -5,7 +5,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Laravel') }}</title>
+        <title>{{ config('app.name', 'Seven Accounting') }}</title>
+        <link rel="icon" href="{{ file_exists(public_path('images/logo.png')) ? asset('images/logo.png') : (file_exists(public_path('images/logo.svg')) ? asset('images/logo.svg') : asset('favicon.ico')) }}">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
