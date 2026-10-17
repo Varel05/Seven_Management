@@ -56,8 +56,9 @@ class EmployeeController extends Controller
         $totalBaseSalary = $activeEmployees->sum('base_salary');
         $averageDailyRate = $totalActive > 0 ? (float) $activeEmployees->avg('effective_daily_rate') : 0;
         $totalAllowanceEstimate = $activeEmployees->sum('total_allowance');
+        $totalDeductionEstimate = $activeEmployees->sum('total_deduction');
         $totalBonusSalary = $activeEmployees->sum('bonus_salary');
-        $totalPayrollEstimate = $totalBaseSalary + $totalAllowanceEstimate + $totalBonusSalary;
+        $totalPayrollEstimate = max(0, $totalBaseSalary + $totalAllowanceEstimate - $totalDeductionEstimate + $totalBonusSalary);
 
         $paidThisMonth = $activeEmployees->filter(fn ($e) => $e->isPaidThisMonth());
         $totalPaidThisMonth = $paidThisMonth->sum('total_salary');
@@ -73,6 +74,7 @@ class EmployeeController extends Controller
             'totalBaseSalary',
             'averageDailyRate',
             'totalAllowanceEstimate',
+            'totalDeductionEstimate',
             'totalBonusSalary',
             'totalPayrollEstimate',
             'totalPaidThisMonth',
@@ -321,9 +323,11 @@ class EmployeeController extends Controller
             $disciplineBonus = $disciplinePresent * $disciplineRate;
             $salesBonus = isset($validated['sales_bonus']) ? (float) $validated['sales_bonus'] : (float) $employee->bonus_salary;
             $holidayBonus = $holidayShifts * $holidayRate;
-            $allowanceTotal = (float) $employee->total_allowance;
+            $allowanceTotal = (float) $employee->calculateTotalAllowance($mainSalary);
+            $deductionTotal = (float) $employee->calculateTotalDeduction($mainSalary);
+            $allowancesBreakdown = $employee->calculateAllowancesBreakdown($mainSalary);
 
-            $calculatedTHP = $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal;
+            $calculatedTHP = max(0, $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal - $deductionTotal);
         } else {
             $totalPresent = 27;
             $totalShifts = 27;
@@ -333,13 +337,15 @@ class EmployeeController extends Controller
             $dailyRate = (float) ($employee->daily_rate ?: ($employee->base_salary / 27));
             $disciplineRate = (float) ($employee->discipline_rate ?? 0);
             $holidayRate = (float) ($employee->holiday_rate ?? 0);
-            $mainSalary = (float) $employee->base_salary;
+            $mainSalary = (float) ((float) $employee->base_salary > 0 ? $employee->base_salary : ($dailyRate * 27));
             $disciplineBonus = 0;
             $salesBonus = (float) $employee->bonus_salary;
             $holidayBonus = 0;
-            $allowanceTotal = (float) $employee->total_allowance;
+            $allowanceTotal = (float) $employee->calculateTotalAllowance($mainSalary);
+            $deductionTotal = (float) $employee->calculateTotalDeduction($mainSalary);
+            $allowancesBreakdown = $employee->calculateAllowancesBreakdown($mainSalary);
 
-            $calculatedTHP = (float) $employee->total_salary;
+            $calculatedTHP = max(0, $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal - $deductionTotal);
         }
 
         $finalAmount = ! empty($validated['amount']) ? (float) $validated['amount'] : $calculatedTHP;
@@ -367,6 +373,8 @@ class EmployeeController extends Controller
             'sales_bonus' => $salesBonus,
             'holiday_bonus' => $holidayBonus,
             'allowance_total' => $allowanceTotal,
+            'deduction_total' => $deductionTotal,
+            'allowances_breakdown' => $allowancesBreakdown,
             'take_home_pay' => $finalAmount,
             'notes' => $validated['notes'] ?? null,
             'hrd_name' => auth()->user()?->name ?? 'Ari Husbana',
@@ -450,9 +458,11 @@ class EmployeeController extends Controller
             $disciplineBonus = $disciplinePresent * $disciplineRate;
             $salesBonus = isset($validated['sales_bonus']) ? (float) $validated['sales_bonus'] : (float) $employee->bonus_salary;
             $holidayBonus = $holidayShifts * $holidayRate;
-            $allowanceTotal = (float) $employee->total_allowance;
+            $allowanceTotal = (float) $employee->calculateTotalAllowance($mainSalary);
+            $deductionTotal = (float) $employee->calculateTotalDeduction($mainSalary);
+            $allowancesBreakdown = $employee->calculateAllowancesBreakdown($mainSalary);
 
-            $calculatedTHP = $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal;
+            $calculatedTHP = max(0, $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal - $deductionTotal);
         } else {
             $totalPresent = 27;
             $totalShifts = 27;
@@ -462,13 +472,15 @@ class EmployeeController extends Controller
             $dailyRate = (float) ($employee->daily_rate ?: ($employee->base_salary / 27));
             $disciplineRate = (float) ($employee->discipline_rate ?? 0);
             $holidayRate = (float) ($employee->holiday_rate ?? 0);
-            $mainSalary = (float) $employee->base_salary;
+            $mainSalary = (float) ((float) $employee->base_salary > 0 ? $employee->base_salary : ($dailyRate * 27));
             $disciplineBonus = 0;
             $salesBonus = (float) $employee->bonus_salary;
             $holidayBonus = 0;
-            $allowanceTotal = (float) $employee->total_allowance;
+            $allowanceTotal = (float) $employee->calculateTotalAllowance($mainSalary);
+            $deductionTotal = (float) $employee->calculateTotalDeduction($mainSalary);
+            $allowancesBreakdown = $employee->calculateAllowancesBreakdown($mainSalary);
 
-            $calculatedTHP = (float) $employee->total_salary;
+            $calculatedTHP = max(0, $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal - $deductionTotal);
         }
 
         $finalAmount = ! empty($validated['amount']) ? (float) $validated['amount'] : $calculatedTHP;
@@ -496,6 +508,8 @@ class EmployeeController extends Controller
             'sales_bonus' => $salesBonus,
             'holiday_bonus' => $holidayBonus,
             'allowance_total' => $allowanceTotal,
+            'deduction_total' => $deductionTotal,
+            'allowances_breakdown' => $allowancesBreakdown,
             'take_home_pay' => $finalAmount,
             'notes' => $validated['notes'] ?? null,
             'hrd_name' => auth()->user()?->name ?? 'Ari Husbana',
@@ -601,6 +615,46 @@ class EmployeeController extends Controller
         $payroll->load(['employee.assetAccount', 'assetAccount', 'journalEntry.lines.account']);
         $assetAccounts = Account::where('type', 'asset')->orderBy('code')->get();
 
+        // Jika slip masih draft (belum dibukukan ke transaksi keuangan), pastikan komponen persentase terhitung akurat
+        if (! $payroll->isPaid() && $payroll->employee) {
+            $employee = $payroll->employee;
+            $mainSalary = (float) $payroll->main_salary > 0
+                ? (float) $payroll->main_salary
+                : ((float) ($employee->base_salary ?? 0) > 0 ? (float) $employee->base_salary : ((float) ($payroll->daily_rate ?? 100000) * 27));
+
+            $newAllowanceTotal = (float) $employee->calculateTotalAllowance($mainSalary);
+            $newDeductionTotal = (float) $employee->calculateTotalDeduction($mainSalary);
+            $newBreakdown = $employee->calculateAllowancesBreakdown($mainSalary);
+
+            $needsUpdate = false;
+            foreach (($payroll->allowances_breakdown['deductions'] ?? []) as $d) {
+                if (($d['calculation_type'] ?? '') === 'percentage' && (float) ($d['amount'] ?? 0) <= 0 && $newDeductionTotal > 0) {
+                    $needsUpdate = true;
+                    break;
+                }
+            }
+            foreach (($payroll->allowances_breakdown['allowances'] ?? []) as $a) {
+                if (($a['calculation_type'] ?? '') === 'percentage' && (float) ($a['amount'] ?? 0) <= 0 && $newAllowanceTotal > 0) {
+                    $needsUpdate = true;
+                    break;
+                }
+            }
+
+            if ($needsUpdate || empty($payroll->allowances_breakdown)) {
+                $grossTotal = (float) $payroll->main_salary + (float) $payroll->discipline_bonus + (float) $payroll->sales_bonus + (float) $payroll->holiday_bonus + $newAllowanceTotal;
+                $newTHP = max(0, $grossTotal - $newDeductionTotal);
+
+                $payroll->update([
+                    'allowance_total' => $newAllowanceTotal,
+                    'deduction_total' => $newDeductionTotal,
+                    'allowances_breakdown' => $newBreakdown,
+                    'take_home_pay' => $newTHP,
+                ]);
+
+                $payroll->refresh();
+            }
+        }
+
         return view('employees.slip', compact('payroll', 'assetAccounts'));
     }
 
@@ -633,8 +687,10 @@ class EmployeeController extends Controller
         $disciplineBonus = $disciplinePresent * $disciplineRate;
         $salesBonus = (float) $employee->bonus_salary;
         $holidayBonus = $holidayShifts * $holidayRate;
-        $allowanceTotal = (float) $employee->total_allowance;
-        $takeHomePay = $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal;
+        $allowanceTotal = (float) $employee->calculateTotalAllowance($mainSalary);
+        $deductionTotal = (float) $employee->calculateTotalDeduction($mainSalary);
+        $allowancesBreakdown = $employee->calculateAllowancesBreakdown($mainSalary);
+        $takeHomePay = max(0, $mainSalary + $disciplineBonus + $salesBonus + $holidayBonus + $allowanceTotal - $deductionTotal);
 
         $payroll = new EmployeePayroll([
             'employee_id' => $employee->id,
@@ -658,6 +714,8 @@ class EmployeeController extends Controller
             'sales_bonus' => $salesBonus,
             'holiday_bonus' => $holidayBonus,
             'allowance_total' => $allowanceTotal,
+            'deduction_total' => $deductionTotal,
+            'allowances_breakdown' => $allowancesBreakdown,
             'take_home_pay' => $takeHomePay,
             'notes' => 'Draft / Estimasi Berjalan (Belum Dibayar)',
             'hrd_name' => 'Ari Husbana',

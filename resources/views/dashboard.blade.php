@@ -31,13 +31,13 @@
                 @dashboard-kpi-updated.window="if ($event.detail?.verifiedCount !== undefined) verifiedCount = $event.detail.verifiedCount"
                 class="flex flex-wrap items-center gap-2.5 sm:gap-3"
             >
-                <!-- Live Sync (5s) Active Indicator -->
+                <!-- Live Sync (1 menit) Active Indicator -->
                 <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-900/80 dark:bg-emerald-950/60 border border-emerald-700/80 dark:border-emerald-800 text-emerald-200 dark:text-emerald-300 text-xs font-semibold shadow-xs backdrop-blur-md">
                     <span class="relative flex h-2 w-2">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-300"></span>
                     </span>
-                    <span>Live Sync (5 dtk)</span>
+                    <span>Live Sync (1 mnt)</span>
                 </div>
 
                 <!-- Tombol Segarkan Manual -->
@@ -263,7 +263,7 @@
                     if (!document.hidden) {
                         this.fetchLiveData(false);
                     }
-                }, 5000);
+                }, 60000);
             },
             get filteredItems() {
                 return this.items.filter(item => {
@@ -341,7 +341,7 @@
                 this.$watch('searchQuery', () => { this.currentPage = 1; });
                 this.$watch('perPage', () => { this.currentPage = 1; });
 
-                // Mulai polling real-time 5 detik
+                // Mulai polling real-time 1 menit
                 this.startPolling();
 
                 // Tangani event visibility change (jeda saat tab tidak aktif, fetch saat tab aktif kembali)

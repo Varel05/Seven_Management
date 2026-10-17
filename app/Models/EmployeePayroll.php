@@ -33,6 +33,8 @@ class EmployeePayroll extends Model
         'sales_bonus' => 'decimal:2',
         'holiday_bonus' => 'decimal:2',
         'allowance_total' => 'decimal:2',
+        'deduction_total' => 'decimal:2',
+        'allowances_breakdown' => 'array',
         'take_home_pay' => 'decimal:2',
     ];
 
@@ -83,12 +85,17 @@ class EmployeePayroll extends Model
 
     public function getFormattedAllowanceTotalAttribute(): string
     {
-        return 'Rp '.number_format($this->allowance_total, 0, ',', '.');
+        return 'Rp '.number_format((float) ($this->allowance_total ?? 0), 0, ',', '.');
+    }
+
+    public function getFormattedDeductionTotalAttribute(): string
+    {
+        return 'Rp '.number_format((float) ($this->deduction_total ?? 0), 0, ',', '.');
     }
 
     public function getFormattedTakeHomePayAttribute(): string
     {
-        return 'Rp '.number_format($this->take_home_pay, 0, ',', '.');
+        return 'Rp '.number_format((float) ($this->take_home_pay ?? 0), 0, ',', '.');
     }
 
     /**
@@ -102,14 +109,17 @@ class EmployeePayroll extends Model
             ? $this->closing_points * $this->rate_per_point
             : $this->sales_bonus);
         $holiday = (float) ($this->holiday_shifts * $this->holiday_rate);
-        $allowances = (float) $this->allowance_total;
+        $allowances = (float) ($this->allowance_total ?? 0);
+        $deductions = (float) ($this->deduction_total ?? 0);
 
-        $thp = $main + $discipline + $sales + $holiday + $allowances;
+        $thp = max(0, $main + $discipline + $sales + $holiday + $allowances - $deductions);
 
         $this->main_salary = $main;
         $this->discipline_bonus = $discipline;
         $this->sales_bonus = $sales;
         $this->holiday_bonus = $holiday;
+        $this->allowance_total = $allowances;
+        $this->deduction_total = $deductions;
         $this->take_home_pay = $thp;
 
         return $thp;

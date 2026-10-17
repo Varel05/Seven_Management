@@ -64,34 +64,47 @@
 
             <!-- Banner Status: Draft vs Terbukukan -->
             @if(!$payroll->isPaid())
-                <div class="mb-4 p-4 rounded-2xl bg-amber-500/15 dark:bg-amber-950/50 border border-amber-500/40 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs print:hidden shadow-xs">
-                    <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-xs">
+                <div class="mb-4 p-4 sm:p-5 rounded-2xl bg-amber-500/15 dark:bg-amber-950/60 border border-amber-500/40 text-amber-900 dark:text-amber-200 print:hidden shadow-xs space-y-3.5 overflow-hidden">
+                    <!-- Pesan Peringatan Berada di Atas (Spacious & Mudah Dibaca) -->
+                    <div class="flex items-start sm:items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-xs mt-0.5 sm:mt-0">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                         </div>
-                        <div>
-                            <strong class="font-extrabold text-sm block text-amber-950 dark:text-amber-100">Slip Gaji Status Draft (Belum Dicatat ke Transaksi)</strong>
-                            <span class="text-amber-800 dark:text-amber-300">
-                                Slip ini belum dicatat ke buku jurnal (Beban Gaji 5002 belum didebit). Jika rincian di bawah telah sesuai, klik tombol <strong>Bukukan Transaksi Keuangan</strong>.
-                            </span>
+                        <div class="flex-1 min-w-0">
+                            <strong class="font-extrabold text-sm sm:text-base block text-amber-950 dark:text-amber-100">
+                                Slip Gaji Status Draft (Belum Dicatat ke Transaksi)
+                            </strong>
+                            <p class="text-xs sm:text-[13px] text-amber-800 dark:text-amber-300/90 mt-0.5 leading-relaxed">
+                                Slip ini belum dicatat ke buku jurnal (Beban Gaji 5002 belum didebit). Jika rincian di bawah telah sesuai, silakan pilih akun pembayaran dan klik tombol <strong>Bukukan Sekarang</strong>.
+                            </p>
                         </div>
                     </div>
-                    <form action="{{ route('employees.payroll.post-transaction', $payroll) }}" method="POST" class="shrink-0 flex items-center gap-2 flex-wrap" onsubmit="return confirm('Bukukan pengeluaran gaji {{ $payroll->employee->name }} sebesar Rp {{ number_format($payroll->take_home_pay, 0, ',', '.') }} ke transaksi jurnal?');">
-                        @csrf
-                        @if(isset($assetAccounts) && $assetAccounts->isNotEmpty())
-                            <select name="asset_account_id" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:ring-emerald-500 focus:border-emerald-500">
-                                @foreach($assetAccounts as $acc)
-                                    <option value="{{ $acc->id }}" {{ ($payroll->asset_account_id ?? $payroll->employee->asset_account_id) == $acc->id ? 'selected' : '' }}>
-                                        Via: {{ $acc->name }} ({{ $acc->code }})
-                                    </option>
-                                @endforeach
-                            </select>
-                        @endif
-                        <button type="submit" class="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                            <span>Bukukan Sekarang</span>
-                        </button>
-                    </form>
+
+                    <!-- Opsi Memilih Akun dan Tombol Bukukan Berada di Bawah Pesan -->
+                    <div class="pt-3 border-t border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <div class="text-[11px] sm:text-xs text-amber-800 dark:text-amber-400 font-medium flex items-center gap-1.5 shrink min-w-0">
+                            <svg class="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span class="truncate">Pilih akun pembayaran:</span>
+                        </div>
+                        <form action="{{ route('employees.payroll.post-transaction', $payroll) }}" method="POST" class="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0" onsubmit="return confirm('Bukukan pengeluaran gaji {{ $payroll->employee->name }} sebesar Rp {{ number_format($payroll->take_home_pay, 0, ',', '.') }} ke transaksi jurnal?');">
+                            @csrf
+                            @if(isset($assetAccounts) && $assetAccounts->isNotEmpty())
+                                <div class="w-full sm:w-auto">
+                                    <select name="asset_account_id" class="w-full sm:w-44 px-2.5 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800/80 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-xs cursor-pointer truncate">
+                                        @foreach($assetAccounts as $acc)
+                                            <option value="{{ $acc->id }}" {{ ($payroll->asset_account_id ?? $payroll->employee->asset_account_id) == $acc->id ? 'selected' : '' }}>
+                                                {{ $acc->name }} ({{ $acc->code }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            @endif
+                            <button type="submit" class="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-950/20 hover:scale-102 active:scale-98 cursor-pointer flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap">
+                                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 13l4 4L19 7"/></svg>
+                                <span>Bukukan Sekarang</span>
+                            </button>
+                        </form>
+                    </div>
                 </div>
             @else
                 <div class="mb-4 p-3.5 rounded-2xl bg-emerald-500/15 dark:bg-emerald-950/50 border border-emerald-500/40 text-emerald-900 dark:text-emerald-200 flex items-center justify-between text-xs print:hidden shadow-xs">
@@ -212,45 +225,121 @@
                         </tr>
                     </thead>
                     <tbody>
+                        @php
+                            $rowNum = 1;
+                        @endphp
                         <tr class="border-b border-black">
                             <td class="p-1.5 border-r border-black">
-                                1. Honor Utama ({{ $payroll->total_present }} hari x Rp {{ number_format($payroll->daily_rate, 0, ',', '.') }})
+                                {{ $rowNum++ }}. Honor Utama ({{ $payroll->total_present }} hari x Rp {{ number_format($payroll->daily_rate, 0, ',', '.') }})
                             </td>
                             <td class="p-1.5 text-right font-mono font-bold w-32">{{ $payroll->formatted_main_salary }}</td>
                         </tr>
                         <tr class="border-b border-black">
                             <td class="p-1.5 border-r border-black">
-                                2. Bonus Disiplin ({{ $payroll->discipline_present }} hari x Rp {{ number_format($payroll->discipline_rate, 0, ',', '.') }})
+                                {{ $rowNum++ }}. Bonus Disiplin ({{ $payroll->discipline_present }} hari x Rp {{ number_format($payroll->discipline_rate, 0, ',', '.') }})
                             </td>
                             <td class="p-1.5 text-right font-mono font-bold w-32">{{ $payroll->formatted_discipline_bonus }}</td>
                         </tr>
+                        @if($payroll->isCs())
+                            <tr class="border-b border-black">
+                                <td class="p-1.5 border-r border-black">
+                                    {{ $rowNum++ }}. Bonus Penjualan ({{ $payroll->closing_points }} poin x Rp {{ number_format($payroll->rate_per_point, 0, ',', '.') }})
+                                </td>
+                                <td class="p-1.5 text-right font-mono font-bold w-32">{{ $payroll->formatted_sales_bonus }}</td>
+                            </tr>
+                        @endif
                         <tr class="border-b border-black">
                             <td class="p-1.5 border-r border-black">
-                                3. Bonus Penjualan ({{ $payroll->closing_points }} poin x Rp {{ number_format($payroll->rate_per_point, 0, ',', '.') }})
-                            </td>
-                            <td class="p-1.5 text-right font-mono font-bold w-32">{{ $payroll->formatted_sales_bonus }}</td>
-                        </tr>
-                        <tr class="border-b border-black">
-                            <td class="p-1.5 border-r border-black">
-                                4. Bonus Tgl Merah ({{ $payroll->holiday_shifts }} hari x Rp {{ number_format($payroll->holiday_rate, 0, ',', '.') }})
+                                {{ $rowNum++ }}. Bonus Tgl Merah ({{ $payroll->holiday_shifts }} hari x Rp {{ number_format($payroll->holiday_rate, 0, ',', '.') }})
                             </td>
                             <td class="p-1.5 text-right font-mono font-bold w-32">{{ $payroll->formatted_holiday_bonus }}</td>
                         </tr>
-                        @if($payroll->allowance_total > 0)
+                        @php
+                            $allowancesList = $payroll->allowances_breakdown['allowances'] ?? [];
+                            $deductionsList = $payroll->allowances_breakdown['deductions'] ?? [];
+                            $baseMainSalary = (float) $payroll->main_salary > 0 
+                                ? (float) $payroll->main_salary 
+                                : ((float) ($payroll->employee?->base_salary ?? 0) > 0 ? (float) $payroll->employee->base_salary : ((float) ($payroll->daily_rate ?? 100000) * 27));
+
+                            // Auto-heal / fallback jika item persentase masih 0 dari data lama
+                            foreach ($allowancesList as &$alwItem) {
+                                if (($alwItem['calculation_type'] ?? '') === 'percentage' && (float) ($alwItem['amount'] ?? 0) <= 0) {
+                                    $ratePct = (float) ($alwItem['rate_percent'] ?? 0);
+                                    $alwItem['amount'] = round(($ratePct / 100) * $baseMainSalary);
+                                    $alwItem['formatted_amount'] = 'Rp ' . number_format($alwItem['amount'], 0, ',', '.');
+                                }
+                            }
+                            unset($alwItem);
+
+                            foreach ($deductionsList as &$dedItem) {
+                                if (($dedItem['calculation_type'] ?? '') === 'percentage' && (float) ($dedItem['amount'] ?? 0) <= 0) {
+                                    $ratePct = (float) ($dedItem['rate_percent'] ?? 0);
+                                    $dedItem['amount'] = round(($ratePct / 100) * $baseMainSalary);
+                                    $dedItem['formatted_amount'] = 'Rp ' . number_format($dedItem['amount'], 0, ',', '.');
+                                }
+                            }
+                            unset($dedItem);
+
+                            $computedAllowanceTotal = !empty($allowancesList) ? array_sum(array_column($allowancesList, 'amount')) : (float) $payroll->allowance_total;
+                            $computedDeductionTotal = !empty($deductionsList) ? array_sum(array_column($deductionsList, 'amount')) : (float) $payroll->deduction_total;
+
+                            $salesBonusAmount = $payroll->isCs() ? (float) $payroll->sales_bonus : 0.0;
+                            $grossTotal = (float) $payroll->main_salary + (float) $payroll->discipline_bonus + $salesBonusAmount + (float) $payroll->holiday_bonus + $computedAllowanceTotal;
+                            $computedTHP = max(0, $grossTotal - $computedDeductionTotal);
+                        @endphp
+
+                        @if(!empty($allowancesList))
+                            @foreach($allowancesList as $idx => $alw)
+                                <tr class="border-b border-black">
+                                    <td class="p-1.5 border-r border-black">
+                                        {{ $rowNum++ }}. Tunjangan: {{ $alw['name'] }} {{ !empty($alw['rate_label']) ? $alw['rate_label'] : '' }}
+                                    </td>
+                                    <td class="p-1.5 text-right font-mono font-bold w-32">+ Rp {{ number_format((float) ($alw['amount'] ?? 0), 0, ',', '.') }}</td>
+                                </tr>
+                            @endforeach
+                        @elseif($computedAllowanceTotal > 0)
                             <tr class="border-b border-black">
                                 <td class="p-1.5 border-r border-black">
-                                    5. Tunjangan Tambahan
+                                    {{ $rowNum++ }}. Tunjangan Tambahan
                                 </td>
-                                <td class="p-1.5 text-right font-mono font-bold w-32">{{ $payroll->formatted_allowance_total }}</td>
+                                <td class="p-1.5 text-right font-mono font-bold w-32">+ Rp {{ number_format($computedAllowanceTotal, 0, ',', '.') }}</td>
                             </tr>
                         @endif
+
                         <tr class="border-b-2 border-black bg-slate-50 font-bold">
-                            <td class="p-1.5 border-r border-black uppercase">TOTAL HONOR</td>
-                            <td class="p-1.5 text-right font-mono">{{ $payroll->formatted_take_home_pay }}</td>
+                            <td class="p-1.5 border-r border-black uppercase">SUBTOTAL PENGHASILAN KOTOR</td>
+                            <td class="p-1.5 text-right font-mono">Rp {{ number_format($grossTotal, 0, ',', '.') }}</td>
                         </tr>
+
+                        @if(!empty($deductionsList))
+                            <tr class="border-b border-black bg-rose-50/70">
+                                <th class="p-1.5 text-left font-bold border-r border-black text-rose-900" colspan="2">Potongan Gaji</th>
+                            </tr>
+                            @foreach($deductionsList as $dIdx => $ded)
+                                <tr class="border-b border-black text-rose-950">
+                                    <td class="p-1.5 border-r border-black pl-3">
+                                        - {{ $ded['name'] }} {{ !empty($ded['rate_label']) ? $ded['rate_label'] : '' }}
+                                    </td>
+                                    <td class="p-1.5 text-right font-mono font-bold w-32 text-rose-700">- Rp {{ number_format((float) ($ded['amount'] ?? 0), 0, ',', '.') }}</td>
+                                </tr>
+                            @endforeach
+                            <tr class="border-b-2 border-black bg-rose-100/60 font-bold text-rose-900">
+                                <td class="p-1.5 border-r border-black uppercase">TOTAL POTONGAN</td>
+                                <td class="p-1.5 text-right font-mono">- Rp {{ number_format($computedDeductionTotal, 0, ',', '.') }}</td>
+                            </tr>
+                        @elseif($computedDeductionTotal > 0)
+                            <tr class="border-b border-black bg-rose-50/70">
+                                <th class="p-1.5 text-left font-bold border-r border-black text-rose-900" colspan="2">Potongan Gaji</th>
+                            </tr>
+                            <tr class="border-b-2 border-black bg-rose-100/60 font-bold text-rose-900">
+                                <td class="p-1.5 border-r border-black uppercase">TOTAL POTONGAN</td>
+                                <td class="p-1.5 text-right font-mono">- Rp {{ number_format($computedDeductionTotal, 0, ',', '.') }}</td>
+                            </tr>
+                        @endif
+
                         <tr class="bg-emerald-300 font-black text-slate-900 border-b border-black">
-                            <td class="p-2 border-r border-black uppercase text-sm">Total Take Home Pay</td>
-                            <td class="p-2 text-right font-mono text-sm">{{ $payroll->formatted_take_home_pay }}</td>
+                            <td class="p-2 border-r border-black uppercase text-sm">Total Take Home Pay (Gaji Bersih)</td>
+                            <td class="p-2 text-right font-mono text-sm">Rp {{ number_format($computedTHP, 0, ',', '.') }}</td>
                         </tr>
                     </tbody>
                 </table>

@@ -33,7 +33,7 @@
                     class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-700 text-white text-xs font-bold shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer"
                 >
                     <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-                    <span>Kelola Tunjangan ({{ $allowances->count() }})</span>
+                    <span>Kelola Tunjangan & Potongan ({{ $allowances->count() }})</span>
                 </button>
                 <form action="{{ route('employees.sync-api') }}" method="POST" class="inline">
                     @csrf
@@ -370,13 +370,52 @@
         calculateHolidayBonus() {
             return (Number(this.payForm.holiday_shifts) || 0) * (Number(this.payForm.holiday_rate) || 0);
         },
+        calculatePayAllowances() {
+            if (!this.employeeToPay) return 0;
+            let mainSalary = this.calculateMainSalary();
+            let base = mainSalary > 0 
+                ? mainSalary 
+                : ((Number(this.employeeToPay.base_salary) > 0) ? Number(this.employeeToPay.base_salary) : ((Number(this.employeeToPay.effective_daily_rate) || 100000) * 27));
+
+            let breakdown = this.employeeToPay.current_allowances_breakdown || {};
+            let list = breakdown.allowances || [];
+            if (!list.length) return Number(this.employeeToPay.total_allowance) || 0;
+
+            return list.reduce((acc, item) => {
+                if (item.calculation_type === 'percentage') {
+                    let pct = Number(item.rate_percent) || 0;
+                    return acc + Math.round((pct / 100) * base);
+                }
+                return acc + (Number(item.amount) || 0);
+            }, 0);
+        },
+        calculatePayDeductions() {
+            if (!this.employeeToPay) return 0;
+            let mainSalary = this.calculateMainSalary();
+            let base = mainSalary > 0 
+                ? mainSalary 
+                : ((Number(this.employeeToPay.base_salary) > 0) ? Number(this.employeeToPay.base_salary) : ((Number(this.employeeToPay.effective_daily_rate) || 100000) * 27));
+
+            let breakdown = this.employeeToPay.current_allowances_breakdown || {};
+            let list = breakdown.deductions || [];
+            if (!list.length) return Number(this.employeeToPay.total_deduction) || 0;
+
+            return list.reduce((acc, item) => {
+                if (item.calculation_type === 'percentage') {
+                    let pct = Number(item.rate_percent) || 0;
+                    return acc + Math.round((pct / 100) * base);
+                }
+                return acc + (Number(item.amount) || 0);
+            }, 0);
+        },
         calculatePayTHP() {
             let main = this.calculateMainSalary();
             let disc = this.calculateDisciplineBonus();
             let sales = Number(this.payForm.sales_bonus) || 0;
             let hol = this.calculateHolidayBonus();
-            let alw = this.employeeToPay ? (Number(this.employeeToPay.total_allowance) || 0) : 0;
-            return main + disc + sales + hol + alw;
+            let alw = this.calculatePayAllowances();
+            let ded = this.calculatePayDeductions();
+            return Math.max(0, main + disc + sales + hol + alw - ded);
         },
         getSelectedAccountName() {
             const acc = this.assetAccounts.find(a => a.id == this.payForm.asset_account_id);
@@ -391,6 +430,9 @@
         allowanceForm: {
             id: null,
             name: '',
+            type: 'allowance',
+            calculation_type: 'fixed',
+            rate_percent: 2.0,
             target_type: 'all',
             target_role: 'cs',
             employee_id: '{{ $employees->first()->id ?? '' }}',
@@ -399,12 +441,18 @@
             notes: '',
             is_active: true
         },
+        isAllowanceEmployeeSelected(id) {
+            id = Number(id);
+            return Array.isArray(this.allowanceForm.target_employee_ids) && 
+                   this.allowanceForm.target_employee_ids.map(Number).includes(id);
+        },
         toggleAllowanceEmployee(id) {
             id = Number(id);
-            if (this.allowanceForm.target_employee_ids.includes(id)) {
-                this.allowanceForm.target_employee_ids = this.allowanceForm.target_employee_ids.filter(x => x !== id);
+            let current = Array.isArray(this.allowanceForm.target_employee_ids) ? [...this.allowanceForm.target_employee_ids.map(Number)] : [];
+            if (current.includes(id)) {
+                this.allowanceForm.target_employee_ids = current.filter(x => x !== id);
             } else {
-                this.allowanceForm.target_employee_ids.push(id);
+                this.allowanceForm.target_employee_ids = [...current, id];
             }
         },
         selectAllAllowanceEmployees() {
@@ -419,6 +467,9 @@
             this.allowanceForm = {
                 id: null,
                 name: '',
+                type: 'allowance',
+                calculation_type: 'fixed',
+                rate_percent: 2.0,
                 target_type: 'all',
                 target_role: 'cs',
                 employee_id: '{{ $employees->first()->id ?? '' }}',
@@ -441,18 +492,61 @@
                 targetIds = [Number(alw.employee_id)];
             }
 
+            let isPerc = (alw.calculation_type === 'percentage');
             this.allowanceForm = {
                 id: alw.id,
                 name: alw.name,
-                target_type: alw.target_type,
+                type: alw.type || 'allowance',
+                calculation_type: alw.calculation_type || 'fixed',
+                rate_percent: isPerc ? (Number(alw.rate_percent) || 0) : null,
+                target_type: alw.target_type || 'all',
                 target_role: alw.target_role || 'cs',
                 employee_id: alw.employee_id || (targetIds[0] || ''),
                 target_employee_ids: targetIds,
-                amount: Number(alw.amount),
+                amount: isPerc ? 0 : (Number(alw.amount) || 0),
                 notes: alw.notes || '',
                 is_active: Boolean(alw.is_active)
             };
             this.showAllowanceModal = true;
+        },
+        submitAllowanceForm(e) {
+            if (!this.allowanceForm.name || !this.allowanceForm.name.trim()) {
+                alert('Nama komponen tunjangan/potongan wajib diisi.');
+                e.preventDefault();
+                return false;
+            }
+
+            if (this.allowanceForm.calculation_type === 'percentage') {
+                let pct = Number(this.allowanceForm.rate_percent);
+                if (isNaN(pct) || pct <= 0) {
+                    alert('Besaran persentase harus lebih besar dari 0% (misal: 1% atau 2%).');
+                    e.preventDefault();
+                    return false;
+                }
+            } else {
+                let amt = Number(this.allowanceForm.amount);
+                if (isNaN(amt) || amt < 0) {
+                    alert('Besaran nominal tunjangan/potongan wajib diisi minimal 0.');
+                    e.preventDefault();
+                    return false;
+                }
+            }
+
+            if (this.allowanceForm.target_type === 'role') {
+                if (!this.allowanceForm.target_role) {
+                    alert('Silakan pilih divisi/role target.');
+                    e.preventDefault();
+                    return false;
+                }
+            } else if (this.allowanceForm.target_type === 'employee') {
+                if (!this.allowanceForm.target_employee_ids || this.allowanceForm.target_employee_ids.length === 0) {
+                    alert('Silakan pilih minimal satu pegawai penerima tunjangan/potongan.');
+                    e.preventDefault();
+                    return false;
+                }
+            }
+
+            return true;
         },
 
         getTierRate(points) {
@@ -817,7 +911,7 @@
                                 <th class="px-2.5 py-2.5 min-w-[140px]">Karyawan</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Gaji per Shift</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap text-center">Presensi Bulan Ini</th>
-                                <th class="px-2 py-2.5 whitespace-nowrap">Tunjangan</th>
+                                <th class="px-2 py-2.5 whitespace-nowrap">Tunjangan & Potongan</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Poin Kinerja</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap">Bonus Poin</th>
                                 <th class="px-2 py-2.5 whitespace-nowrap text-center">Jatuh Tempo</th>
@@ -915,20 +1009,29 @@
                                         @endif
                                     </td>
 
-                                    <!-- Tunjangan -->
+                                    <!-- Tunjangan & Potongan -->
                                     <td class="px-2 py-2 whitespace-nowrap text-xs">
-                                        @if($emp->total_allowance > 0)
-                                            <div class="space-y-0.5">
-                                                <span class="font-mono font-bold text-teal-700 dark:text-teal-300">
-                                                    {{ $emp->formatted_total_allowance }}
-                                                </span>
-                                                <div class="text-[9px] text-slate-500 dark:text-slate-400 truncate max-w-[95px]" title="{{ $emp->applicable_allowances->pluck('name')->implode(', ') }}">
-                                                    {{ $emp->applicable_allowances->pluck('name')->implode(', ') }}
+                                        <div class="space-y-1">
+                                            @if($emp->total_allowance > 0)
+                                                <div class="flex items-center gap-1">
+                                                    <span class="text-[9px] text-teal-600 dark:text-teal-400 font-extrabold">+</span>
+                                                    <span class="font-mono font-bold text-teal-700 dark:text-teal-300">
+                                                        {{ $emp->formatted_total_allowance }}
+                                                    </span>
                                                 </div>
-                                            </div>
-                                        @else
-                                            <span class="text-slate-400 dark:text-slate-600 font-mono text-[11px]">-</span>
-                                        @endif
+                                            @endif
+                                            @if($emp->total_deduction > 0)
+                                                <div class="flex items-center gap-1">
+                                                    <span class="text-[9px] text-rose-500 dark:text-rose-400 font-extrabold">-</span>
+                                                    <span class="font-mono font-bold text-rose-600 dark:text-rose-400">
+                                                        {{ $emp->formatted_total_deduction }}
+                                                    </span>
+                                                </div>
+                                            @endif
+                                            @if($emp->total_allowance == 0 && $emp->total_deduction == 0)
+                                                <span class="text-slate-400 dark:text-slate-600 font-mono text-[11px]">-</span>
+                                            @endif
+                                        </div>
                                     </td>
 
                                     <!-- Poin Kinerja -->
@@ -1738,13 +1841,22 @@
                                         </div>
                                     </div>
 
-                                    <!-- Tunjangan Aktif -->
-                                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200/80 dark:border-teal-800/40 text-xs">
+                                    <!-- Tunjangan Aktif (+) -->
+                                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200/80 dark:border-teal-800/40 text-xs" x-show="calculatePayAllowances() > 0">
                                         <div class="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
-                                            <span>5. Tunjangan Tambahan:</span>
-                                            <span class="text-[10px] text-teal-600 dark:text-teal-400 font-normal" x-show="Number(employeeToPay.total_allowance) > 0">(Sesuai daftar tunjangan aktif)</span>
+                                            <span>5. Tunjangan (+):</span>
+                                            <span class="text-[10px] text-teal-600 dark:text-teal-400 font-normal">(Tunjangan aktif)</span>
                                         </div>
-                                        <span class="font-mono font-bold text-teal-700 dark:text-teal-300" x-text="'Rp ' + (Number(employeeToPay.total_allowance) || 0).toLocaleString('id-ID')"></span>
+                                        <span class="font-mono font-bold text-teal-700 dark:text-teal-300" x-text="'+ Rp ' + calculatePayAllowances().toLocaleString('id-ID')"></span>
+                                    </div>
+
+                                    <!-- Potongan Aktif (-) -->
+                                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-800/40 text-xs" x-show="calculatePayDeductions() > 0">
+                                        <div class="text-rose-800 dark:text-rose-300 font-semibold flex items-center gap-1.5">
+                                            <span>6. Potongan Gaji (-):</span>
+                                            <span class="text-[10px] text-rose-600 dark:text-rose-400 font-normal">(BPJS, Kasbon, dll)</span>
+                                        </div>
+                                        <span class="font-mono font-bold text-rose-600 dark:text-rose-400" x-text="'- Rp ' + calculatePayDeductions().toLocaleString('id-ID')"></span>
                                     </div>
                                 </div>
 
@@ -1891,40 +2003,100 @@
                                     :action="isEditAllowance ? '{{ url('allowances') }}/' + allowanceForm.id : '{{ route('allowances.store') }}'" 
                                     method="POST" 
                                     class="space-y-4"
-                                    @submit="if(allowanceForm.target_type === 'employee' && allowanceForm.target_employee_ids.length === 0) { alert('Silakan pilih minimal satu pegawai penerima tunjangan.'); $event.preventDefault(); }"
+                                    @submit="submitAllowanceForm($event)"
+                                    novalidate
                                 >
                                     @csrf
-                                    <template x-if="isEditAllowance">
-                                        <input type="hidden" name="_method" value="PUT">
-                                    </template>
+                                    <input type="hidden" name="_method" value="PUT" :disabled="!isEditAllowance">
 
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                                        <!-- Nama Tunjangan -->
+                                        <!-- Jenis Komponen: Tunjangan vs Potongan -->
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Jenis Komponen Gaji</label>
+                                            <div class="grid grid-cols-2 gap-3">
+                                                <label class="flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all"
+                                                    :class="allowanceForm.type === 'allowance' ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-900 dark:text-emerald-200 shadow-xs' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'">
+                                                    <input type="radio" name="type" value="allowance" x-model="allowanceForm.type" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                                                    <div>
+                                                        <div class="text-xs font-bold flex items-center gap-1.5">
+                                                            <span>🟢 Tunjangan</span>
+                                                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 font-extrabold">(+) Tambah Gaji</span>
+                                                        </div>
+                                                        <div class="text-[11px] text-slate-500 dark:text-slate-400">Makan, transport, jabatan</div>
+                                                    </div>
+                                                </label>
+                                                <label class="flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all"
+                                                    :class="allowanceForm.type === 'deduction' ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-500 text-rose-900 dark:text-rose-200 shadow-xs' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'">
+                                                    <input type="radio" name="type" value="deduction" x-model="allowanceForm.type" class="w-4 h-4 text-rose-600 focus:ring-rose-500">
+                                                    <div>
+                                                        <div class="text-xs font-bold flex items-center gap-1.5">
+                                                            <span>🔴 Potongan</span>
+                                                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-300 font-extrabold">(-) Kurang Gaji</span>
+                                                        </div>
+                                                        <div class="text-[11px] text-slate-500 dark:text-slate-400">BPJS Ketenagakerjaan/Kesehatan, kasbon</div>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <!-- Nama Komponen -->
                                         <div>
-                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Tunjangan</label>
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" x-text="allowanceForm.type === 'deduction' ? 'Nama Potongan' : 'Nama Tunjangan'"></label>
                                             <input 
                                                 type="text" 
                                                 name="name" 
                                                 x-model="allowanceForm.name" 
                                                 required 
-                                                placeholder="Contoh: Tunjangan Makan, Transport, Jabatan" 
+                                                :placeholder="allowanceForm.type === 'deduction' ? 'Contoh: BPJS Ketenagakerjaan, BPJS Kesehatan' : 'Contoh: Tunjangan Makan, Transport, Jabatan'" 
                                                 class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
                                             >
                                         </div>
 
-                                        <!-- Nominal Tunjangan -->
+                                        <!-- Metode Perhitungan -->
                                         <div>
-                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Besaran Tunjangan (Rp)</label>
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Metode Perhitungan</label>
+                                            <select 
+                                                name="calculation_type" 
+                                                x-model="allowanceForm.calculation_type" 
+                                                class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 font-medium"
+                                            >
+                                                <option value="fixed">Nominal Tetap (Rp)</option>
+                                                <option value="percentage">Persentase dari Gaji Pokok (%)</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Besaran Input (Nominal vs Persentase) -->
+                                        <div x-show="allowanceForm.calculation_type === 'fixed'">
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1" x-text="allowanceForm.type === 'deduction' ? 'Besaran Potongan (Rp)' : 'Besaran Tunjangan (Rp)'"></label>
                                             <input 
                                                 type="number" 
                                                 name="amount" 
                                                 x-model="allowanceForm.amount" 
-                                                required 
+                                                :disabled="allowanceForm.calculation_type !== 'fixed'"
                                                 min="0" 
                                                 step="1000" 
                                                 placeholder="100000" 
                                                 class="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
                                             >
+                                        </div>
+
+                                        <div x-show="allowanceForm.calculation_type === 'percentage'">
+                                            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Besaran Persentase (%)</label>
+                                            <div class="relative">
+                                                <input 
+                                                    type="number" 
+                                                    name="rate_percent" 
+                                                    x-model="allowanceForm.rate_percent" 
+                                                    :disabled="allowanceForm.calculation_type !== 'percentage'"
+                                                    min="0.01" 
+                                                    max="100" 
+                                                    step="0.01" 
+                                                    placeholder="Contoh: 1.00 atau 2.00" 
+                                                    class="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 pr-8 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
+                                                >
+                                                <span class="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                                            </div>
+                                            <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Dihitung otomatis: [Persen] x [Gaji Pokok / Kehadiran] saat penggajian.</p>
                                         </div>
 
                                         <!-- Target Tunjangan -->
@@ -1947,6 +2119,7 @@
                                             <select 
                                                 name="target_role" 
                                                 x-model="allowanceForm.target_role" 
+                                                :disabled="allowanceForm.target_type !== 'role'"
                                                 class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
                                             >
                                                 @foreach(\App\Models\Employee::ROLES as $roleVal => $roleLabel)
@@ -1973,6 +2146,7 @@
                                                 <input 
                                                     type="text" 
                                                     x-model="allowanceEmployeeSearch" 
+                                                    @keydown.enter.prevent
                                                     placeholder="Ketik untuk memfilter nama pegawai..." 
                                                     class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 pl-8 text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500"
                                                 >
@@ -1984,16 +2158,17 @@
                                                 @foreach($employees as $empOption)
                                                     <label 
                                                         x-show="!allowanceEmployeeSearch || '{{ strtolower(addslashes($empOption->name)) }}'.includes(allowanceEmployeeSearch.toLowerCase()) || '{{ strtolower(addslashes($empOption->position)) }}'.includes(allowanceEmployeeSearch.toLowerCase())"
-                                                        class="flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer border border-transparent"
-                                                        :class="allowanceForm.target_employee_ids.includes({{ $empOption->id }}) ? 'bg-teal-50 dark:bg-teal-950/50 border-teal-200 dark:border-teal-800 text-teal-950 dark:text-teal-200 font-semibold' : 'hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'"
+                                                        class="flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer border border-transparent select-none"
+                                                        :class="isAllowanceEmployeeSelected({{ $empOption->id }}) ? 'bg-teal-50 dark:bg-teal-950/50 border-teal-200 dark:border-teal-800 text-teal-950 dark:text-teal-200 font-semibold' : 'hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'"
                                                     >
                                                         <div class="flex items-center gap-2.5">
                                                             <input 
                                                                 type="checkbox" 
                                                                 name="target_employee_ids[]" 
                                                                 value="{{ $empOption->id }}"
-                                                                :checked="allowanceForm.target_employee_ids.includes({{ $empOption->id }})"
+                                                                :checked="isAllowanceEmployeeSelected({{ $empOption->id }})"
                                                                 @change="toggleAllowanceEmployee({{ $empOption->id }})"
+                                                                :disabled="allowanceForm.target_type !== 'employee'"
                                                                 class="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300 dark:border-slate-600"
                                                             >
                                                             <span class="text-xs">{{ $empOption->name }}</span>
@@ -2025,33 +2200,34 @@
                                     <div class="flex items-center justify-between pt-1">
                                         <label class="inline-flex items-center gap-2 cursor-pointer">
                                             <input type="checkbox" name="is_active" value="1" x-model="allowanceForm.is_active" class="w-4 h-4 rounded text-teal-600 focus:ring-teal-500">
-                                            <span class="text-xs font-medium text-slate-700 dark:text-slate-300">Tunjangan Aktif</span>
+                                            <span class="text-xs font-medium text-slate-700 dark:text-slate-300" x-text="allowanceForm.type === 'deduction' ? 'Potongan Aktif' : 'Tunjangan Aktif'"></span>
                                         </label>
 
                                         <button 
                                             type="submit" 
-                                            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-sm transition-all"
+                                            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
                                         >
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                            <span x-text="isEditAllowance ? 'Simpan Perubahan' : 'Tambahkan Tunjangan'"></span>
+                                            <span x-text="isEditAllowance ? 'Simpan Perubahan' : (allowanceForm.type === 'deduction' ? 'Tambahkan Potongan' : 'Tambahkan Tunjangan')"></span>
                                         </button>
                                     </div>
                                 </form>
                             </div>
 
-                            <!-- Daftar Master Tunjangan Yang Ada -->
+                            <!-- Daftar Master Tunjangan & Potongan Yang Ada -->
                             <div class="space-y-3">
                                 <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                                    Daftar Jenis Tunjangan Terdaftar ({{ $allowances->count() }})
+                                    Daftar Komponen Tunjangan & Potongan Terdaftar ({{ $allowances->count() }})
                                 </h4>
 
                                 <div class="overflow-x-auto rounded-2xl border border-slate-200/90 dark:border-slate-700">
                                     <table class="w-full text-left border-collapse text-xs">
                                         <thead>
                                             <tr class="bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase">
-                                                <th class="px-3.5 py-2.5">Nama Tunjangan</th>
+                                                <th class="px-3.5 py-2.5">Nama Komponen</th>
+                                                <th class="px-3 py-2.5 text-center">Jenis</th>
                                                 <th class="px-3 py-2.5">Target Alokasi</th>
-                                                <th class="px-3 py-2.5">Besaran (Rp)</th>
+                                                <th class="px-3 py-2.5">Besaran</th>
                                                 <th class="px-3 py-2.5 text-center">Status</th>
                                                 <th class="px-3 py-2.5 text-center">Aksi</th>
                                             </tr>
@@ -2065,13 +2241,28 @@
                                                             <div class="text-[10px] font-normal text-slate-400">{{ $alw->notes }}</div>
                                                         @endif
                                                     </td>
+                                                    <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                                                        @if($alw->isDeduction())
+                                                            <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300/80">
+                                                                🔴 Potongan (-)
+                                                            </span>
+                                                        @else
+                                                            <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80">
+                                                                🟢 Tunjangan (+)
+                                                            </span>
+                                                        @endif
+                                                    </td>
                                                     <td class="px-3 py-2.5">
                                                         <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                                             {{ $alw->target_label }}
                                                         </span>
                                                     </td>
-                                                    <td class="px-3 py-2.5 font-mono font-bold text-teal-700 dark:text-teal-300">
-                                                        {{ $alw->formatted_amount }}
+                                                    <td class="px-3 py-2.5 font-mono font-bold {{ $alw->isDeduction() ? 'text-rose-700 dark:text-rose-400' : 'text-teal-700 dark:text-teal-300' }}">
+                                                        @if($alw->isPercentage())
+                                                            {{ number_format($alw->rate_percent, 2) }}% <span class="text-[10px] font-sans font-normal text-slate-500">(Gaji Pokok)</span>
+                                                        @else
+                                                            {{ $alw->formatted_amount }}
+                                                        @endif
                                                     </td>
                                                     <td class="px-3 py-2.5 text-center">
                                                         <form action="{{ route('allowances.toggle', $alw) }}" method="POST" class="inline">
@@ -2092,17 +2283,17 @@
                                                                 type="button" 
                                                                 @click="openEditAllowanceModal({{ Js::from($alw) }})" 
                                                                 class="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                                                                title="Edit Tunjangan"
+                                                                title="Edit Komponen"
                                                             >
                                                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                                                             </button>
-                                                            <form action="{{ route('allowances.destroy', $alw) }}" method="POST" class="inline" onsubmit="return confirm('Hapus tunjangan {{ $alw->name }}?');">
+                                                            <form action="{{ route('allowances.destroy', $alw) }}" method="POST" class="inline" onsubmit="return confirm('Hapus komponen {{ $alw->name }}?');">
                                                                 @csrf
                                                                 @method('DELETE')
                                                                 <button 
                                                                     type="submit" 
                                                                     class="p-1.5 rounded-lg text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                                                                    title="Hapus Tunjangan"
+                                                                    title="Hapus Komponen"
                                                                 >
                                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                                                 </button>
@@ -2112,8 +2303,8 @@
                                                 </tr>
                                             @empty
                                                 <tr>
-                                                    <td colspan="5" class="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
-                                                        Belum ada jenis tunjangan yang dibuat. Silakan tambahkan melalui form di atas.
+                                                    <td colspan="6" class="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                                                        Belum ada jenis tunjangan atau potongan yang dibuat. Silakan tambahkan melalui form di atas.
                                                     </td>
                                                 </tr>
                                             @endforelse

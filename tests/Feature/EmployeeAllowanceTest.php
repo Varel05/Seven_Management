@@ -327,4 +327,102 @@ class EmployeeAllowanceTest extends TestCase
         $this->assertEquals(200000, $emp3->fresh()->total_allowance);
         $this->assertStringContainsString('3 orang', $allowance->target_label);
     }
+
+    public function test_user_can_create_and_calculate_deductions_fixed_and_percentage(): void
+    {
+        $user = User::factory()->create();
+
+        $employee = Employee::create([
+            'name' => 'Budi Santoso',
+            'phone' => '081234567899',
+            'role' => EmployeeRole::Staff,
+            'position' => 'Staff Operasional',
+            'base_salary' => 3000000,
+            'pay_day' => 25,
+            'status' => 'active',
+        ]);
+
+        // 1. Buat Tunjangan Makan (Allowance Rp 200.000)
+        Allowance::create([
+            'name' => 'Tunjangan Makan',
+            'type' => Allowance::TYPE_ALLOWANCE,
+            'calculation_type' => Allowance::CALC_FIXED,
+            'target_type' => Allowance::TARGET_ALL,
+            'amount' => 200000,
+            'is_active' => true,
+        ]);
+
+        // 2. Buat Potongan Kasbon (Deduction Nominal Tetap Rp 100.000)
+        $response = $this->actingAs($user)->post('/allowances', [
+            'name' => 'Potongan Kasbon',
+            'type' => Allowance::TYPE_DEDUCTION,
+            'calculation_type' => Allowance::CALC_FIXED,
+            'target_type' => Allowance::TARGET_EMPLOYEE,
+            'target_employee_ids' => [$employee->id],
+            'amount' => 100000,
+            'is_active' => 1,
+        ]);
+        $response->assertRedirect(route('employees.index'));
+
+        // 3. Buat Potongan BPJS (Deduction Persentase 2% dari Gaji Pokok)
+        $responseBPJS = $this->actingAs($user)->post('/allowances', [
+            'name' => 'BPJS Ketenagakerjaan',
+            'type' => Allowance::TYPE_DEDUCTION,
+            'calculation_type' => Allowance::CALC_PERCENTAGE,
+            'rate_percent' => 2.0,
+            'target_type' => Allowance::TARGET_ALL,
+            'amount' => 0,
+            'is_active' => 1,
+        ]);
+        $responseBPJS->assertRedirect(route('employees.index'));
+
+        // Verifikasi perhitungan:
+        // Base Salary: 3.000.000
+        // Allowance: 200.000
+        // Deductions: 100.000 (Kasbon) + (2% x 3.000.000 = 60.000 BPJS) = 160.000
+        // THP: 3.000.000 + 200.000 - 160.000 = 3.040.000
+        $employee->refresh();
+        $this->assertEquals(200000, $employee->total_allowance);
+        $this->assertEquals(160000, $employee->total_deduction);
+        $this->assertEquals(3040000, $employee->total_salary);
+
+        // Verifikasi breakdown komponen
+        $breakdown = $employee->current_allowances_breakdown;
+        $this->assertCount(1, $breakdown['allowances']);
+        $this->assertCount(2, $breakdown['deductions']);
+
+        $bpjsItem = collect($breakdown['deductions'])->firstWhere('name', 'BPJS Ketenagakerjaan');
+        $this->assertNotNull($bpjsItem);
+        $this->assertEquals(60000, $bpjsItem['amount']);
+        $this->assertEquals('percentage', $bpjsItem['calculation_type']);
+        $this->assertEquals(2.0, $bpjsItem['rate_percent']);
+
+        // Eksekusi posting payroll
+        $journalEntry = $employee->executePayrollPosting();
+        $this->assertNotNull($journalEntry);
+
+        // Cek baris jurnal beban gaji bernilai THP (3.040.000)
+        $expenseAccount = Account::where('code', '5002')->first();
+        $this->assertDatabaseHas('journal_entry_lines', [
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $expenseAccount->id,
+            'debit' => 3040000,
+            'credit' => 0,
+        ]);
+
+        // Cek deskripsi memuat tunjangan dan potongan
+        $line = $journalEntry->lines()->where('account_id', $expenseAccount->id)->first();
+        $this->assertStringContainsString('Tunjangan: Rp 200.000', $line->description);
+        $this->assertStringContainsString('Potongan: Rp 160.000', $line->description);
+        $this->assertStringContainsString('BPJS Ketenagakerjaan', $line->description);
+        $this->assertStringContainsString('Potongan Kasbon', $line->description);
+
+        // Cek payroll record
+        $payroll = $employee->payrolls()->latest('id')->first();
+        $this->assertNotNull($payroll);
+        $this->assertEquals(200000, $payroll->allowance_total);
+        $this->assertEquals(160000, $payroll->deduction_total);
+        $this->assertEquals(3040000, $payroll->take_home_pay);
+        $this->assertNotEmpty($payroll->allowances_breakdown);
+    }
 }

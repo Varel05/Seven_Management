@@ -23,17 +23,30 @@ class AllowanceController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:100',
+            'type' => ['nullable', Rule::in([Allowance::TYPE_ALLOWANCE, Allowance::TYPE_DEDUCTION])],
             'target_type' => ['required', Rule::in([Allowance::TARGET_ALL, Allowance::TARGET_ROLE, Allowance::TARGET_EMPLOYEE])],
             'target_role' => ['nullable', 'string', 'max:50', Rule::requiredIf($request->input('target_type') === Allowance::TARGET_ROLE)],
             'employee_id' => ['nullable', 'exists:employees,id'],
             'target_employee_ids' => ['nullable', 'array'],
             'target_employee_ids.*' => ['integer', 'exists:employees,id'],
-            'amount' => 'required|numeric|min:0',
+            'calculation_type' => ['nullable', Rule::in([Allowance::CALC_FIXED, Allowance::CALC_PERCENTAGE])],
+            'amount' => 'nullable|numeric|min:0',
+            'rate_percent' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string|max:255',
             'is_active' => 'nullable|boolean',
         ]);
 
+        $validated['type'] = $request->input('type', Allowance::TYPE_ALLOWANCE) ?: Allowance::TYPE_ALLOWANCE;
+        $validated['calculation_type'] = $request->input('calculation_type', Allowance::CALC_FIXED) ?: Allowance::CALC_FIXED;
         $validated['is_active'] = $request->boolean('is_active', true);
+
+        if ($validated['calculation_type'] === Allowance::CALC_PERCENTAGE) {
+            $validated['rate_percent'] = (float) $request->input('rate_percent', 0);
+            $validated['amount'] = 0;
+        } else {
+            $validated['rate_percent'] = null;
+            $validated['amount'] = (float) $request->input('amount', 0);
+        }
 
         // Jika bukan target_role, bersihkan target_role
         if ($validated['target_type'] !== Allowance::TARGET_ROLE) {
@@ -55,8 +68,9 @@ class AllowanceController extends Controller
         }
 
         $allowance = Allowance::create($validated);
+        $typeLabel = $allowance->isDeduction() ? 'Potongan' : 'Tunjangan';
 
-        return redirect()->route('employees.index')->with('success', "Tunjangan '{$allowance->name}' ({$allowance->formatted_amount}) berhasil ditambahkan.");
+        return redirect()->route('employees.index')->with('success', "{$typeLabel} '{$allowance->name}' ({$allowance->formatted_amount}) berhasil ditambahkan.");
     }
 
     /**
@@ -73,17 +87,30 @@ class AllowanceController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:100',
+            'type' => ['nullable', Rule::in([Allowance::TYPE_ALLOWANCE, Allowance::TYPE_DEDUCTION])],
             'target_type' => ['required', Rule::in([Allowance::TARGET_ALL, Allowance::TARGET_ROLE, Allowance::TARGET_EMPLOYEE])],
             'target_role' => ['nullable', 'string', 'max:50', Rule::requiredIf($request->input('target_type') === Allowance::TARGET_ROLE)],
             'employee_id' => ['nullable', 'exists:employees,id'],
             'target_employee_ids' => ['nullable', 'array'],
             'target_employee_ids.*' => ['integer', 'exists:employees,id'],
-            'amount' => 'required|numeric|min:0',
+            'calculation_type' => ['nullable', Rule::in([Allowance::CALC_FIXED, Allowance::CALC_PERCENTAGE])],
+            'amount' => 'nullable|numeric|min:0',
+            'rate_percent' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string|max:255',
             'is_active' => 'nullable|boolean',
         ]);
 
+        $validated['type'] = $request->input('type', $allowance->type ?? Allowance::TYPE_ALLOWANCE) ?: Allowance::TYPE_ALLOWANCE;
+        $validated['calculation_type'] = $request->input('calculation_type', $allowance->calculation_type ?? Allowance::CALC_FIXED) ?: Allowance::CALC_FIXED;
         $validated['is_active'] = $request->boolean('is_active', true);
+
+        if ($validated['calculation_type'] === Allowance::CALC_PERCENTAGE) {
+            $validated['rate_percent'] = (float) $request->input('rate_percent', 0);
+            $validated['amount'] = 0;
+        } else {
+            $validated['rate_percent'] = null;
+            $validated['amount'] = (float) $request->input('amount', 0);
+        }
 
         if ($validated['target_type'] !== Allowance::TARGET_ROLE) {
             $validated['target_role'] = null;
@@ -103,8 +130,9 @@ class AllowanceController extends Controller
         }
 
         $allowance->update($validated);
+        $typeLabel = $allowance->isDeduction() ? 'Potongan' : 'Tunjangan';
 
-        return redirect()->route('employees.index')->with('success', "Tunjangan '{$allowance->name}' berhasil diperbarui.");
+        return redirect()->route('employees.index')->with('success', "{$typeLabel} '{$allowance->name}' berhasil diperbarui.");
     }
 
     /**

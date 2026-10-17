@@ -55,6 +55,9 @@ class Employee extends Model
         'bonus_salary',
         'total_allowance',
         'formatted_total_allowance',
+        'total_deduction',
+        'formatted_total_deduction',
+        'current_allowances_breakdown',
         'total_salary',
         'tier_label',
         'tier_name',
@@ -415,20 +418,43 @@ class Employee extends Model
     }
 
     /**
-     * Dapatkan semua tunjangan aktif yang berlaku untuk karyawan ini
-     * (berlaku untuk semua, sesuai divisi/role, atau khusus untuk karyawan ini).
+     * Dapatkan semua komponen tunjangan & potongan aktif yang berlaku untuk karyawan ini.
      */
-    public function getApplicableAllowancesAttribute()
+    public function getApplicableComponentsAttribute()
     {
         return Allowance::active()->get()->filter(fn (Allowance $allowance) => $allowance->appliesTo($this))->values();
     }
 
     /**
-     * Total nominal tunjangan karyawan.
+     * Dapatkan semua tunjangan penambah aktif yang berlaku untuk karyawan ini.
+     */
+    public function getApplicableAllowancesAttribute()
+    {
+        return $this->applicable_components->filter(fn (Allowance $a) => $a->isAllowance())->values();
+    }
+
+    /**
+     * Dapatkan semua potongan pengurang aktif yang berlaku untuk karyawan ini.
+     */
+    public function getApplicableDeductionsAttribute()
+    {
+        return $this->applicable_components->filter(fn (Allowance $a) => $a->isDeduction())->values();
+    }
+
+    /**
+     * Hitung total nominal tunjangan penambah karyawan dengan basis tertentu (opsional).
+     */
+    public function calculateTotalAllowance(?float $baseAmount = null): float
+    {
+        return (float) $this->applicable_allowances->sum(fn (Allowance $a) => $a->calculateAmountFor($this, $baseAmount));
+    }
+
+    /**
+     * Total nominal tunjangan penambah karyawan (default).
      */
     public function getTotalAllowanceAttribute(): float
     {
-        return (float) $this->applicable_allowances->sum('amount');
+        return $this->calculateTotalAllowance();
     }
 
     /**
@@ -440,11 +466,68 @@ class Employee extends Model
     }
 
     /**
-     * Total gaji = Gaji Pokok + Total Tunjangan + Bonus Poin.
+     * Hitung total nominal potongan pengurang karyawan dengan basis tertentu (opsional).
+     */
+    public function calculateTotalDeduction(?float $baseAmount = null): float
+    {
+        return (float) $this->applicable_deductions->sum(fn (Allowance $a) => $a->calculateAmountFor($this, $baseAmount));
+    }
+
+    /**
+     * Total nominal potongan pengurang karyawan (default).
+     */
+    public function getTotalDeductionAttribute(): float
+    {
+        return $this->calculateTotalDeduction();
+    }
+
+    /**
+     * Format Rupiah untuk Total Potongan.
+     */
+    public function getFormattedTotalDeductionAttribute(): string
+    {
+        return 'Rp '.number_format($this->total_deduction, 0, ',', '.');
+    }
+
+    /**
+     * Rincian breakdown tunjangan & potongan dengan basis tertentu (opsional).
+     */
+    public function calculateAllowancesBreakdown(?float $baseAmount = null): array
+    {
+        return [
+            'allowances' => $this->applicable_allowances->map(fn (Allowance $a) => [
+                'name' => $a->name,
+                'amount' => $a->calculateAmountFor($this, $baseAmount),
+                'calculation_type' => $a->calculation_type,
+                'rate_percent' => (float) ($a->rate_percent ?? 0),
+                'formatted_amount' => 'Rp '.number_format($a->calculateAmountFor($this, $baseAmount), 0, ',', '.'),
+                'rate_label' => $a->isPercentage() ? "({$a->rate_percent}%)" : '',
+            ])->values()->toArray(),
+            'deductions' => $this->applicable_deductions->map(fn (Allowance $a) => [
+                'name' => $a->name,
+                'amount' => $a->calculateAmountFor($this, $baseAmount),
+                'calculation_type' => $a->calculation_type,
+                'rate_percent' => (float) ($a->rate_percent ?? 0),
+                'formatted_amount' => 'Rp '.number_format($a->calculateAmountFor($this, $baseAmount), 0, ',', '.'),
+                'rate_label' => $a->isPercentage() ? "({$a->rate_percent}%)" : '',
+            ])->values()->toArray(),
+        ];
+    }
+
+    /**
+     * Rincian breakdown tunjangan & potongan saat ini.
+     */
+    public function getCurrentAllowancesBreakdownAttribute(): array
+    {
+        return $this->calculateAllowancesBreakdown();
+    }
+
+    /**
+     * Total gaji = max(0, Gaji Pokok + Total Tunjangan - Total Potongan + Bonus Poin).
      */
     public function getTotalSalaryAttribute(): float
     {
-        return (float) ($this->base_salary + $this->total_allowance + $this->bonus_salary);
+        return (float) max(0, $this->base_salary + $this->total_allowance - $this->total_deduction + $this->bonus_salary);
     }
 
     /**
@@ -592,17 +675,22 @@ class Employee extends Model
                 ? ', Tunjangan: '.$this->formatted_total_allowance.($allowanceNames ? " ({$allowanceNames})" : '')
                 : '';
 
+            $deductionNames = $this->applicable_deductions->pluck('name')->implode(', ');
+            $deductionText = $this->total_deduction > 0
+                ? ', Potongan: '.$this->formatted_total_deduction.($deductionNames ? " ({$deductionNames})" : '')
+                : '';
+
             $bonusText = $this->bonus_salary > 0
                 ? ', Bonus: '.$this->formatted_bonus_salary." ({$this->tier_points_to_deduct} poin)"
                 : '';
 
-            $mainSalaryBase = $draftPayroll ? $draftPayroll->main_salary : ($payrollData['main_salary'] ?? $this->base_salary);
+            $mainSalaryBase = (float) ($draftPayroll ? $draftPayroll->main_salary : ($payrollData['main_salary'] ?? ((float) $this->base_salary > 0 ? (float) $this->base_salary : ((float) $this->effective_daily_rate * 27))));
 
             // 1. Debit Akun Beban Gaji (5002)
             JournalEntryLine::create([
                 'journal_entry_id' => $journalEntry->id,
                 'account_id' => $expenseAccount->id,
-                'description' => "Gaji {$this->name} (Pokok/Honor: Rp ".number_format($mainSalaryBase, 0, ',', '.')."{$allowanceText}{$bonusText})",
+                'description' => "Gaji {$this->name} (Pokok/Honor: Rp ".number_format($mainSalaryBase, 0, ',', '.')."{$allowanceText}{$deductionText}{$bonusText})",
                 'debit' => $finalAmount,
                 'credit' => 0,
             ]);
@@ -616,24 +704,17 @@ class Employee extends Model
                 'credit' => $finalAmount,
             ]);
 
+            $allowanceTotal = (float) ($payrollData['allowance_total'] ?? ($draftPayroll ? $draftPayroll->allowance_total : $this->calculateTotalAllowance($mainSalaryBase)));
+            $deductionTotal = (float) ($payrollData['deduction_total'] ?? ($draftPayroll ? ($draftPayroll->deduction_total ?? 0) : $this->calculateTotalDeduction($mainSalaryBase)));
+            $breakdown = $payrollData['allowances_breakdown'] ?? ($draftPayroll ? ($draftPayroll->allowances_breakdown ?? null) : null) ?? $this->calculateAllowancesBreakdown($mainSalaryBase);
+
             if ($draftPayroll) {
                 // Gunakan data dari draft yang sudah diisi oleh webhook generatePayrollSlip
-                $totalPresent = $draftPayroll->total_present;
-                $totalShifts = $draftPayroll->total_shifts;
-                $lateCount = $draftPayroll->late_count;
-                $disciplinePresent = $draftPayroll->discipline_present;
-                $holidayShifts = $draftPayroll->holiday_shifts;
-                $dailyRate = $draftPayroll->daily_rate;
-                $disciplineRate = $draftPayroll->discipline_rate;
-                $holidayRate = $draftPayroll->holiday_rate;
-                $mainSalary = $draftPayroll->main_salary;
-                $disciplineBonus = $draftPayroll->discipline_bonus;
-                $salesBonus = $draftPayroll->sales_bonus;
-                $holidayBonus = $draftPayroll->holiday_bonus;
-                $allowanceTotal = $draftPayroll->allowance_total;
-
                 $draftPayroll->update([
                     'journal_entry_id' => $journalEntry->id,
+                    'allowance_total' => $allowanceTotal,
+                    'deduction_total' => $deductionTotal,
+                    'allowances_breakdown' => $breakdown,
                     'take_home_pay' => $finalAmount,
                     'notes' => 'Telah Dibayar',
                     'paid_at' => now(), // Assume this column exists or will just be ignored if not in fillable
@@ -653,7 +734,6 @@ class Employee extends Model
                 $disciplineBonus = (float) ($payrollData['discipline_bonus'] ?? ($disciplinePresent * $disciplineRate));
                 $salesBonus = (float) ($payrollData['sales_bonus'] ?? $this->bonus_salary);
                 $holidayBonus = (float) ($payrollData['holiday_bonus'] ?? ($holidayShifts * $holidayRate));
-                $allowanceTotal = (float) ($payrollData['allowance_total'] ?? $this->total_allowance);
 
                 EmployeePayroll::create([
                     'employee_id' => $this->id,
@@ -679,6 +759,8 @@ class Employee extends Model
                     'sales_bonus' => $salesBonus,
                     'holiday_bonus' => $holidayBonus,
                     'allowance_total' => $allowanceTotal,
+                    'deduction_total' => $deductionTotal,
+                    'allowances_breakdown' => $breakdown,
                     'take_home_pay' => $finalAmount,
                     'notes' => $payrollData['notes'] ?? null,
                     'hrd_name' => $payrollData['hrd_name'] ?? 'Ari Husbana',
