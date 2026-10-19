@@ -11,6 +11,8 @@ use App\Models\EmployeePointLog;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\RecurringTransaction;
+use App\Models\Tailor;
+use App\Models\TailorLaborRate;
 use App\Models\TailorPayroll;
 use App\Services\AttendanceSyncService;
 use App\Services\TaxService;
@@ -18,6 +20,7 @@ use App\Services\TransactionCancellationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class WebhookTransactionController extends Controller
@@ -34,11 +37,12 @@ class WebhookTransactionController extends Controller
         $senderPhone = trim((string) (
             $request->input('sender_phone')
             ?? $request->input('sender_mobile_number')
+            ?? $request->input('telegram_phone')
+            ?? $request->header('X-Telegram-Phone')
+            ?? $request->header('X-Sender-Phone')
             ?? $request->input('phone_number')
             ?? $request->input('mobile_number')
             ?? $request->input('phone')
-            ?? $request->header('X-Telegram-Phone')
-            ?? $request->header('X-Sender-Phone')
             ?? ''
         ));
 
@@ -60,11 +64,12 @@ class WebhookTransactionController extends Controller
         $senderPhone = trim((string) (
             $request->input('sender_phone')
             ?? $request->input('sender_mobile_number')
+            ?? $request->input('telegram_phone')
+            ?? $request->header('X-Telegram-Phone')
+            ?? $request->header('X-Sender-Phone')
             ?? $request->input('phone_number')
             ?? $request->input('mobile_number')
             ?? $request->input('phone')
-            ?? $request->header('X-Telegram-Phone')
-            ?? $request->header('X-Sender-Phone')
             ?? ''
         ));
 
@@ -306,11 +311,16 @@ class WebhookTransactionController extends Controller
             // Double-entry mode jika lines eksplisit disediakan
             if (! empty($validated['lines']) && count($validated['lines']) > 0) {
                 foreach ($validated['lines'] as $line) {
+                    $normCode = self::normalizeAccountCode((string) ($line['account_code'] ?? ''));
+                    $official = self::getOfficialAccountDetails($normCode);
+                    $defaultName = $official ? $official['name'] : ($line['account_name'] ?? ('Akun '.$normCode));
+                    $defaultType = $official ? $official['type'] : 'expense';
+
                     $account = Account::firstOrCreate(
-                        ['code' => $line['account_code']],
+                        ['code' => $normCode],
                         [
-                            'name' => $line['account_name'] ?? ('Akun '.$line['account_code']),
-                            'type' => 'expense',
+                            'name' => $defaultName,
+                            'type' => $defaultType,
                         ]
                     );
 
@@ -323,13 +333,55 @@ class WebhookTransactionController extends Controller
                     ]);
                 }
             } else {
-                // Simple mode: auto generate double-entry sesuai database Chart of Accounts
+                // Simple mode: auto generate double-entry sesuai database Chart of Accounts (COA)
                 $amount = $validated['amount'];
                 $type = $validated['type'];
 
                 $assetAccount = $this->resolveAssetAccount($validated);
 
-                if ($type === 'expense') {
+                // Deteksi Transaksi Kasbon (1005 - Piutang Kasbon Karyawan & Penjahit)
+                if ($this->isKasbonTransaction($validated)) {
+                    $kasbonAccount = Account::firstOrCreate(
+                        ['code' => '1005'],
+                        ['name' => 'Piutang Kasbon Karyawan & Penjahit', 'type' => 'asset']
+                    );
+
+                    if ($type === 'income') {
+                        // Pelunasan / pengembalian kasbon: Kas/Bank bertambah (Debit), Piutang Kasbon berkurang (Kredit)
+                        JournalEntryLine::create([
+                            'journal_entry_id' => $journalEntry->id,
+                            'account_id' => $assetAccount->id,
+                            'description' => 'Penerimaan pelunasan kasbon ke '.$assetAccount->name,
+                            'debit' => $amount,
+                            'credit' => 0,
+                        ]);
+
+                        JournalEntryLine::create([
+                            'journal_entry_id' => $journalEntry->id,
+                            'account_id' => $kasbonAccount->id,
+                            'description' => $journalEntry->description,
+                            'debit' => 0,
+                            'credit' => $amount,
+                        ]);
+                    } else {
+                        // Pemberian kasbon: Piutang Kasbon bertambah (Debit), Kas/Bank berkurang (Kredit)
+                        JournalEntryLine::create([
+                            'journal_entry_id' => $journalEntry->id,
+                            'account_id' => $kasbonAccount->id,
+                            'description' => $journalEntry->description,
+                            'debit' => $amount,
+                            'credit' => 0,
+                        ]);
+
+                        JournalEntryLine::create([
+                            'journal_entry_id' => $journalEntry->id,
+                            'account_id' => $assetAccount->id,
+                            'description' => 'Pembayaran kasbon via '.$assetAccount->name,
+                            'debit' => 0,
+                            'credit' => $amount,
+                        ]);
+                    }
+                } elseif ($type === 'expense') {
                     $expenseAccount = $this->resolveCategoryAccount($validated, 'expense');
 
                     // Debit Akun Beban, Credit Akun Kas/Bank
@@ -515,6 +567,79 @@ class WebhookTransactionController extends Controller
     }
 
     /**
+     * Normalisasi kode akun legacy atau alias ke 8 akun resmi Chart of Accounts Seven Management.
+     */
+    public static function normalizeAccountCode(string $code): string
+    {
+        $code = trim($code);
+        $map = [
+            // Pajak PPh Final
+            '5008' => '5005',
+            // Gaji / Bonus Kinerja
+            '5004' => '5002',
+            // Kasbon Karyawan & Penjahit (disatukan ke 1005)
+            '1003' => '1005',
+            '1004' => '1005',
+            // Beban Utilitas, Iklan, & Operasional lainnya (disatukan ke 5001)
+            '5006' => '5001',
+            '5007' => '5001',
+            '5099' => '5001',
+            // Pendapatan Usaha (disatukan ke 4001)
+            '4002' => '4001',
+            '4003' => '4001',
+            '4004' => '4001',
+        ];
+
+        return $map[$code] ?? $code;
+    }
+
+    /**
+     * Dapatkan rincian nama dan tipe resmi untuk 8 akun Chart of Accounts Seven Management.
+     */
+    public static function getOfficialAccountDetails(string $code): ?array
+    {
+        $official = [
+            '1001' => ['name' => 'Kas Operasional', 'type' => 'asset'],
+            '1002' => ['name' => 'Bank BCA', 'type' => 'asset'],
+            '1005' => ['name' => 'Piutang Kasbon Karyawan & Penjahit', 'type' => 'asset'],
+            '4001' => ['name' => 'Pendapatan Usaha', 'type' => 'revenue'],
+            '5001' => ['name' => 'Beban Operasional', 'type' => 'expense'],
+            '5002' => ['name' => 'Beban Gaji & Upah', 'type' => 'expense'],
+            '5003' => ['name' => 'Beban Perlengkapan & ATK', 'type' => 'expense'],
+            '5005' => ['name' => 'Beban Pajak Penghasilan (PPh Final)', 'type' => 'expense'],
+        ];
+
+        return $official[$code] ?? null;
+    }
+
+    /**
+     * Deteksi apakah transaksi adalah pemberian atau pelunasan kasbon / pinjaman karyawan & penjahit.
+     */
+    public function isKasbonTransaction(array $validated): bool
+    {
+        $code = trim((string) ($validated['account_code'] ?? ''));
+        if (in_array($code, ['1005', '1003', '1004'], true)) {
+            return true;
+        }
+
+        $text = strtolower(implode(' ', array_filter([
+            $validated['category'] ?? '',
+            $validated['description'] ?? '',
+            $validated['account'] ?? '',
+            $validated['type'] ?? '',
+        ])));
+
+        // Deteksi pola kata kunci kasbon / pinjaman / panjar karyawan atau penjahit
+        if (preg_match('/\b(kasbon|bon|pinjaman|panjar|uang muka)\b/i', $text)) {
+            if (! preg_match('/\b(tanpa kasbon|bebas bon|tanpa bon|tanpa pinjaman)\b/i', $text)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Cari akun Asset (Kas / Bank) yang paling cocok dari database.
      */
     private function resolveAssetAccount(array $validated): Account
@@ -523,8 +648,9 @@ class WebhookTransactionController extends Controller
 
         // 1. Cek jika kode akun langsung diberikan dan cocok dengan akun asset
         if (! empty($validated['account_code'])) {
-            $found = $assetAccounts->firstWhere('code', $validated['account_code']);
-            if ($found) {
+            $normCode = self::normalizeAccountCode($validated['account_code']);
+            $found = $assetAccounts->firstWhere('code', $normCode);
+            if ($found && ! in_array($normCode, ['1005'], true)) {
                 return $found;
             }
         }
@@ -549,6 +675,26 @@ class WebhookTransactionController extends Controller
         $searchSources = array_filter($searchSources);
         $fullSearchText = strtolower(implode(' ', $searchSources));
 
+        // Deteksi eksplisit Bank BCA jika ada kata BCA / transfer / rekening / qris
+        if (preg_match('/\b(bca|bank bca|transfer|tf|rekening|qris|edc|m-banking)\b/i', $fullSearchText)) {
+            $bca = $liquidAccounts->first(function ($acc) {
+                return str_contains(strtolower($acc->name), 'bca') || $acc->code === '1002';
+            });
+            if ($bca) {
+                return $bca;
+            }
+        }
+
+        // Deteksi Kas Tunai jika ada kata kas / tunai / cash
+        if (preg_match('/\b(kas|tunai|cash|laci)\b/i', $fullSearchText)) {
+            $kas = $liquidAccounts->first(function ($acc) {
+                return str_contains(strtolower($acc->name), 'kas') || $acc->code === '1001';
+            });
+            if ($kas) {
+                return $kas;
+            }
+        }
+
         $bestAccount = null;
         $highestScore = 0;
 
@@ -567,21 +713,15 @@ class WebhookTransactionController extends Controller
                 $score += 80;
             }
 
-            // C. Kecocokan kata kunci unik (misal "bca", "mandiri", "bri", "gopay", "ovo")
+            // C. Kecocokan kata kunci unik
             $cleanName = trim(str_replace(['bank', 'kas', 'dompet', 'rekening'], '', $accNameLower));
             if (! empty($cleanName)) {
-                // Split jika ada beberapa kata
                 $keywords = array_filter(explode(' ', $cleanName));
                 foreach ($keywords as $kw) {
                     if (strlen($kw) >= 2 && preg_match('/\b'.preg_quote($kw, '/').'\b/i', $fullSearchText)) {
                         $score += 60;
                     }
                 }
-            }
-
-            // D. Kecocokan kata "kas" atau "tunai"
-            if (str_contains($accNameLower, 'kas') && (preg_match('/\b(kas|tunai|cash)\b/i', $fullSearchText))) {
-                $score += 50;
             }
 
             if ($score > $highestScore) {
@@ -603,72 +743,62 @@ class WebhookTransactionController extends Controller
 
     /**
      * Cari akun Kategori (Beban atau Pendapatan) yang paling cocok dari database.
+     * Menggunakan kamus semantik presisi ke 8 akun aktif resmi Seven Management.
      */
     private function resolveCategoryAccount(array $validated, string $type): Account
     {
-        $targetType = $type === 'income' ? 'revenue' : 'expense';
-        $accounts = Account::where('type', $targetType)->get();
-
-        $searchSources = [
-            trim($validated['category'] ?? ''),
-            trim($validated['description'] ?? ''),
-        ];
-        $searchSources = array_filter($searchSources);
-        $fullSearchText = strtolower(implode(' ', $searchSources));
-
         // 1. Cek jika kode akun langsung diberikan dan cocok
         if (! empty($validated['account_code'])) {
-            $found = $accounts->firstWhere('code', $validated['account_code']);
+            $normCode = self::normalizeAccountCode($validated['account_code']);
+            $found = Account::firstWhere('code', $normCode);
             if ($found) {
                 return $found;
             }
         }
 
-        $bestAccount = null;
-        $highestScore = 0;
+        $searchSources = [
+            trim($validated['category'] ?? ''),
+            trim($validated['description'] ?? ''),
+            trim($validated['account'] ?? ''),
+        ];
+        $searchSources = array_filter($searchSources);
+        $fullSearchText = strtolower(implode(' ', $searchSources));
 
-        foreach ($accounts as $acc) {
-            $score = 0;
-            $accNameLower = strtolower($acc->name);
-            $accCodeLower = strtolower($acc->code);
-
-            // A. Kecocokan kode akun eksak
-            if (preg_match('/\b'.preg_quote($accCodeLower, '/').'\b/', $fullSearchText)) {
-                $score += 100;
-            }
-
-            // B. Kecocokan nama lengkap
-            if (str_contains($fullSearchText, $accNameLower)) {
-                $score += 80;
-            }
-
-            // C. Kata kunci inti akun (misal "gaji", "listrik", "perlengkapan", "kantor", "sewa")
-            $cleanName = trim(str_replace(['beban', 'biaya', 'pendapatan', 'akun'], '', $accNameLower));
-            $keywords = array_filter(explode(' ', $cleanName));
-            foreach ($keywords as $kw) {
-                if (strlen($kw) >= 3 && preg_match('/\b'.preg_quote($kw, '/').'\b/i', $fullSearchText)) {
-                    $score += 50;
-                }
-            }
-
-            if ($score > $highestScore) {
-                $highestScore = $score;
-                $bestAccount = $acc;
-            }
-        }
-
-        if ($bestAccount && $highestScore > 0) {
-            return $bestAccount;
-        }
-
-        // Fallback default
         if ($type === 'income') {
+            // Seven Management mencatat seluruh pendapatan usaha ke 4001
             return Account::firstOrCreate(
                 ['code' => '4001'],
                 ['name' => 'Pendapatan Usaha', 'type' => 'revenue']
             );
         }
 
+        // --- EXPENSE MAPPING (8 AKUN RESMI COA) ---
+
+        // 1. Prioritas Pajak PPh Final (5005)
+        if (preg_match('/\b(pajak|pph|pph final|pph 0\.5%|pajak 0\.5%|djp|ebilling|e-billing|ntpn|pajak umkm|pp 55)\b/i', $fullSearchText)) {
+            return Account::firstOrCreate(
+                ['code' => '5005'],
+                ['name' => 'Beban Pajak Penghasilan (PPh Final)', 'type' => 'expense']
+            );
+        }
+
+        // 2. Prioritas Gaji & Upah (5002) - honor shift toko, bonus, upah jahit borongan
+        if (preg_match('/\b(gaji|upah|payroll|honor|thp|take home pay|bonus|insentif|tunjangan|shift|uang makan|borongan jahit|upah jahit|penjahit)\b/i', $fullSearchText)) {
+            return Account::firstOrCreate(
+                ['code' => '5002'],
+                ['name' => 'Beban Gaji & Upah', 'type' => 'expense']
+            );
+        }
+
+        // 3. Prioritas Perlengkapan & ATK (5003) - packaging, nota, hanger, cover jas, atk
+        if (preg_match('/\b(atk|perlengkapan|kertas|nota|pulpen|lakban|solasi|plastik|polymailer|kresek|hanger|cover jas|gunting|jarum|benang|alat tulis|buku nota|buku kas|kwitansi)\b/i', $fullSearchText)) {
+            return Account::firstOrCreate(
+                ['code' => '5003'],
+                ['name' => 'Beban Perlengkapan & ATK', 'type' => 'expense']
+            );
+        }
+
+        // 4. Default Beban Operasional (5001) - utilitas (listrik, air, wifi), sewa, bensin, konsumsi, iklan, maintenance
         return Account::firstOrCreate(
             ['code' => '5001'],
             ['name' => 'Beban Operasional', 'type' => 'expense']
@@ -1676,7 +1806,8 @@ class WebhookTransactionController extends Controller
 
         $taxService = app(TaxService::class);
         $taxData = $taxService->calculateMonthlyTax($now->year, $now->month);
-        $taxStatusStr = $taxData['is_paid'] ? '(✅ Disetor)' : '(⏳ Belum Setor)';
+        $taxStatusStr = $taxData['is_paid'] ? '(Lunas ✅)' : '(Belum Disetor ⚠️)';
+        $excelUrl = url('/journal-entries/export-monthly?month='.$now->format('Y-m'));
 
         $messageLines = [
             "📊 *Ringkasan Keuangan ({$monthName})*\n",
@@ -1688,6 +1819,8 @@ class WebhookTransactionController extends Controller
             "\n⏳ *Status Transaksi Bulan Ini*:",
             "• Menunggu Verifikasi: {$pendingCount}",
             "• Terverifikasi: {$verifiedCount}",
+            '───────────────────',
+            "📥 *Unduh Excel Laporan Keuangan & Jurnal:*\n• {$excelUrl}",
         ];
 
         return response()->json([
@@ -1705,7 +1838,429 @@ class WebhookTransactionController extends Controller
             ],
             'pending_count' => $pendingCount,
             'verified_count' => $verifiedCount,
+            'excel_download_url' => $excelUrl,
             'message' => implode("\n", $messageLines),
+        ]);
+    }
+
+    /**
+     * Laporan Laba Rugi Komprehensif (Income Statement & Margin) untuk Telegram / Hermes Agent.
+     */
+    public function profitLossReport(Request $request)
+    {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
+        $monthInput = $request->input('month', Carbon::now()->format('Y-m'));
+        $yearInput = $request->input('year');
+        $isAll = ($monthInput === 'all' || $request->input('period') === 'all');
+
+        $query = JournalEntry::with('lines.account')->where('status', '!=', 'rejected');
+
+        if ($isAll) {
+            $periodLabel = 'Semua Periode';
+            $monthParam = 'all';
+        } else {
+            if (is_numeric($monthInput) && (int) $monthInput >= 1 && (int) $monthInput <= 12) {
+                $year = $yearInput ? (int) $yearInput : Carbon::now()->year;
+                $month = (int) $monthInput;
+                $carbon = Carbon::create($year, $month, 1);
+            } elseif (preg_match('/^(\d{4})-(\d{2})$/', $monthInput, $matches)) {
+                $carbon = Carbon::create((int) $matches[1], (int) $matches[2], 1);
+            } else {
+                $carbon = Carbon::now();
+            }
+
+            $query->whereYear('date', $carbon->year)->whereMonth('date', $carbon->month);
+            $periodLabel = $carbon->translatedFormat('F Y');
+            $monthParam = $carbon->format('Y-m');
+        }
+
+        $entries = $query->get();
+
+        $linesByAccount = [];
+        foreach ($entries as $entry) {
+            foreach ($entry->lines as $line) {
+                if (! $line->account) {
+                    continue;
+                }
+                $accId = $line->account_id;
+                if (! isset($linesByAccount[$accId])) {
+                    $linesByAccount[$accId] = [
+                        'account' => $line->account,
+                        'debit' => 0.0,
+                        'credit' => 0.0,
+                    ];
+                }
+                $linesByAccount[$accId]['debit'] += (float) $line->debit;
+                $linesByAccount[$accId]['credit'] += (float) $line->credit;
+            }
+        }
+
+        $masterAccounts = Account::orderBy('code')->get();
+
+        // 1. Pendapatan (Revenue)
+        $revenueDetails = [];
+        $totalRevenue = 0.0;
+        foreach ($masterAccounts->where('type', 'revenue') as $acc) {
+            $deb = $linesByAccount[$acc->id]['debit'] ?? 0.0;
+            $cred = $linesByAccount[$acc->id]['credit'] ?? 0.0;
+            $net = $cred - $deb;
+            $totalRevenue += $net;
+
+            $revenueDetails[] = [
+                'code' => $acc->code,
+                'name' => $acc->name,
+                'amount' => $net,
+                'formatted_amount' => 'Rp '.number_format($net, 0, ',', '.'),
+            ];
+        }
+
+        // 2. Beban (Expense)
+        $expenseDetails = [];
+        $totalExpense = 0.0;
+        foreach ($masterAccounts->where('type', 'expense') as $acc) {
+            $deb = $linesByAccount[$acc->id]['debit'] ?? 0.0;
+            $cred = $linesByAccount[$acc->id]['credit'] ?? 0.0;
+            $net = $deb - $cred;
+            $totalExpense += $net;
+
+            $expenseDetails[] = [
+                'code' => $acc->code,
+                'name' => $acc->name,
+                'amount' => $net,
+                'formatted_amount' => 'Rp '.number_format($net, 0, ',', '.'),
+            ];
+        }
+
+        // 3. Aset (Kas & Bank)
+        $assetDetails = [];
+        $totalAssetDebit = 0.0;
+        $totalAssetCredit = 0.0;
+        foreach ($masterAccounts->where('type', 'asset') as $acc) {
+            $deb = $linesByAccount[$acc->id]['debit'] ?? 0.0;
+            $cred = $linesByAccount[$acc->id]['credit'] ?? 0.0;
+            $totalAssetDebit += $deb;
+            $totalAssetCredit += $cred;
+            $assetDetails[] = [
+                'code' => $acc->code,
+                'name' => $acc->name,
+                'in' => $deb,
+                'out' => $cred,
+                'net' => $deb - $cred,
+            ];
+        }
+        $netCashFlow = $totalAssetDebit - $totalAssetCredit;
+
+        $netProfit = $totalRevenue - $totalExpense;
+        $profitMargin = ($totalRevenue > 0) ? round(($netProfit / $totalRevenue) * 100, 1) : 0.0;
+        $isProfit = $netProfit >= 0;
+
+        $excelUrl = url("/journal-entries/export-monthly?month={$monthParam}");
+
+        // Format pesan Telegram Markdown
+        $lines = [
+            '📈 *LAPORAN LABA RUGI KOMPREHENSIF*',
+            '🏢 *Entitas*: CV / PT Seven Management',
+            "📅 *Periode*: {$periodLabel}",
+            '────────────────────────────────────────',
+            '*I. PENDAPATAN USAHA (REVENUE):*',
+        ];
+
+        foreach ($revenueDetails as $rev) {
+            $pct = ($totalRevenue > 0) ? round(($rev['amount'] / $totalRevenue) * 100, 1) : 0.0;
+            $lines[] = "• `{$rev['code']}` {$rev['name']}: {$rev['formatted_amount']} ({$pct}%)";
+        }
+        $lines[] = '👉 *Total Pendapatan (A)*: *Rp '.number_format($totalRevenue, 0, ',', '.').'*';
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '*II. BEBAN OPERASIONAL (EXPENSES):*';
+
+        foreach ($expenseDetails as $exp) {
+            $pct = ($totalRevenue > 0) ? round(($exp['amount'] / $totalRevenue) * 100, 1) : 0.0;
+            $lines[] = "• `{$exp['code']}` {$exp['name']}: {$exp['formatted_amount']} ({$pct}%)";
+        }
+        $lines[] = '👉 *Total Beban (B)*: *Rp '.number_format($totalExpense, 0, ',', '.').'*';
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '*III. HASIL USAHA BERSIH (NET PROFIT):*';
+        $statusIcon = $isProfit ? '🟩' : '🟥';
+        $statusLabel = $isProfit ? 'SURPLUS BERSIH (LABA)' : 'DEFISIT BERSIH (RUGI)';
+        $lines[] = "{$statusIcon} *Laba/Rugi Bersih [A - B]*: *Rp ".number_format($netProfit, 0, ',', '.')."* ({$statusLabel})";
+        $lines[] = "📊 *Net Profit Margin*: *{$profitMargin}%*";
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '*IV. ARUS LIKUIDITAS KAS & BANK:*';
+        $lines[] = '• Penerimaan (Debit): Rp '.number_format($totalAssetDebit, 0, ',', '.');
+        $lines[] = '• Pengeluaran (Kredit): Rp '.number_format($totalAssetCredit, 0, ',', '.');
+        $lines[] = '• Arus Kas Bersih: '.($netCashFlow >= 0 ? '+' : '').'Rp '.number_format($netCashFlow, 0, ',', '.');
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = "📥 *Unduh Laporan Excel (2 Sheet: Laba Rugi & Jurnal Umum):*\n• {$excelUrl}";
+
+        return response()->json([
+            'status' => true,
+            'period' => $periodLabel,
+            'total_revenue' => $totalRevenue,
+            'formatted_total_revenue' => 'Rp '.number_format($totalRevenue, 0, ',', '.'),
+            'total_expense' => $totalExpense,
+            'formatted_total_expense' => 'Rp '.number_format($totalExpense, 0, ',', '.'),
+            'net_profit' => $netProfit,
+            'formatted_net_profit' => 'Rp '.number_format($netProfit, 0, ',', '.'),
+            'profit_margin_percent' => $profitMargin,
+            'is_profit' => $isProfit,
+            'net_cash_flow' => $netCashFlow,
+            'revenue_breakdown' => $revenueDetails,
+            'expense_breakdown' => $expenseDetails,
+            'excel_download_url' => $excelUrl,
+            'message' => implode("\n", $lines),
+        ]);
+    }
+
+    /**
+     * Menampilkan daftar transaksi jurnal yang masih menunggu verifikasi (status: pending).
+     */
+    public function pendingTransactions(Request $request)
+    {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
+        $pending = JournalEntry::with('lines.account')
+            ->where('status', 'pending')
+            ->latest('date')
+            ->get();
+
+        if ($pending->isEmpty()) {
+            return response()->json([
+                'status' => true,
+                'count' => 0,
+                'transactions' => [],
+                'message' => "✅ *Tidak Ada Transaksi Pending*\nSeluruh pembukuan jurnal transaksi telah diverifikasi dan up-to-date.",
+            ]);
+        }
+
+        $lines = [
+            "⏳ *Daftar Transaksi Menunggu Verifikasi ({$pending->count()} Transaksi):*",
+            '────────────────────────────────────────',
+        ];
+
+        foreach ($pending as $trx) {
+            $amount = (float) $trx->lines->where('debit', '>', 0)->sum('debit');
+            $formattedAmount = 'Rp '.number_format($amount, 0, ',', '.');
+            $dateStr = $trx->date ? Carbon::parse($trx->date)->translatedFormat('d M Y, H:i') : '-';
+            $lines[] = "• *#{$trx->id}* `{$trx->reference}` ({$dateStr})";
+            $lines[] = "  Keterangan: *{$trx->description}*";
+            $lines[] = "  Nominal: *{$formattedAmount}* | Sumber: {$trx->source}";
+            $lines[] = '';
+        }
+
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '💡 *Cara Verifikasi via Telegram:*';
+        $lines[] = '• Setujui: `Verifikasi transaksi <ref/id>`';
+        $lines[] = '• Tolak: `Tolak transaksi <ref/id> [alasan]`';
+
+        return response()->json([
+            'status' => true,
+            'count' => $pending->count(),
+            'transactions' => $pending,
+            'message' => implode("\n", $lines),
+        ]);
+    }
+
+    /**
+     * Memverifikasi (menyetujui) atau menolak transaksi pending via Telegram.
+     */
+    public function verifyTransaction(Request $request)
+    {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
+        $ref = trim((string) ($request->input('reference') ?? $request->input('ref') ?? ''));
+        $id = $request->input('id') ?? $request->input('transaction_id');
+        $action = strtolower(trim((string) ($request->input('action') ?? 'verify')));
+        $reason = trim((string) ($request->input('reason') ?? $request->input('alasan') ?? ''));
+
+        $query = JournalEntry::query();
+        if (! empty($ref)) {
+            $query->where(function ($q) use ($ref) {
+                $q->where('reference', $ref)->orWhere('reference', 'LIKE', "%{$ref}%");
+            });
+        } elseif (! empty($id)) {
+            $query->where('id', $id);
+        } else {
+            // Ambil transaksi pending terbaru
+            $query->where('status', 'pending');
+        }
+
+        $trx = $query->latest('id')->first();
+
+        if (! $trx) {
+            return response()->json([
+                'status' => false,
+                'message' => '❌ Transaksi tidak ditemukan untuk diverifikasi.',
+            ], 404);
+        }
+
+        $amount = (float) $trx->lines->where('debit', '>', 0)->sum('debit');
+        $formattedAmount = 'Rp '.number_format($amount, 0, ',', '.');
+
+        if (in_array($action, ['reject', 'tolak'], true)) {
+            $trx->update([
+                'status' => 'rejected',
+                'description' => $reason ? ($trx->description.' (Ditolak: '.$reason.')') : $trx->description,
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'action' => 'rejected',
+                'transaction' => $trx,
+                'message' => "🚫 *Transaksi Ditolak!*\n\n".
+                             "Ref: `{$trx->reference}`\n".
+                             "Keterangan: {$trx->description}\n".
+                             "Nominal: {$formattedAmount}\n".
+                             ($reason ? "Alasan: {$reason}\n" : '').
+                             'Status: *Rejected* (Tidak masuk pembukuan aktif)',
+            ]);
+        }
+
+        $trx->update(['status' => 'verified']);
+
+        return response()->json([
+            'status' => true,
+            'action' => 'verified',
+            'transaction' => $trx,
+            'message' => "✅ *Transaksi Berhasil Diverifikasi!*\n\n".
+                         "Ref: `{$trx->reference}`\n".
+                         "Keterangan: {$trx->description}\n".
+                         "Nominal: *{$formattedAmount}*\n".
+                         'Status: *Verified* (Tercatat resmi di buku besar)',
+        ]);
+    }
+
+    /**
+     * Menampilkan daftar master data penjahit aktif untuk Telegram / Hermes.
+     */
+    public function listTailors(Request $request)
+    {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
+        $tailors = Tailor::with('latestPayroll')
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get();
+
+        if ($tailors->isEmpty()) {
+            return response()->json([
+                'status' => true,
+                'count' => 0,
+                'tailors' => [],
+                'message' => "ℹ️ Belum ada penjahit terdaftar di master data.\n\n💡 Daftarkan penjahit melalui web atau kirim perintah: `Daftarkan penjahit <Nama> <Nomor HP> <periode: mingguan/bulanan>`.",
+            ]);
+        }
+
+        $lines = [
+            "🪡 *Daftar Master Penjahit Aktif ({$tailors->count()} Penjahit):*",
+            '────────────────────────────────────────',
+        ];
+
+        foreach ($tailors as $t) {
+            $schedule = $t->formatted_payment_schedule;
+            $phoneStr = $t->phone ? "📞 {$t->phone}" : '📞 -';
+            $lastSlip = $t->latestPayroll
+                ? "Slip Terakhir: {$t->latestPayroll->payroll_date->format('d/m/Y')} ({$t->latestPayroll->formatted_take_home_pay})"
+                : 'Belum ada riwayat slip';
+
+            $lines[] = "• 👤 *{$t->name}* ({$phoneStr})";
+            $lines[] = "  Jadwal: *{$schedule}* | {$lastSlip}";
+            $lines[] = '';
+        }
+
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '💡 *Hitung Upah Borongan:*';
+        $lines[] = '`Hitung upah penjahit '.($tailors->first()->name ?? 'Adriana').': Jas Reguler 10 pcs, Celana 5 pcs, kasbon 100rb`';
+
+        return response()->json([
+            'status' => true,
+            'count' => $tailors->count(),
+            'tailors' => $tailors,
+            'message' => implode("\n", $lines),
+        ]);
+    }
+
+    /**
+     * Mendaftarkan penjahit baru ke master data via Telegram / Hermes.
+     */
+    public function registerTailor(Request $request)
+    {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:100',
+            'phone' => 'nullable|string|max:20',
+            'payment_period' => 'nullable|string|in:weekly,monthly,mingguan,bulanan',
+            'payment_day' => 'nullable|string|max:50',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        $period = in_array(strtolower($validated['payment_period'] ?? ''), ['monthly', 'bulanan']) ? 'monthly' : 'weekly';
+
+        $tailor = Tailor::create([
+            'name' => $validated['name'],
+            'phone' => $validated['phone'] ?? null,
+            'payment_period' => $period,
+            'payment_day' => $validated['payment_day'] ?? ($period === 'monthly' ? '25' : 'Jumat'),
+            'status' => 'active',
+            'notes' => $validated['notes'] ?? 'Didaftarkan via Telegram Hermes Agent',
+        ]);
+
+        $schedule = $tailor->formatted_payment_schedule;
+
+        return response()->json([
+            'status' => true,
+            'tailor' => $tailor,
+            'message' => "✅ *Penjahit Baru Berhasil Didaftarkan!*\n\n".
+                         "👤 Nama: *{$tailor->name}*\n".
+                         '📞 No. HP: '.($tailor->phone ?: '-')."\n".
+                         "📅 Periode Upah: *{$schedule}*\n\n".
+                         '💡 Anda kini dapat langsung menghitung upah borongan untuk penjahit ini.',
+        ], 201);
+    }
+
+    /**
+     * Menampilkan daftar tarif standar upah penjahit (HPP Direct Labor) langsung dari master database web.
+     * Memungkinkan Hermes mendeteksi perubahan harga secara real-time.
+     */
+    public function tailorLaborRates(Request $request)
+    {
+        $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
+
+        $rates = TailorPayroll::getLaborRates();
+        $lastUpdated = null;
+
+        if (Schema::hasTable('tailor_labor_rates')) {
+            $lastUpdated = TailorLaborRate::max('updated_at');
+        }
+
+        $lastUpdatedFormatted = $lastUpdated
+            ? Carbon::parse($lastUpdated)->translatedFormat('l, d F Y H:i')
+            : now()->translatedFormat('l, d F Y H:i');
+
+        $lines = [
+            '🪡 *Daftar Tarif Upah Penjahit di HPP (Master Data Web):*',
+            "🕒 *Terakhir Diperbarui*: {$lastUpdatedFormatted}",
+            '────────────────────────────────────────',
+        ];
+
+        foreach ($rates as $r) {
+            $displayName = $r->clean_name ?? $r->name;
+            $lines[] = "• *{$displayName}* (`{$r->code}`)";
+            $lines[] = "  Tarif: *{$r->formatted_standard_cost}* / {$r->unit}";
+        }
+
+        $lines[] = '────────────────────────────────────────';
+        $lines[] = '💡 *Info*: Setiap perubahan harga yang Anda simpan di web akan langsung aktif dan otomatis diterapkan oleh Hermes saat membuat slip upah.';
+
+        return response()->json([
+            'status' => true,
+            'action' => 'rates',
+            'total_items' => $rates->count(),
+            'last_updated_at' => $lastUpdated,
+            'last_updated_formatted' => $lastUpdatedFormatted,
+            'rates' => $rates,
+            'message' => implode("\n", $lines),
         ]);
     }
 
@@ -2513,25 +3068,16 @@ class WebhookTransactionController extends Controller
         $auth = $this->authorizeTelegramRole($request, EmployeeRole::aboveStaff());
 
         $action = strtolower(trim((string) ($request->input('action') ?? '')));
-        $tailorQuery = trim((string) ($request->input('tailor_name') ?? $request->input('query') ?? $request->input('name') ?? ''));
+        $tailorQuery = trim((string) ($request->input('tailor_name') ?? $request->input('tailor') ?? $request->input('query') ?? $request->input('name') ?? ''));
 
-        // Action: Cek Tarif Jasa Standar (Direct Labor)
-        if ($action === 'rates' || str_contains($tailorQuery, 'tarif') || str_contains($tailorQuery, 'harga')) {
-            $laborMaterials = TailorPayroll::getLaborRates();
-            $lines = ['🪡 *Daftar Tarif Upah Penjahit di HPP (Direct Labor):*', ''];
-            foreach ($laborMaterials as $lm) {
-                $lines[] = "• *{$lm->name}* (`{$lm->code}`)";
-                $lines[] = "  Tarif: *{$lm->formatted_standard_cost}* / {$lm->unit}";
-            }
-            $lines[] = '';
-            $lines[] = '💡 *Info*: Tarif di atas digunakan secara otomatis sebagai acuan perhitungan slip upah borongan penjahit.';
+        // Action: Daftar Master Penjahit
+        if (in_array($action, ['tailors', 'list_tailors', 'penjahit', 'master_penjahit'], true) || $tailorQuery === 'penjahit') {
+            return $this->listTailors($request);
+        }
 
-            return response()->json([
-                'status' => true,
-                'action' => 'rates',
-                'materials' => $laborMaterials,
-                'message' => implode("\n", $lines),
-            ]);
+        // Action: Cek Tarif Jasa Standar (Direct Labor) langsung dari Master Web
+        if ($action === 'rates' || str_contains($tailorQuery, 'tarif') || str_contains($tailorQuery, 'harga') || str_contains($tailorQuery, 'hpp')) {
+            return $this->tailorLaborRates($request);
         }
 
         // Action: Rekap / Daftar Riwayat Slip Penjahit
@@ -2599,9 +3145,34 @@ class WebhookTransactionController extends Controller
             ]);
         }
 
-        // Action: Hitung / Buat Slip Upah Penjahit Baru
-        $laborRates = collect(TailorPayroll::STANDARD_RATES)->pluck('standard_cost', 'code')->toArray();
-        $laborIds = [];
+        // Action: Hitung / Buat Slip Upah Penjahit Baru (Mengambil data real-time langsung dari web / database)
+        $activeLaborRates = TailorPayroll::getLaborRates();
+
+        $lastRatesUpdated = null;
+        if (Schema::hasTable('tailor_labor_rates')) {
+            $lastRatesUpdated = TailorLaborRate::max('updated_at');
+        }
+        $ratesUpdatedFormatted = $lastRatesUpdated
+            ? Carbon::parse($lastRatesUpdated)->translatedFormat('d/m/Y H:i')
+            : now()->translatedFormat('d/m/Y H:i');
+
+        // Peta lookup berdasarkan kode dan slug
+        $ratesByCode = [];
+        $ratesBySlug = [];
+        $processedCodes = [];
+
+        foreach ($activeLaborRates as $lr) {
+            $codeUpper = strtoupper($lr->code);
+            $ratesByCode[$codeUpper] = $lr;
+
+            $slugName = Str::snake(strtolower($lr->name));
+            $slugClean = Str::snake(strtolower($lr->clean_name ?? $lr->name));
+            $slugCode = Str::snake(strtolower($lr->code));
+
+            $ratesBySlug[$slugName] = $lr;
+            $ratesBySlug[$slugClean] = $lr;
+            $ratesBySlug[$slugCode] = $lr;
+        }
 
         $tailorName = ! empty($tailorQuery) ? $tailorQuery : 'Penjahit Adriana';
         if (! str_starts_with(strtolower($tailorName), 'penjahit')) {
@@ -2616,60 +3187,141 @@ class WebhookTransactionController extends Controller
         $itemsData = [];
         $totalPieces = 0;
         $totalWage = 0.0;
+        $orderIndex = 1;
 
-        // Standard mapping
-        $standardItems = [
-            'jas_reguler' => ['code' => 'LAB-JHT-REG', 'name' => 'Jas Reguler', 'default_cost' => 50000],
-            'vest' => ['code' => 'LAB-JHT-VST', 'name' => 'Vest', 'default_cost' => 37000],
-            'jas_premium' => ['code' => 'LAB-JHT-PRM', 'name' => 'Jas Premium', 'default_cost' => 150000],
-            'revisi' => ['code' => 'LAB-JHT-REV', 'name' => 'Revisi', 'default_cost' => 0],
-            'celana' => ['code' => 'LAB-JHT-CLN', 'name' => 'Celana Formal', 'default_cost' => 30000],
-            'jas_exclusive' => ['code' => 'LAB-JHT-EXC', 'name' => 'Jas Master Exclusive', 'default_cost' => 250000],
+        // Pemetaan standar core items dengan alias & kode HPP
+        $standardItemsMapping = [
+            'jas_reguler' => ['code' => 'LAB-JHT-REG', 'default_name' => 'Jas Reguler', 'default_cost' => 50000, 'aliases' => ['jas', 'jas_regular']],
+            'vest' => ['code' => 'LAB-JHT-VST', 'default_name' => 'Vest', 'default_cost' => 37000, 'aliases' => ['rompi', 'rompi_vest']],
+            'jas_premium' => ['code' => 'LAB-JHT-PRM', 'default_name' => 'Jas Premium', 'default_cost' => 150000, 'aliases' => ['premium', 'jas_prm']],
+            'revisi' => ['code' => 'LAB-JHT-REV', 'default_name' => 'Revisi', 'default_cost' => 0, 'aliases' => ['perbaikan', 'repair']],
+            'celana' => ['code' => 'LAB-JHT-CLN', 'default_name' => 'Celana Formal', 'default_cost' => 30000, 'aliases' => ['celana_formal', 'pant', 'pants']],
+            'jas_exclusive' => ['code' => 'LAB-JHT-EXC', 'default_name' => 'Jas Master Exclusive', 'default_cost' => 250000, 'aliases' => ['exclusive', 'master_exclusive']],
         ];
 
-        $orderIndex = 1;
-        foreach ($standardItems as $key => $config) {
-            $qty = (int) ($request->input($key) ?? 0);
+        // 1. Proses item standar utama
+        foreach ($standardItemsMapping as $paramKey => $config) {
             $code = $config['code'];
-            $rate = isset($laborRates[$code]) && $laborRates[$code] > 0
-                ? (float) $laborRates[$code]
-                : (float) $config['default_cost'];
+            $matchedRate = $ratesByCode[$code] ?? null;
 
-            if ($request->has($key.'_rate')) {
-                $rate = (float) $request->input($key.'_rate');
+            // Ambil qty dari request parameter (bisa via primary key atau alias)
+            $qty = 0;
+            if ($request->has($paramKey)) {
+                $qty = (int) $request->input($paramKey);
+            } else {
+                foreach ($config['aliases'] as $alias) {
+                    if ($request->has($alias)) {
+                        $qty = (int) $request->input($alias);
+                        break;
+                    }
+                }
             }
 
-            $isCoreItem = in_array($key, ['jas_reguler', 'vest', 'jas_premium', 'revisi'], true);
+            // AMBIL TARIF LANGSUNG DARI WEB: jika ada di master web, gunakan standard_cost terbaru dari web
+            $rate = $matchedRate ? (float) $matchedRate->standard_cost : (float) $config['default_cost'];
+            if ($request->has($paramKey.'_rate')) {
+                $rate = (float) $request->input($paramKey.'_rate');
+            }
+
+            $itemName = $matchedRate ? ($matchedRate->clean_name ?? $matchedRate->name) : $config['default_name'];
+            $isCoreItem = in_array($paramKey, ['jas_reguler', 'vest', 'jas_premium', 'revisi'], true);
+
             if ($qty > 0 || $isCoreItem) {
                 $subtotal = $qty * $rate;
                 $totalPieces += $qty;
                 $totalWage += $subtotal;
 
                 $itemsData[] = [
-                    'material_id' => $laborIds[$code] ?? null,
-                    'item_name' => $config['name'],
+                    'material_id' => $matchedRate?->id,
+                    'item_name' => $itemName,
                     'quantity' => $qty,
                     'rate_per_piece' => $rate,
                     'subtotal' => $subtotal,
                     'order' => $orderIndex++,
                 ];
+                $processedCodes[] = $code;
             }
         }
 
-        // Custom items array jika ada
-        if (is_array($request->input('custom_items'))) {
-            foreach ($request->input('custom_items') as $cItem) {
+        // 2. Proses produk lain yang ada di master database web (misal produk baru ditambahkan di web)
+        foreach ($activeLaborRates as $lr) {
+            $codeUpper = strtoupper($lr->code);
+            if (in_array($codeUpper, $processedCodes, true)) {
+                continue;
+            }
+
+            $slugClean = Str::snake(strtolower($lr->clean_name ?? $lr->name));
+            $slugCode = Str::snake(strtolower($lr->code));
+
+            $qty = 0;
+            if ($request->has($slugClean)) {
+                $qty = (int) $request->input($slugClean);
+            } elseif ($request->has($slugCode)) {
+                $qty = (int) $request->input($slugCode);
+            }
+
+            if ($qty > 0) {
+                $rate = (float) $lr->standard_cost;
+                if ($request->has($slugClean.'_rate')) {
+                    $rate = (float) $request->input($slugClean.'_rate');
+                }
+
+                $subtotal = $qty * $rate;
+                $totalPieces += $qty;
+                $totalWage += $subtotal;
+
+                $itemsData[] = [
+                    'material_id' => $lr->id,
+                    'item_name' => $lr->clean_name ?? $lr->name,
+                    'quantity' => $qty,
+                    'rate_per_piece' => $rate,
+                    'subtotal' => $subtotal,
+                    'order' => $orderIndex++,
+                ];
+                $processedCodes[] = $codeUpper;
+            }
+        }
+
+        // 3. Proses input items / custom_items array jika dikirim via payload JSON
+        $rawItems = $request->input('items') ?? $request->input('custom_items');
+        if (is_array($rawItems)) {
+            foreach ($rawItems as $cItem) {
                 $cQty = (int) ($cItem['quantity'] ?? $cItem['qty'] ?? 1);
-                $cRate = (float) ($cItem['rate_per_piece'] ?? $cItem['rate'] ?? $cItem['cost'] ?? 0);
-                $cSubtotal = $cQty * $cRate;
+                $rawName = trim((string) ($cItem['name'] ?? $cItem['item_name'] ?? ''));
+                $rawCode = strtoupper(trim((string) ($cItem['code'] ?? '')));
+
+                // Cocokkan ke database web
+                $matchedRate = null;
+                if (! empty($rawCode) && isset($ratesByCode[$rawCode])) {
+                    $matchedRate = $ratesByCode[$rawCode];
+                } elseif (! empty($rawName)) {
+                    $slugTarget = Str::snake(strtolower($rawName));
+                    $matchedRate = $ratesBySlug[$slugTarget] ?? null;
+
+                    if (! $matchedRate) {
+                        foreach ($activeLaborRates as $lr) {
+                            if (stripos($lr->name, $rawName) !== false || stripos($lr->clean_name ?? '', $rawName) !== false) {
+                                $matchedRate = $lr;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                $finalName = ! empty($rawName) ? $rawName : ($matchedRate ? ($matchedRate->clean_name ?? $matchedRate->name) : 'Item Jahit Lainnya');
+                $finalRate = isset($cItem['rate_per_piece']) || isset($cItem['rate']) || isset($cItem['cost'])
+                    ? (float) ($cItem['rate_per_piece'] ?? $cItem['rate'] ?? $cItem['cost'])
+                    : ($matchedRate ? (float) $matchedRate->standard_cost : 0.0);
+
+                $cSubtotal = $cQty * $finalRate;
                 $totalPieces += $cQty;
                 $totalWage += $cSubtotal;
 
                 $itemsData[] = [
-                    'material_id' => $cItem['material_id'] ?? null,
-                    'item_name' => trim((string) ($cItem['name'] ?? $cItem['item_name'] ?? 'Item Jahit Lainnya')),
+                    'material_id' => $cItem['material_id'] ?? $matchedRate?->id,
+                    'item_name' => $finalName,
                     'quantity' => $cQty,
-                    'rate_per_piece' => $cRate,
+                    'rate_per_piece' => $finalRate,
                     'subtotal' => $cSubtotal,
                     'order' => $orderIndex++,
                 ];
@@ -2723,7 +3375,10 @@ class WebhookTransactionController extends Controller
                 $advancesData,
                 $request
             ) {
+                $tailor = Tailor::where('name', 'like', "%{$tailorName}%")->first();
+
                 $tailorPayroll = TailorPayroll::create([
+                    'tailor_id' => $tailor?->id,
                     'tailor_name' => $tailorName,
                     'payroll_date' => $payrollDate->format('Y-m-d'),
                     'period_label' => $periodLabel,
@@ -2852,6 +3507,7 @@ class WebhookTransactionController extends Controller
             $lines[] = "🧾 {$refText} [Status: Verified]";
         }
 
+        $lines[] = "💡 *Tarif HPP Real-Time*: Diambil otomatis dari Master Data Web (Terupdate: {$ratesUpdatedFormatted})";
         $lines[] = "📄 *Akses Slip Upah Web:*\n• {$slipUrl}";
 
         return response()->json([
@@ -2863,8 +3519,264 @@ class WebhookTransactionController extends Controller
             'total_bon' => $totalBon,
             'take_home_pay' => $takeHomePay,
             'formatted_take_home_pay' => 'Rp '.number_format($takeHomePay, 0, ',', '.'),
+            'rates_source' => 'web_database',
+            'rates_last_updated' => $ratesUpdatedFormatted,
             'slip_url' => $slipUrl,
             'message' => implode("\n", $lines),
+        ]);
+    }
+
+    /**
+     * Master Chart of Accounts (COA) Directory & Semantic Account Detection for Hermes AI Accountant.
+     * Mengembalikan 8 akun aktif resmi Seven Management, kata kunci semantik, dan panduan transaksi.
+     * Jika parameter 'detect' atau 'search' diberikan, sistem mengembalikan simulasi deteksi akun real-time.
+     */
+    public function listAccounts(Request $request)
+    {
+        $coaMetadata = [
+            '1001' => [
+                'name' => 'Kas Operasional',
+                'type' => 'asset',
+                'type_label' => 'Aset Lancar (Kas & Setara Kas)',
+                'normal_balance' => 'debit',
+                'category_group' => 'Kas & Bank',
+                'keywords' => ['kas', 'tunai', 'cash', 'uang tunai', 'uang fisik', 'laci kasir', 'dompet', 'kas kecil'],
+                'usage_guide' => 'Penerimaan atau pengeluaran uang tunai fisik secara langsung di toko / kasir.',
+                'examples' => [
+                    'Beli galon air minum 20rb tunai',
+                    'Terima pembayaran tunai jual kemeja 150rb',
+                    'Kasbon karyawan 100rb ambil dari kas toko',
+                ],
+            ],
+            '1002' => [
+                'name' => 'Bank BCA',
+                'type' => 'asset',
+                'type_label' => 'Aset Lancar (Kas & Setara Kas)',
+                'normal_balance' => 'debit',
+                'category_group' => 'Kas & Bank',
+                'keywords' => ['bca', 'bank bca', 'transfer bca', 'debit bca', 'qris', 'edc', 'rekening bca', 'm-banking', 'transfer bank'],
+                'usage_guide' => 'Transaksi perbankan melalui rekening operasional BCA, QRIS store, transfer antar-bank, dan EDC.',
+                'examples' => [
+                    'Transfer gaji staf via BCA 2.500.000',
+                    'Pelanggan transfer DP jahit jas via QRIS/BCA 500.000',
+                    'Bayar tagihan listrik ruko via m-BCA 450.000',
+                ],
+            ],
+            '1005' => [
+                'name' => 'Piutang Kasbon Karyawan & Penjahit',
+                'type' => 'asset',
+                'type_label' => 'Aset Lancar (Piutang Lain-lain)',
+                'normal_balance' => 'debit',
+                'category_group' => 'Piutang Kasbon',
+                'keywords' => ['kasbon', 'bon', 'pinjaman', 'pinjam uang', 'panjar', 'uang muka', 'kasbon penjahit', 'kasbon karyawan', 'kasbon staf', 'piutang kasbon'],
+                'usage_guide' => 'Pencatatan pinjaman sementara / uang muka karyawan dan penjahit borongan. Saat uang keluar: Debit 1005, Kredit 1001/1002 (BUKAN beban). Saat dipotong pada slip upah/gaji atau dilunasi tunai: Kredit 1005.',
+                'examples' => [
+                    'Kasbon penjahit Ahmad 200rb via kas',
+                    'Kasbon staf kasir Rina 150rb via BCA',
+                    'Pengembalian kasbon penjahit Budi secara tunai 100rb',
+                ],
+            ],
+            '4001' => [
+                'name' => 'Pendapatan Usaha',
+                'type' => 'revenue',
+                'type_label' => 'Pendapatan Usaha (Omzet Bruto)',
+                'normal_balance' => 'credit',
+                'category_group' => 'Pendapatan',
+                'keywords' => ['pendapatan', 'penjualan', 'jual', 'omset', 'omzet', 'jual jas', 'custom jas', 'order jahit', 'jahit jas', 'sewa jas', 'persewaan', 'pelanggan', 'pemasukan usaha'],
+                'usage_guide' => 'Seluruh penerimaan omzet usaha ritel jas ready-to-wear, pesanan jahit custom jas, persewaan jas pesta, dan penjualan aksesoris formal.',
+                'examples' => [
+                    'Penjualan 1 set jas formal ready stock 1.200.000',
+                    'Pelunasan custom order jas pernikahan 2.500.000',
+                    'Sewa jas wisuda 3 hari 350.000',
+                ],
+            ],
+            '5001' => [
+                'name' => 'Beban Operasional',
+                'type' => 'expense',
+                'type_label' => 'Beban Usaha (Operasional & Utilitas)',
+                'normal_balance' => 'debit',
+                'category_group' => 'Beban Usaha',
+                'keywords' => ['operasional', 'listrik', 'token listrik', 'pln', 'air', 'pdam', 'wifi', 'internet', 'indihome', 'biznet', 'sewa', 'sewa ruko', 'sewa toko', 'bensin', 'bbm', 'pertalite', 'pertamax', 'ongkir', 'ekspedisi', 'jne', 'jnt', 'iklan', 'ads', 'facebook ads', 'meta ads', 'tiktok ads', 'kebersihan', 'keamanan', 'iuran', 'konsumsi', 'makan', 'minum', 'galon', 'kopi', 'snack', 'maintenance', 'servis', 'perbaikan'],
+                'usage_guide' => 'Beban operasional rutin toko non-gaji: listrik, air, internet, sewa gedung, bensin kurir/belanja, iklan medsos, konsumsi harian, retribusi, dan servis peralatan.',
+                'examples' => [
+                    'Beli token listrik PLN ruko 200.000',
+                    'Bayar tagihan Wi-Fi Biznet toko 350.000 via BCA',
+                    'Top up saldo iklan Facebook Ads 500.000',
+                    'Konsumsi lembur staf dan galon air 65.000',
+                ],
+            ],
+            '5002' => [
+                'name' => 'Beban Gaji & Upah',
+                'type' => 'expense',
+                'type_label' => 'Beban Usaha (Tenaga Kerja & Payroll)',
+                'normal_balance' => 'debit',
+                'category_group' => 'Beban Usaha',
+                'keywords' => ['gaji', 'upah', 'payroll', 'honor', 'gaji bulanan', 'gaji shift', 'shift toko', 'upah jahit', 'borongan jahit', 'bonus', 'bonus sales', 'bonus disiplin', 'bonus kehadiran', 'tunjangan', 'insentif', 'thp', 'take home pay', 'uang makan karyawan'],
+                'usage_guide' => 'Seluruh kompensasi tenaga kerja: honor shift harian karyawan toko, bonus performa/disiplin, insentif penjualan, serta upah borongan jahit (HPP Jasa Jahit).',
+                'examples' => [
+                    'Pembayaran gaji shift staf toko periode Oktober 1.850.000',
+                    'Pembayaran upah borongan penjahit Rudi 15 pcs jas 750.000',
+                    'Bonus pencapaian target penjualan staf kasir 250.000',
+                ],
+            ],
+            '5003' => [
+                'name' => 'Beban Perlengkapan & ATK',
+                'type' => 'expense',
+                'type_label' => 'Beban Usaha (Perlengkapan Toko & ATK)',
+                'normal_balance' => 'debit',
+                'category_group' => 'Beban Usaha',
+                'keywords' => ['atk', 'perlengkapan', 'kertas', 'nota', 'pulpen', 'lakban', 'solasi', 'plastik', 'plastik packing', 'plastik jas', 'polymailer', 'kresek', 'hanger', 'hanger jas', 'cover jas', 'gunting', 'jarum', 'benang', 'alat tulis', 'buku nota', 'buku kas', 'kwitansi'],
+                'usage_guide' => 'Belanja barang habis pakai pendukung ritel, packaging jas, perlengkapan penataan baju, dan ATK administrasi.',
+                'examples' => [
+                    'Beli plastik cover jas & hanger kayu 50 pcs 250.000',
+                    'Cetak buku nota kasir 3 rangkap 75.000',
+                    'Beli lakban packing dan polymailer 80.000',
+                ],
+            ],
+            '5005' => [
+                'name' => 'Beban Pajak Penghasilan (PPh Final)',
+                'type' => 'expense',
+                'type_label' => 'Beban Usaha (Pajak UMKM PP 55/2022)',
+                'normal_balance' => 'debit',
+                'category_group' => 'Beban Pajak',
+                'keywords' => ['pajak', 'pph', 'pph final', 'pph 0.5%', 'pajak 0.5%', 'setoran pajak', 'djp', 'ebilling', 'e-billing', 'pajak penghasilan', 'pajak umkm', 'pp 55', 'pp 55/2022', 'ntpn'],
+                'usage_guide' => 'Penyetoran kewajiban PPh Final UMKM 0,5% dari omzet bruto bulanan ke kas negara via Kode Billing DJP (jatuh tempo tgl 15 bulan berikutnya).',
+                'examples' => [
+                    'Setor PPh Final 0,5% masa September 2026 kode billing 125.000 via BCA',
+                    'Bayar pajak penghasilan UMKM bulan Oktober 180.000',
+                ],
+            ],
+        ];
+
+        // Pastikan akun resmi ada di database jika belum di-seed
+        foreach ($coaMetadata as $code => $meta) {
+            Account::firstOrCreate(
+                ['code' => $code],
+                ['name' => $meta['name'], 'type' => $meta['type']]
+            );
+        }
+
+        $query = Account::query()->orderBy('code');
+
+        if ($request->filled('type')) {
+            $type = strtolower($request->type);
+            if ($type === 'asset' || $type === 'aset') {
+                $query->where('type', 'asset');
+            } elseif ($type === 'revenue' || $type === 'pendapatan' || $type === 'income') {
+                $query->where('type', 'revenue');
+            } elseif ($type === 'expense' || $type === 'beban' || $type === 'biaya') {
+                $query->where('type', 'expense');
+            }
+        }
+
+        $dbAccounts = $query->get();
+
+        $accountsData = $dbAccounts->map(function ($acc) use ($coaMetadata) {
+            $meta = $coaMetadata[$acc->code] ?? [
+                'name' => $acc->name,
+                'type' => $acc->type,
+                'type_label' => ucfirst($acc->type),
+                'normal_balance' => $acc->type === 'revenue' ? 'credit' : 'debit',
+                'category_group' => ucfirst($acc->type),
+                'keywords' => [strtolower($acc->name)],
+                'usage_guide' => 'Akun pembukuan sistem.',
+                'examples' => [],
+            ];
+
+            return [
+                'id' => $acc->id,
+                'code' => $acc->code,
+                'name' => $acc->name,
+                'type' => $acc->type,
+                'type_label' => $meta['type_label'],
+                'normal_balance' => $meta['normal_balance'],
+                'category_group' => $meta['category_group'],
+                'keywords' => $meta['keywords'],
+                'usage_guide' => $meta['usage_guide'],
+                'examples' => $meta['examples'],
+            ];
+        });
+
+        // Fitur Deteksi Akun Instan bagi Hermes Agent
+        $detectionResult = null;
+        $detectInput = trim((string) (
+            $request->input('detect')
+            ?? $request->input('query')
+            ?? $request->input('text')
+            ?? ''
+        ));
+
+        if (! empty($detectInput)) {
+            $simulatedValidated = [
+                'description' => $detectInput,
+                'category' => $request->input('category', ''),
+                'account' => $request->input('account', ''),
+                'account_code' => $request->input('account_code', ''),
+                'type' => $request->input('type', 'expense'),
+            ];
+
+            $isKasbon = $this->isKasbonTransaction($simulatedValidated);
+            $assetAccount = $this->resolveAssetAccount($simulatedValidated);
+
+            if ($isKasbon) {
+                $targetAccount = Account::firstWhere('code', '1005');
+                $actionType = 'kasbon';
+                $suggestedJournal = [
+                    'debit' => ['code' => '1005', 'name' => 'Piutang Kasbon Karyawan & Penjahit', 'type' => 'asset'],
+                    'credit' => ['code' => $assetAccount->code, 'name' => $assetAccount->name, 'type' => 'asset'],
+                ];
+            } elseif ($simulatedValidated['type'] === 'income') {
+                $targetAccount = $this->resolveCategoryAccount($simulatedValidated, 'income');
+                $actionType = 'income';
+                $suggestedJournal = [
+                    'debit' => ['code' => $assetAccount->code, 'name' => $assetAccount->name, 'type' => 'asset'],
+                    'credit' => ['code' => $targetAccount->code, 'name' => $targetAccount->name, 'type' => 'revenue'],
+                ];
+            } else {
+                $targetAccount = $this->resolveCategoryAccount($simulatedValidated, 'expense');
+                $actionType = 'expense';
+                $suggestedJournal = [
+                    'debit' => ['code' => $targetAccount->code, 'name' => $targetAccount->name, 'type' => 'expense'],
+                    'credit' => ['code' => $assetAccount->code, 'name' => $assetAccount->name, 'type' => 'asset'],
+                ];
+            }
+
+            $detectionResult = [
+                'input_text' => $detectInput,
+                'action_type' => $actionType,
+                'is_kasbon' => $isKasbon,
+                'detected_target_account' => [
+                    'code' => $targetAccount->code,
+                    'name' => $targetAccount->name,
+                    'type' => $targetAccount->type,
+                ],
+                'detected_asset_account' => [
+                    'code' => $assetAccount->code,
+                    'name' => $assetAccount->name,
+                    'type' => $assetAccount->type,
+                ],
+                'suggested_journal' => $suggestedJournal,
+            ];
+        }
+
+        return response()->json([
+            'status' => true,
+            'coa_system' => 'Seven Management Official Chart of Accounts (8 Core Accounts)',
+            'total' => $accountsData->count(),
+            'accounts' => $accountsData,
+            'legacy_code_mappings' => [
+                '5008' => '5005 (Beban Pajak Penghasilan (PPh Final))',
+                '5004' => '5002 (Beban Gaji & Upah)',
+                '1003' => '1005 (Piutang Kasbon Karyawan & Penjahit)',
+                '1004' => '1005 (Piutang Kasbon Karyawan & Penjahit)',
+                '5006' => '5001 (Beban Operasional)',
+                '5007' => '5001 (Beban Operasional)',
+                '5099' => '5001 (Beban Operasional)',
+                '4002' => '4001 (Pendapatan Usaha)',
+                '4003' => '4001 (Pendapatan Usaha)',
+                '4004' => '4001 (Pendapatan Usaha)',
+            ],
+            'detection_result' => $detectionResult,
         ]);
     }
 }

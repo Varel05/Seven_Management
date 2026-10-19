@@ -7,6 +7,8 @@ use App\Models\Account;
 use App\Models\Employee;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Tailor;
+use App\Models\TailorLaborRate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -337,5 +339,340 @@ class WebhookInfoEndpointsTest extends TestCase
         $this->assertStringContainsString('Jumlah Bon', $message);
         $this->assertStringContainsString('TAKE HOME PAY', $message);
         $this->assertStringContainsString('535.000', $message);
+    }
+
+    public function test_webhook_profit_loss_report(): void
+    {
+        config(['services.telegram.owner_phones' => ['08111111111']]);
+
+        $kas = Account::where('code', '1001')->first();
+        $revenue = Account::where('code', '4001')->first();
+        $beban = Account::where('code', '5001')->first();
+
+        $revEntry = JournalEntry::create([
+            'reference' => 'REV-TEST-001',
+            'date' => now()->toDateString(),
+            'description' => 'Pendapatan Usaha',
+            'status' => 'verified',
+        ]);
+        JournalEntryLine::create(['journal_entry_id' => $revEntry->id, 'account_id' => $kas->id, 'debit' => 1000000, 'credit' => 0]);
+        JournalEntryLine::create(['journal_entry_id' => $revEntry->id, 'account_id' => $revenue->id, 'debit' => 0, 'credit' => 1000000]);
+
+        $expEntry = JournalEntry::create([
+            'reference' => 'EXP-TEST-001',
+            'date' => now()->toDateString(),
+            'description' => 'Beban Perlengkapan',
+            'status' => 'verified',
+        ]);
+        JournalEntryLine::create(['journal_entry_id' => $expEntry->id, 'account_id' => $beban->id, 'debit' => 300000, 'credit' => 0]);
+        JournalEntryLine::create(['journal_entry_id' => $expEntry->id, 'account_id' => $kas->id, 'debit' => 0, 'credit' => 300000]);
+
+        $response = $this->getJson('/api/webhook/profit-loss', [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', true);
+        $this->assertEquals(1000000, $response->json('total_revenue'));
+        $this->assertEquals(300000, $response->json('total_expense'));
+        $this->assertEquals(700000, $response->json('net_profit'));
+        $this->assertNotEmpty($response->json('excel_download_url'));
+
+        $message = $response->json('message');
+        $this->assertStringContainsString('LAPORAN LABA RUGI KOMPREHENSIF', $message);
+        $this->assertStringContainsString('Total Pendapatan (A)', $message);
+        $this->assertStringContainsString('Total Beban (B)', $message);
+        $this->assertStringContainsString('SURPLUS BERSIH (LABA)', $message);
+        $this->assertStringContainsString('Unduh Laporan Excel', $message);
+    }
+
+    public function test_webhook_pending_transactions_and_verify(): void
+    {
+        config(['services.telegram.owner_phones' => ['08111111111']]);
+
+        $kas = Account::where('code', '1001')->first();
+        $beban = Account::where('code', '5001')->first();
+
+        $pendingEntry = JournalEntry::create([
+            'reference' => 'PND-TEST-001',
+            'date' => now()->toDateString(),
+            'description' => 'Pengeluaran Menunggu Persetujuan',
+            'status' => 'pending',
+            'source' => 'telegram',
+        ]);
+        JournalEntryLine::create(['journal_entry_id' => $pendingEntry->id, 'account_id' => $beban->id, 'debit' => 250000, 'credit' => 0]);
+        JournalEntryLine::create(['journal_entry_id' => $pendingEntry->id, 'account_id' => $kas->id, 'debit' => 0, 'credit' => 250000]);
+
+        // 1. Cek list pending
+        $responseList = $this->getJson('/api/webhook/transactions/pending', [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+        $responseList->assertStatus(200);
+        $responseList->assertJsonPath('status', true);
+        $this->assertGreaterThanOrEqual(1, $responseList->json('count'));
+        $this->assertStringContainsString('PND-TEST-001', $responseList->json('message'));
+
+        // 2. Eksekusi Verifikasi
+        $responseVerify = $this->postJson('/api/webhook/transaction/verify', [
+            'reference' => 'PND-TEST-001',
+            'action' => 'verify',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $responseVerify->assertStatus(200);
+        $responseVerify->assertJsonPath('status', true);
+        $responseVerify->assertJsonPath('action', 'verified');
+        $this->assertStringContainsString('Berhasil Diverifikasi', $responseVerify->json('message'));
+
+        $this->assertEquals('verified', $pendingEntry->fresh()->status);
+    }
+
+    public function test_webhook_tailors_list_and_register(): void
+    {
+        config(['services.telegram.owner_phones' => ['08111111111']]);
+
+        // 1. Registrasi Penjahit Baru
+        $responseReg = $this->postJson('/api/webhook/tailors/register', [
+            'name' => 'Budi Taylor',
+            'phone' => '081299998888',
+            'payment_period' => 'weekly',
+            'payment_day' => 'Jumat',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $responseReg->assertStatus(201);
+        $responseReg->assertJsonPath('status', true);
+        $this->assertStringContainsString('Budi Taylor', $responseReg->json('message'));
+
+        // 2. Ambil Daftar Penjahit
+        $responseList = $this->getJson('/api/webhook/tailors', [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $responseList->assertStatus(200);
+        $responseList->assertJsonPath('status', true);
+        $this->assertGreaterThanOrEqual(1, $responseList->json('count'));
+        $this->assertStringContainsString('Budi Taylor', $responseList->json('message'));
+    }
+
+    public function test_webhook_tailor_rates_endpoint_returns_active_rates(): void
+    {
+        config(['services.telegram.owner_phones' => ['08111111111']]);
+
+        $response = $this->getJson('/api/webhook/tailor-rates', [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', true);
+        $response->assertJsonPath('action', 'rates');
+        $this->assertGreaterThanOrEqual(1, $response->json('total_items'));
+        $this->assertStringContainsString('Jas Reguler', $response->json('message'));
+    }
+
+    public function test_hermes_dynamically_detects_price_changes_and_new_products_from_web(): void
+    {
+        config(['services.telegram.owner_phones' => ['08111111111']]);
+
+        // 1. Setup master penjahit dan pastikan tarif awal Jas Reguler Rp 50.000
+        $tailor = Tailor::create([
+            'name' => 'Penjahit Santoso',
+            'payment_period' => 'weekly',
+            'payment_day' => 'Jumat',
+            'status' => 'active',
+        ]);
+
+        $regRate = TailorLaborRate::where('code', 'LAB-JHT-REG')->first();
+        $regRate->update(['standard_cost' => 50000]);
+
+        // Hermes request hitung upah: 10 pcs jas reguler
+        $resp1 = $this->postJson('/api/webhook/tailor-payroll', [
+            'tailor_name' => 'Santoso',
+            'jas_reguler' => 10,
+            'save' => false,
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $resp1->assertOk();
+        $this->assertEquals(500000, $resp1->json('total_wage'));
+        $this->assertEquals('web_database', $resp1->json('rates_source'));
+
+        // 2. Simulasi: Owner merubah harga di web dari Rp 50.000 menjadi Rp 75.000
+        $regRate->update(['standard_cost' => 75000]);
+
+        // Hermes request lagi untuk santoso dengan 10 pcs jas reguler
+        $resp2 = $this->postJson('/api/webhook/tailor-payroll', [
+            'tailor_name' => 'Santoso',
+            'jas_reguler' => 10,
+            'save' => false,
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $resp2->assertOk();
+        // Hermes LANGSUNG mendeteksi harga baru Rp 75.000 -> Total Upah = Rp 750.000
+        $this->assertEquals(750000, $resp2->json('total_wage'));
+        $this->assertStringContainsString('750.000', $resp2->json('message'));
+
+        // 3. Simulasi: Owner menambahkan produk baru di web: Kemeja Batik Rp 40.000
+        TailorLaborRate::create([
+            'code' => 'LAB-JHT-BTK',
+            'name' => 'Upah Penjahit Kemeja Batik',
+            'unit' => 'pcs',
+            'standard_cost' => 40000,
+            'order' => 7,
+            'is_active' => true,
+        ]);
+
+        // Hermes memproses jahit untuk Kemeja Batik (5 pcs)
+        $resp3 = $this->postJson('/api/webhook/tailor-payroll', [
+            'tailor_name' => 'Santoso',
+            'items' => [
+                ['name' => 'Kemeja Batik', 'quantity' => 5],
+            ],
+            'save' => false,
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $resp3->assertOk();
+        // 5 pcs x Rp 40.000 = Rp 200.000
+        $this->assertEquals(200000, $resp3->json('total_wage'));
+        $this->assertStringContainsString('Kemeja Batik', $resp3->json('message'));
+        $this->assertStringContainsString('200.000', $resp3->json('message'));
+    }
+
+    public function test_accounts_endpoint_returns_eight_official_active_accounts_with_semantics(): void
+    {
+        $response = $this->getJson('/api/webhook/accounts', [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('total', 8);
+
+        $accounts = collect($response->json('accounts'));
+        $codes = $accounts->pluck('code')->sort()->values()->all();
+
+        $expectedCodes = ['1001', '1002', '1005', '4001', '5001', '5002', '5003', '5005'];
+        $this->assertEquals($expectedCodes, $codes);
+
+        // Verifikasi metadata semantik untuk akun kasbon (1005)
+        $kasbon = $accounts->firstWhere('code', '1005');
+        $this->assertEquals('Piutang Kasbon Karyawan & Penjahit', $kasbon['name']);
+        $this->assertEquals('asset', $kasbon['type']);
+        $this->assertEquals('debit', $kasbon['normal_balance']);
+        $this->assertContains('kasbon', $kasbon['keywords']);
+
+        // Verifikasi metadata semantik untuk pajak (5005)
+        $pajak = $accounts->firstWhere('code', '5005');
+        $this->assertEquals('Beban Pajak Penghasilan (PPh Final)', $pajak['name']);
+        $this->assertEquals('expense', $pajak['type']);
+        $this->assertContains('pph final', $pajak['keywords']);
+
+        // Verifikasi metadata semantik untuk ATK (5003)
+        $atk = $accounts->firstWhere('code', '5003');
+        $this->assertEquals('Beban Perlengkapan & ATK', $atk['name']);
+        $this->assertContains('nota', $atk['keywords']);
+    }
+
+    public function test_accounts_endpoint_detects_appropriate_account_from_natural_text(): void
+    {
+        // 1. Deteksi transaksi perlengkapan & nota kasir -> 5003
+        $resp1 = $this->getJson('/api/webhook/accounts?detect=beli+buku+nota+kasir+3+rangkap+dan+pulpen', [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+        $resp1->assertOk()
+            ->assertJsonPath('detection_result.action_type', 'expense')
+            ->assertJsonPath('detection_result.detected_target_account.code', '5003')
+            ->assertJsonPath('detection_result.suggested_journal.debit.code', '5003');
+
+        // 2. Deteksi transaksi pembayaran pajak PPh Final -> 5005
+        $resp2 = $this->getJson('/api/webhook/accounts?detect=setor+pajak+pph+final+umkm+via+bca', [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+        $resp2->assertOk()
+            ->assertJsonPath('detection_result.detected_target_account.code', '5005')
+            ->assertJsonPath('detection_result.detected_asset_account.code', '1002')
+            ->assertJsonPath('detection_result.suggested_journal.debit.code', '5005')
+            ->assertJsonPath('detection_result.suggested_journal.credit.code', '1002');
+
+        // 3. Deteksi kasbon penjahit -> 1005 (bukan akun beban!)
+        $resp3 = $this->getJson('/api/webhook/accounts?detect=kasbon+penjahit+ahmad+200rb', [
+            'X-Webhook-Secret' => 'test_secret_key',
+        ]);
+        $resp3->assertOk()
+            ->assertJsonPath('detection_result.is_kasbon', true)
+            ->assertJsonPath('detection_result.action_type', 'kasbon')
+            ->assertJsonPath('detection_result.suggested_journal.debit.code', '1005')
+            ->assertJsonPath('detection_result.suggested_journal.credit.code', '1001');
+    }
+
+    public function test_transaction_recording_correctly_debits_piutang_kasbon_for_cash_advance(): void
+    {
+        // Transaksi pengeluaran kasbon via webhook
+        $resp = $this->postJson('/api/webhook/transaction', [
+            'description' => 'Kasbon penjahit Rudi 150rb via tunai kas',
+            'amount' => 150000,
+            'type' => 'expense',
+            'source' => 'telegram',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $resp->assertCreated();
+
+        $journal = JournalEntry::with('lines.account')->latest('id')->first();
+        $this->assertNotNull($journal);
+
+        // Harus mendebit akun Piutang Kasbon 1005 (BUKAN beban 5001)
+        $debitLine = $journal->lines->firstWhere('debit', '>', 0);
+        $this->assertEquals('1005', $debitLine->account->code);
+        $this->assertEquals('Piutang Kasbon Karyawan & Penjahit', $debitLine->account->name);
+        $this->assertEquals(150000, (float) $debitLine->debit);
+
+        // Dan mengkredit Kas Operasional 1001
+        $creditLine = $journal->lines->firstWhere('credit', '>', 0);
+        $this->assertEquals('1001', $creditLine->account->code);
+        $this->assertEquals(150000, (float) $creditLine->credit);
+    }
+
+    public function test_transaction_recording_maps_legacy_codes_in_double_entry_mode(): void
+    {
+        // Simulasi request double-entry dengan kode lama dari prompt legacy (5008 -> 5005)
+        $resp = $this->postJson('/api/webhook/transaction', [
+            'description' => 'Pembayaran PPh Final bulan September via BCA',
+            'lines' => [
+                ['account_code' => '5008', 'debit' => 250000, 'credit' => 0],
+                ['account_code' => '1002', 'debit' => 0, 'credit' => 250000],
+            ],
+            'source' => 'telegram',
+        ], [
+            'X-Webhook-Secret' => 'test_secret_key',
+            'X-Telegram-Phone' => '08111111111',
+        ]);
+
+        $resp->assertCreated();
+
+        $journal = JournalEntry::with('lines.account')->latest('id')->first();
+        $debitLine = $journal->lines->firstWhere('debit', '>', 0);
+
+        // Kode 5008 otomatis dipetakan ke 5005 yang sah
+        $this->assertEquals('5005', $debitLine->account->code);
+        $this->assertEquals('Beban Pajak Penghasilan (PPh Final)', $debitLine->account->name);
     }
 }

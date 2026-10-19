@@ -38,13 +38,29 @@ Route::middleware('webhook.secret')->group(function () {
     // Auth & Telegram Identity Verification Endpoint
     Route::match(['get', 'post'], '/webhook/auth/identify', [WebhookTransactionController::class, 'identifyTelegramUser']);
 
-    // Information & Monitoring Endpoints (Balance & Summary)
+    // Information & Monitoring Endpoints (Balance, Summary, & Profit Loss)
     Route::match(['get', 'post'], '/webhook/balance', [WebhookTransactionController::class, 'balance']);
     Route::match(['get', 'post'], '/webhook/summary', [WebhookTransactionController::class, 'summary']);
+    Route::match(['get', 'post'], '/webhook/profit-loss', [WebhookTransactionController::class, 'profitLossReport']);
+    Route::match(['get', 'post'], '/webhook/income-statement', [WebhookTransactionController::class, 'profitLossReport']);
+
+    // Pending Transactions & Verification via Telegram
+    Route::match(['get', 'post'], '/webhook/transactions/pending', [WebhookTransactionController::class, 'pendingTransactions']);
+    Route::match(['get', 'post'], '/webhook/transaction/verify', [WebhookTransactionController::class, 'verifyTransaction']);
+    Route::match(['get', 'post'], '/webhook/transaction/approve', [WebhookTransactionController::class, 'verifyTransaction']);
+
+    // Master Tailors & Labor Rates Management for Telegram
+    Route::match(['get', 'post'], '/webhook/tailors', [WebhookTransactionController::class, 'listTailors']);
+    Route::post('/webhook/tailors/register', [WebhookTransactionController::class, 'registerTailor']);
+    Route::match(['get', 'post'], '/webhook/tailor-rates', [WebhookTransactionController::class, 'tailorLaborRates']);
+    Route::match(['get', 'post'], '/webhook/tailors/rates', [WebhookTransactionController::class, 'tailorLaborRates']);
 
     // Tax (PPh Final UMKM 0.5%) Endpoints for Telegram / Hermes / n8n
     Route::match(['get', 'post'], '/webhook/tax', [WebhookTransactionController::class, 'taxSummary']);
     Route::match(['get', 'post'], '/webhook/tax/summary', [WebhookTransactionController::class, 'taxSummary']);
     Route::post('/webhook/tax/pay', [WebhookTransactionController::class, 'recordTaxPayment']);
 
+    // Active Chart of Accounts (COA) Directory & Semantic Account Detection for Hermes
+    Route::match(['get', 'post'], '/webhook/accounts', [WebhookTransactionController::class, 'listAccounts']);
+    Route::match(['get', 'post'], '/webhook/accounts/detect', [WebhookTransactionController::class, 'listAccounts']);
 });
