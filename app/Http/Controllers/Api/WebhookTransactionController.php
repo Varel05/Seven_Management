@@ -15,6 +15,7 @@ use App\Models\Tailor;
 use App\Models\TailorLaborRate;
 use App\Models\TailorPayroll;
 use App\Services\AttendanceSyncService;
+use App\Services\SalesSyncService;
 use App\Services\TaxService;
 use App\Services\TransactionCancellationService;
 use Illuminate\Http\Request;
@@ -3778,5 +3779,66 @@ class WebhookTransactionController extends Controller
             ],
             'detection_result' => $detectionResult,
         ]);
+    }
+
+    /**
+     * Webhook endpoint untuk menerima notifikasi transaksi penjualan / sewa secara instan.
+     */
+    public function recordSalesOrder(Request $request, SalesSyncService $salesSyncService)
+    {
+        $validated = $request->validate([
+            'reference' => 'nullable|string|max:100',
+            'seri' => 'nullable|string|max:100',
+            'amount' => 'nullable|numeric|min:0',
+            'total' => 'nullable|numeric|min:0',
+            'tagihan' => 'nullable|numeric|min:0',
+            'type' => 'nullable|string',
+            'kolam' => 'nullable|string',
+            'status' => 'nullable|string',
+            'store' => 'nullable|string',
+            'toko' => 'nullable|string',
+            'product' => 'nullable|string',
+            'produk' => 'nullable|string',
+            'barang' => 'nullable|string',
+            'payment_method' => 'nullable|string',
+            'metode_bayar' => 'nullable|string',
+            'date' => 'nullable|string',
+            'tanggal' => 'nullable|string',
+            'description' => 'nullable|string',
+        ]);
+
+        $ref = $validated['reference'] ?? $validated['seri'] ?? ('ORD-'.strtoupper(Str::random(8)));
+        $amount = (float) ($validated['amount'] ?? $validated['total'] ?? $validated['tagihan'] ?? 0);
+        $type = $validated['type'] ?? $validated['kolam'] ?? 'penjualan';
+        $store = $validated['store'] ?? $validated['toko'] ?? 'Web Penjualan';
+        $product = $validated['product'] ?? $validated['produk'] ?? $validated['barang'] ?? 'Produk';
+        $paymentMethod = $validated['payment_method'] ?? $validated['metode_bayar'] ?? 'bca';
+        $date = $validated['date'] ?? $validated['tanggal'] ?? now()->toDateString();
+
+        $result = $salesSyncService->recordTransaction([
+            'reference' => $ref,
+            'amount' => $amount,
+            'type' => $type,
+            'store' => $store,
+            'product' => $product,
+            'payment_method' => $paymentMethod,
+            'date' => $date,
+            'description' => $validated['description'] ?? null,
+        ]);
+
+        return response()->json($result, $result['success'] ? 200 : 422);
+    }
+
+    /**
+     * Webhook endpoint untuk memicu sinkronisasi transaksi penjualan/sewa dari API publik.
+     */
+    public function syncSalesFromApi(Request $request, SalesSyncService $salesSyncService)
+    {
+        $startDate = $request->input('start_date', $request->input('awal', now()->startOfMonth()->format('Y-m-d')));
+        $endDate = $request->input('end_date', $request->input('akhir', now()->format('Y-m-d')));
+
+        $result = $salesSyncService->syncTransactionsFromApi($startDate, $endDate);
+
+        return response()->json($result);
     }
 }

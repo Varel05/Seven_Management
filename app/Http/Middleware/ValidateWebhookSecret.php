@@ -26,8 +26,12 @@ class ValidateWebhookSecret
 
         // Check X-Webhook-Secret header or Bearer token
         $providedSecret = $request->header('X-Webhook-Secret') ?? $request->bearerToken();
+        $salesToken = config('services.sales_app.token');
 
-        if (empty($providedSecret) || ! hash_equals((string) $expectedSecret, (string) $providedSecret)) {
+        $isValid = (! empty($expectedSecret) && hash_equals((string) $expectedSecret, (string) $providedSecret))
+            || (! empty($salesToken) && hash_equals((string) $salesToken, (string) $providedSecret));
+
+        if (empty($providedSecret) || ! $isValid) {
             return response()->json([
                 'status' => false,
                 'message' => 'Unauthorized: Invalid or missing webhook secret token.',

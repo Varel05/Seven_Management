@@ -49,6 +49,12 @@ return [
         'timeout' => (int) env('KARYAWAN_API_TIMEOUT', 15),
     ],
 
+    'sales_app' => [
+        'url' => env('SALES_APP_URL', 'https://postcard-hardened-legroom.ngrok-free.dev'),
+        'token' => env('SALES_APP_TOKEN', 'jap_d70fadaf3f7abb5b46f860f9979af23aec0b0f84'),
+        'timeout' => (int) env('SALES_APP_TIMEOUT', 15),
+    ],
+
     'telegram' => [
         'owner_ids' => array_filter(array_map('trim', explode(',', env('TELEGRAM_OWNER_IDS', env('TELEGRAM_ADMIN_IDS', ''))))),
         'akuntan_ids' => array_filter(array_map('trim', explode(',', env('TELEGRAM_AKUNTAN_IDS', '')))),

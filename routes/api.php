@@ -63,4 +63,9 @@ Route::middleware('webhook.secret')->group(function () {
     // Active Chart of Accounts (COA) Directory & Semantic Account Detection for Hermes
     Route::match(['get', 'post'], '/webhook/accounts', [WebhookTransactionController::class, 'listAccounts']);
     Route::match(['get', 'post'], '/webhook/accounts/detect', [WebhookTransactionController::class, 'listAccounts']);
+
+    // E-Commerce Web Penjualan & Sewa Integration Endpoints
+    Route::post('/webhook/sales-order', [WebhookTransactionController::class, 'recordSalesOrder']);
+    Route::post('/webhook/sales-transaction', [WebhookTransactionController::class, 'recordSalesOrder']);
+    Route::match(['get', 'post'], '/webhook/sales/sync', [WebhookTransactionController::class, 'syncSalesFromApi']);
 });
