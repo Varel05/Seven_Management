@@ -292,7 +292,7 @@ TELEGRAM_AKUNTAN_PHONES=08123456788
 ### Setup Otomatis (Recommended)
 
 ```bash
-git clone <repository-url> seven-management
+git clone https://github.com/Varel05/Seven_Management.git seven-management
 cd seven-management
 composer run setup
 ```
