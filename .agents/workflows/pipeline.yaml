@@ -1,0 +1,12 @@
+name: Functional Task Allocation Pipeline
+on:
+  task: "create-feature"
+steps:
+  - name: Develop
+    agent: developer-agent
+  - name: Audit & Secure
+    agent: auditor-agent
+    requires: [Develop]
+  - name: Test & Document
+    agent: tester-agent
+    requires: [Develop]

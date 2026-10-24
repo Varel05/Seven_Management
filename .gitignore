@@ -5,7 +5,9 @@
 .env.production
 .phpactor.json
 .phpunit.result.cache
-.agents
+# Antigravity State and Handover Tracking
+AGENTS.md
+.agents/state.json
 /.codex
 /.cursor/
 /.idea
