@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Account;
+use App\Models\Employee;
+use App\Models\EmployeePointLog;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use Exception;
@@ -32,6 +34,7 @@ class SalesSyncService
     protected function client()
     {
         return Http::timeout($this->timeout)
+            ->retry(2, 200)
             ->withHeaders([
                 'Authorization' => "Bearer {$this->apiToken}",
                 'ngrok-skip-browser-warning' => 'true',
@@ -383,5 +386,298 @@ class SalesSyncService
             'total_amount' => $totalAmount,
             'details' => $details,
         ];
+    }
+
+    /**
+     * Sinkronisasi data poin kinerja karyawan dari Web Penjualan ke sistem Poin & Bonus Karyawan.
+     * Mengambil data JSON dari endpoint /api/publik/poin, mengalokasikan poin per nota ke CS/karyawan yang bersangkutan,
+     * memperbarui tingkatan (tier) tarif per poin, dan menghitung estimasi bonus gaji karyawan.
+     *
+     * @return array{
+     *     success: bool,
+     *     message: string,
+     *     synced: int,
+     *     skipped: int,
+     *     total_points: int,
+     *     details: array,
+     *     employees_updated: array
+     * }
+     */
+    public function syncPointsAndBonusFromApi(?string $startDate = null, ?string $endDate = null): array
+    {
+        $startDate = $startDate ?? now()->startOfMonth()->format('Y-m-d');
+        $endDate = $endDate ?? now()->format('Y-m-d');
+
+        $pointsRes = $this->fetchPointsReport($startDate, $endDate);
+        if (! ($pointsRes['success'] ?? false)) {
+            return [
+                'success' => false,
+                'message' => $pointsRes['message'] ?? 'Gagal mengambil data poin dari web penjualan.',
+                'synced' => 0,
+                'skipped' => 0,
+                'total_points' => 0,
+                'details' => [],
+                'employees_updated' => [],
+            ];
+        }
+
+        return $this->processPointsReport($pointsRes['data'] ?? [], 'Web Penjualan (API Sync)');
+    }
+
+    /**
+     * Proses data JSON poin (berupa ringkas, per_barang, per_nota) untuk menambah poin kinerja & bonus karyawan.
+     */
+    public function processPointsReport(array $pointsData, ?string $actor = 'Web Penjualan (E-Commerce)'): array
+    {
+        $perNota = $pointsData['per_nota'] ?? [];
+        $perBarang = collect($pointsData['per_barang'] ?? []);
+
+        $syncedCount = 0;
+        $skippedCount = 0;
+        $totalPointsAdded = 0;
+        $details = [];
+        $affectedEmployeeIds = [];
+
+        foreach ($perNota as $nota) {
+            $seri = trim((string) ($nota['seri'] ?? ''));
+            $points = (int) ($nota['poin'] ?? 0);
+
+            if (empty($seri) || $points <= 0) {
+                continue;
+            }
+
+            // Cari barang yang relevan jika ada untuk catatan
+            $matchingBarang = $perBarang->firstWhere('nota', 1) ?? $perBarang->first();
+            $kodeBarang = $matchingBarang['kode'] ?? null;
+            $tokoId = $matchingBarang['toko'] ?? null;
+
+            // Cari karyawan yang bersangkutan berdasarkan seri nota
+            $employee = $this->resolveEmployeeForNota($seri, $tokoId, $kodeBarang);
+
+            if (! $employee) {
+                $details[] = [
+                    'seri' => $seri,
+                    'status' => 'unmatched',
+                    'points' => $points,
+                    'message' => "Karyawan / CS untuk seri nota '{$seri}' tidak ditemukan di sistem.",
+                ];
+                $skippedCount++;
+
+                continue;
+            }
+
+            $applyResult = $this->applyEmployeePoints(
+                employee: $employee,
+                points: $points,
+                seri: $seri,
+                description: $kodeBarang,
+                category: EmployeePointLog::CATEGORY_ITEM_SALE,
+                actor: $actor
+            );
+
+            if ($applyResult['status'] === 'applied') {
+                $syncedCount++;
+                $totalPointsAdded += $points;
+                $affectedEmployeeIds[$employee->id] = true;
+            } else {
+                $skippedCount++;
+            }
+
+            $details[] = [
+                'seri' => $seri,
+                'employee_id' => $employee->id,
+                'employee_name' => $employee->name,
+                'points' => $points,
+                'status' => $applyResult['status'],
+                'message' => $applyResult['message'],
+            ];
+        }
+
+        // Kumpulkan data karyawan yang terpengaruh beserta status bonus terkininya
+        $employeesUpdated = Employee::whereIn('id', array_keys($affectedEmployeeIds))->get()->map(function (Employee $emp) {
+            return [
+                'id' => $emp->id,
+                'name' => $emp->name,
+                'position' => $emp->position,
+                'role' => $emp->role_value,
+                'current_points' => (int) $emp->current_points,
+                'tier_name' => $emp->tier_name,
+                'tier_label' => $emp->tier_label,
+                'rate_per_point' => (float) $emp->rate_per_point,
+                'bonus_salary' => (float) $emp->bonus_salary,
+                'formatted_bonus' => $emp->formatted_bonus_salary,
+                'formatted_total_salary' => $emp->formatted_total_salary,
+            ];
+        })->values()->toArray();
+
+        return [
+            'success' => true,
+            'message' => "Berhasil memproses poin kinerja: {$syncedCount} transaksi poin berhasil ditambahkan (+{$totalPointsAdded} poin), {$skippedCount} dilewati.",
+            'synced' => $syncedCount,
+            'skipped' => $skippedCount,
+            'total_points' => $totalPointsAdded,
+            'details' => $details,
+            'employees_updated' => $employeesUpdated,
+        ];
+    }
+
+    /**
+     * Resolusi karyawan (CS / Sales) yang berhak menerima poin berdasarkan kode seri nota penjualan.
+     */
+    public function resolveEmployeeForNota(string $seri, ?int $tokoId = null, ?string $kodeBarang = null): ?Employee
+    {
+        $prefix = '';
+        if (preg_match('/^([a-zA-Z]{2,4})/i', $seri, $matches)) {
+            $prefix = strtoupper($matches[1]);
+        }
+
+        // 1. Cek pemetaan khusus di konfigurasi (cs_prefix_map)
+        $prefixMap = config('services.sales_app.cs_prefix_map', []);
+        if (! empty($prefix) && ! empty($prefixMap[$prefix])) {
+            $mappedEmp = Employee::active()->find($prefixMap[$prefix]);
+            if ($mappedEmp) {
+                return $mappedEmp;
+            }
+        }
+
+        // 2. Cek apakah ada karyawan aktif dengan NIP yang berawalan prefix (misal CS/13-05-2026)
+        if (! empty($prefix)) {
+            $byNip = Employee::active()
+                ->where('nip', 'like', "{$prefix}%")
+                ->first();
+            if ($byNip) {
+                return $byNip;
+            }
+        }
+
+        // 3. Cek apakah ada karyawan dengan nama yang mengandung prefix (misal DA -> Dayat, AM -> Amira)
+        if ($prefix === 'DA') {
+            $byName = Employee::active()
+                ->where(function ($q) {
+                    $q->where('name', 'like', '%Dayat%')
+                        ->orWhere('name', 'like', '%Hidayat%');
+                })->first();
+            if ($byName) {
+                return $byName;
+            }
+        } elseif ($prefix === 'AM') {
+            $byName = Employee::active()
+                ->where(function ($q) {
+                    $q->where('name', 'like', '%Amira%')
+                        ->orWhere('name', 'like', '%Amir%');
+                })->first();
+            if ($byName) {
+                return $byName;
+            }
+        }
+
+        // 4. Jika prefix CS, prioritaskan staf dengan role 'cs'
+        if ($prefix === 'CS') {
+            $csEmployee = Employee::active()
+                ->where('role', 'cs')
+                ->orderBy('id', 'asc')
+                ->first();
+            if ($csEmployee) {
+                return $csEmployee;
+            }
+        }
+
+        // 5. Cek tokoId (misal toko 32 = Dayat)
+        if ($tokoId === 32) {
+            $dayat = Employee::active()->where('name', 'like', '%Dayat%')->first();
+            if ($dayat) {
+                return $dayat;
+            }
+        }
+
+        // 6. Fallback: Cari karyawan role 'cs' yang aktif secara berurutan
+        $fallbackCs = Employee::active()
+            ->where('role', 'cs')
+            ->first();
+
+        if ($fallbackCs) {
+            return $fallbackCs;
+        }
+
+        // 7. Fallback terakhir: karyawan aktif manapun yang bertugas
+        return Employee::active()->first();
+    }
+
+    /**
+     * Tambahkan poin kinerja ke karyawan, perbarui tarif per poin sesuai tingkatan (tier),
+     * dan catat log mutasi poin dengan idempotensi agar tidak duplikat.
+     */
+    public function applyEmployeePoints(
+        Employee $employee,
+        int $points,
+        string $seri,
+        ?string $description = null,
+        string $category = EmployeePointLog::CATEGORY_ITEM_SALE,
+        ?string $actor = 'Web Penjualan (E-Commerce)'
+    ): array {
+        if ($points <= 0) {
+            return [
+                'status' => 'skipped',
+                'message' => 'Poin harus lebih dari 0.',
+            ];
+        }
+
+        // Cek idempotensi: Hindari pemberian poin ganda untuk nota yang sama
+        $alreadyLogged = EmployeePointLog::where('employee_id', $employee->id)
+            ->where('notes', 'like', "%{$seri}%")
+            ->exists();
+
+        if ($alreadyLogged) {
+            return [
+                'status' => 'skipped',
+                'message' => "Poin untuk nota {$seri} sudah pernah ditambahkan sebelumnya ke {$employee->name}.",
+                'employee' => $employee,
+            ];
+        }
+
+        return DB::transaction(function () use ($employee, $points, $seri, $description, $category, $actor) {
+            $oldPoints = (int) $employee->current_points;
+            $newPoints = $oldPoints + $points;
+            $tierRate = Employee::getRateForPoints($newPoints);
+
+            $updateData = ['current_points' => $newPoints];
+            if ($tierRate > 0) {
+                $updateData['rate_per_point'] = $tierRate;
+            }
+
+            // Pastikan claim_bonus aktif agar perhitungan getBonusSalaryAttribute bernilai nominal rupiah
+            if ($employee->claim_bonus === null) {
+                $updateData['claim_bonus'] = true;
+            }
+
+            $employee->update($updateData);
+
+            $descText = $description ? " ({$description})" : '';
+            $logNotes = "Poin Kinerja Web Penjualan - Nota {$seri}{$descText}";
+
+            $employee->pointLogs()->create([
+                'points' => $points,
+                'category' => $category,
+                'reference_type' => 'sales_order',
+                'actor' => $actor,
+                'notes' => $logNotes,
+            ]);
+
+            $employee->refresh();
+
+            return [
+                'status' => 'applied',
+                'message' => "Berhasil menambahkan {$points} poin ke {$employee->name} (Nota: {$seri}). Total sekarang: {$newPoints} pt ({$employee->tier_name}). Estimasi bonus: {$employee->formatted_bonus_salary}",
+                'employee_id' => $employee->id,
+                'employee_name' => $employee->name,
+                'points_added' => $points,
+                'old_points' => $oldPoints,
+                'new_points' => $newPoints,
+                'tier_name' => $employee->tier_name,
+                'rate_per_point' => (float) $employee->rate_per_point,
+                'bonus_salary' => (float) $employee->bonus_salary,
+                'formatted_bonus' => $employee->formatted_bonus_salary,
+            ];
+        });
     }
 }

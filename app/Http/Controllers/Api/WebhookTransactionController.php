@@ -3805,6 +3805,10 @@ class WebhookTransactionController extends Controller
             'date' => 'nullable|string',
             'tanggal' => 'nullable|string',
             'description' => 'nullable|string',
+            'poin' => 'nullable|integer|min:0',
+            'points' => 'nullable|integer|min:0',
+            'employee_id' => 'nullable|exists:employees,id',
+            'cs' => 'nullable|string',
         ]);
 
         $ref = $validated['reference'] ?? $validated['seri'] ?? ('ORD-'.strtoupper(Str::random(8)));
@@ -3826,6 +3830,36 @@ class WebhookTransactionController extends Controller
             'description' => $validated['description'] ?? null,
         ]);
 
+        // Jika request juga menyertakan poin kinerja CS/karyawan, proses bonus poin kinerja
+        $points = (int) ($validated['poin'] ?? $validated['points'] ?? 0);
+        if ($points > 0) {
+            $employee = null;
+            if (! empty($validated['employee_id'])) {
+                $employee = Employee::find($validated['employee_id']);
+            } elseif (! empty($validated['cs'])) {
+                $employee = Employee::where('name', 'like', "%{$validated['cs']}%")
+                    ->orWhere('nip', $validated['cs'])
+                    ->first();
+            }
+
+            if (! $employee) {
+                $tokoId = is_numeric($store) ? (int) $store : null;
+                $employee = $salesSyncService->resolveEmployeeForNota($ref, $tokoId, $product);
+            }
+
+            if ($employee) {
+                $pointResult = $salesSyncService->applyEmployeePoints(
+                    employee: $employee,
+                    points: $points,
+                    seri: $ref,
+                    description: $product,
+                    category: EmployeePointLog::CATEGORY_ITEM_SALE,
+                    actor: 'Webhook Sales Order'
+                );
+                $result['point_award'] = $pointResult;
+            }
+        }
+
         return response()->json($result, $result['success'] ? 200 : 422);
     }
 
@@ -3839,6 +3873,101 @@ class WebhookTransactionController extends Controller
 
         $result = $salesSyncService->syncTransactionsFromApi($startDate, $endDate);
 
+        // Opsi: sinkronisasikan poin & bonus sekaligus jika parameter sync_points diisi
+        if ($request->boolean('sync_points') || $request->boolean('poin')) {
+            $pointsResult = $salesSyncService->syncPointsAndBonusFromApi($startDate, $endDate);
+            $result['points_sync'] = $pointsResult;
+        }
+
         return response()->json($result);
+    }
+
+    /**
+     * Webhook endpoint untuk memicu sinkronisasi poin kinerja karyawan dari Web Penjualan.
+     */
+    public function syncSalesPoints(Request $request, SalesSyncService $salesSyncService)
+    {
+        $startDate = $request->input('start_date', $request->input('awal', now()->startOfMonth()->format('Y-m-d')));
+        $endDate = $request->input('end_date', $request->input('akhir', now()->format('Y-m-d')));
+
+        $result = $salesSyncService->syncPointsAndBonusFromApi($startDate, $endDate);
+
+        return response()->json($result);
+    }
+
+    /**
+     * Webhook endpoint untuk menerima notifikasi poin kinerja karyawan langsung via JSON POST.
+     */
+    public function receiveSalesPointsWebhook(Request $request, SalesSyncService $salesSyncService)
+    {
+        // 1. Jika dikirim dalam bentuk batch / struktur laporan (per_nota)
+        if ($request->has('per_nota') || $request->has('data.per_nota')) {
+            $data = $request->input('data') ?? $request->all();
+            $result = $salesSyncService->processPointsReport($data, 'Webhook Sales Points Batch');
+
+            return response()->json($result);
+        }
+
+        // 2. Jika dikirim dalam bentuk single nota webhook
+        $validated = $request->validate([
+            'seri' => 'nullable|string|max:100',
+            'reference' => 'nullable|string|max:100',
+            'poin' => 'nullable|integer|min:1',
+            'points' => 'nullable|integer|min:1',
+            'employee_id' => 'nullable|exists:employees,id',
+            'cs' => 'nullable|string',
+            'employee_query' => 'nullable|string',
+            'product' => 'nullable|string',
+            'produk' => 'nullable|string',
+            'barang' => 'nullable|string',
+            'toko' => 'nullable|numeric',
+        ]);
+
+        $seri = $validated['seri'] ?? $validated['reference'] ?? ('NOTA-'.strtoupper(Str::random(8)));
+        $points = (int) ($validated['poin'] ?? $validated['points'] ?? 0);
+        $product = $validated['product'] ?? $validated['produk'] ?? $validated['barang'] ?? null;
+        $tokoId = isset($validated['toko']) ? (int) $validated['toko'] : null;
+
+        if ($points <= 0) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Poin kinerja harus berupa bilangan bulat positif (> 0).',
+            ], 422);
+        }
+
+        $employee = null;
+        if (! empty($validated['employee_id'])) {
+            $employee = Employee::find($validated['employee_id']);
+        } elseif (! empty($validated['cs']) || ! empty($validated['employee_query'])) {
+            $q = $validated['cs'] ?? $validated['employee_query'];
+            $employee = Employee::where('name', 'like', "%{$q}%")
+                ->orWhere('nip', $q)
+                ->first();
+        }
+
+        if (! $employee) {
+            $employee = $salesSyncService->resolveEmployeeForNota($seri, $tokoId, $product);
+        }
+
+        if (! $employee) {
+            return response()->json([
+                'status' => false,
+                'message' => "Tidak dapat menemukan karyawan/CS penerima untuk seri nota '{$seri}'.",
+            ], 404);
+        }
+
+        $result = $salesSyncService->applyEmployeePoints(
+            employee: $employee,
+            points: $points,
+            seri: $seri,
+            description: $product,
+            category: EmployeePointLog::CATEGORY_ITEM_SALE,
+            actor: 'Webhook Sales Points'
+        );
+
+        return response()->json([
+            'success' => $result['status'] === 'applied',
+            'data' => $result,
+        ]);
     }
 }

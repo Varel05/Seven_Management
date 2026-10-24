@@ -68,4 +68,8 @@ Route::middleware('webhook.secret')->group(function () {
     Route::post('/webhook/sales-order', [WebhookTransactionController::class, 'recordSalesOrder']);
     Route::post('/webhook/sales-transaction', [WebhookTransactionController::class, 'recordSalesOrder']);
     Route::match(['get', 'post'], '/webhook/sales/sync', [WebhookTransactionController::class, 'syncSalesFromApi']);
+    Route::match(['get', 'post'], '/webhook/sales/points/sync', [WebhookTransactionController::class, 'syncSalesPoints']);
+    Route::match(['get', 'post'], '/webhook/sales/poin/sync', [WebhookTransactionController::class, 'syncSalesPoints']);
+    Route::post('/webhook/sales/points', [WebhookTransactionController::class, 'receiveSalesPointsWebhook']);
+    Route::post('/webhook/sales-points', [WebhookTransactionController::class, 'receiveSalesPointsWebhook']);
 });

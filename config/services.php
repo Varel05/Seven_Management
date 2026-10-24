@@ -53,6 +53,11 @@ return [
         'url' => env('SALES_APP_URL', 'https://postcard-hardened-legroom.ngrok-free.dev'),
         'token' => env('SALES_APP_TOKEN', 'jap_d70fadaf3f7abb5b46f860f9979af23aec0b0f84'),
         'timeout' => (int) env('SALES_APP_TIMEOUT', 15),
+        'cs_prefix_map' => [
+            'CS' => env('SALES_CS_EMPLOYEE_ID', null),
+            'DA' => env('SALES_DA_EMPLOYEE_ID', null),
+            'AM' => env('SALES_AM_EMPLOYEE_ID', null),
+        ],
     ],
 
     'telegram' => [
