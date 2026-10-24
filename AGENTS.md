@@ -167,3 +167,27 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - Run `vendor/bin/phpunit` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
 
 </laravel-boost-guidelines>
+
+---
+
+# State Tracking & Handover
+
+## 1. Current Status
+- Telah mengimplementasikan **Opsi 1: Background Scheduler** di [`routes/console.php`](file:///d:/laragon/www/Seven_Management/routes/console.php) untuk secara berkala menarik transaksi penjualan & sewa serta poin kinerja CS dari Web E-Commerce ke database Jurnal Akuntansi Seven Management.
+- Telah memverifikasi command `php artisan schedule:list` yang mendaftarkan:
+  - `sales:sync-transactions` setiap 5 menit (`*/5 * * * *`)
+  - `sales:sync-points` setiap 15 menit (`*/15 * * * *`)
+  - `recurring:check --notify` setiap hari pukul 08:00
+- Telah melakukan live test langsung via Artisan: berhasil menarik 5 transaksi penjualan & sewa nyata dari endpoint API publik Web Penjualan ke Jurnal Akuntansi, dan pengujian kedua mengonfirmasi idempotensi (0 duplikasi, transaksi yang sudah ada otomatis dilewati).
+- Semua test suite `SalesSyncTest` (11 pengujian) lulus 100% tanpa regresi.
+
+## 2. Pending Tasks
+- Jika aplikasi dijalankan di lingkungan production atau server lokal jangka panjang, pastikan worker scheduler Laravel berjalan di background: `php artisan schedule:work` atau cron server `* * * * * cd /path-to-project && php artisan schedule:run >> /dev/null 2>&1`.
+
+## 3. Architectural Decisions
+- Memilih **Laravel Console Scheduler** daripada melakukan panggilan API sinkronisasi langsung di dalam handler `DashboardController::liveData()`. Hal ini mencegah dashboard lambat (karena menunggu koneksi ngrok/HTTP eksternal hingga 15 detik), menghindari timeout browser, dan menghindari pembengkakan limit ngrok.
+- Menambahkan flag `withoutOverlapping()` dan `runInBackground()` agar proses sinkronisasi yang membutuhkan waktu lama tidak tumpang tindih.
+
+## 4. Active Diffs
+- [`routes/console.php`](file:///d:/laragon/www/Seven_Management/routes/console.php)
+- [`AGENTS.md`](file:///d:/laragon/www/Seven_Management/AGENTS.md)
